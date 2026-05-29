@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "pulse-dashboard",
-      "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "8080", "--directory", "dashboard"],
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "frontend", "--", "--host", "127.0.0.1", "--port", "8080"],
       "port": 8080
     }
   ]

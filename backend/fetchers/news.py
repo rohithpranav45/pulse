@@ -301,7 +301,7 @@ def fetch_from_financialjuice() -> list[dict]:
         run = client.actor("apify/web-scraper").call(
             run_input=run_input,
             run_timeout=timedelta(seconds=60),  # max 60 s — don't block forever
-            memory_mbytes=256,                  # small scrape, minimal memory
+            memory_mbytes=512,                  # 256 caused page crashes on Puppeteer
         )
 
         # apify_client v1 returns a plain dict; v2+ returns a Run object.
@@ -465,7 +465,16 @@ def get_energy_news(max_articles: int = 15) -> dict:
     """
     global _news_cache, _news_cache_time
 
-    if _news_cache is not None and _news_cache_time is not None:
+    # Honor ?nocache=1 from the Flask request context (debug bypass).
+    _bypass = False
+    try:
+        from flask import has_request_context, request as _req
+        if has_request_context() and _req.args.get("nocache"):
+            _bypass = True
+    except Exception:
+        pass
+
+    if not _bypass and _news_cache is not None and _news_cache_time is not None:
         age = (datetime.now() - _news_cache_time).total_seconds()
         if age < _NEWS_CACHE_TTL:
             return _news_cache
@@ -495,18 +504,50 @@ def get_energy_news(max_articles: int = 15) -> dict:
     # ── Fallback: NewsAPI ─────────────────────────────────────────────────────
     else:
         source_used  = "newsapi"
-        newsapi_arts = fetch_news(top_n=max_articles)
+        try:
+            newsapi_arts = fetch_news(top_n=max_articles)
+        except Exception as exc:
+            print(f"  [warn] newsapi failed ({type(exc).__name__}); falling back to RSS")
+            newsapi_arts = []
         articles = [
             {
                 "headline":    a.get("title", ""),
+                "title":       a.get("title", ""),
+                "url":         a.get("url", ""),
                 "source":      a.get("source", "Unknown"),
                 "time":        a.get("published_ago", "N/A"),
                 "published":   a.get("published", ""),
+                "published_at":a.get("published", ""),
                 "category":    a.get("category", "ENERGY"),
                 "is_negative": is_negative(a.get("title", "")),
             }
             for a in newsapi_arts
         ]
+
+        # ── Tertiary: RSS (no-auth, always reachable) ─────────────────────────
+        if len(articles) < 3:
+            print(f"  [info] newsapi returned {len(articles)} articles; falling back to Google News RSS")
+            try:
+                from fetchers.rss_news import fetch_rss_news
+                rss_arts = fetch_rss_news(max_articles)
+                source_used = "rss"
+                articles = [
+                    {
+                        "headline":    a["title"],
+                        "title":       a["title"],
+                        "url":         a.get("url", ""),
+                        "source":      a.get("source", "RSS"),
+                        "time":        a.get("time", "now"),
+                        "published":   a.get("published", ""),
+                        "published_at":a.get("published_at", ""),
+                        "category":    _tag(a["title"], a.get("description", "")),
+                        "is_negative": is_negative(a["title"]),
+                    }
+                    for a in rss_arts
+                ]
+            except Exception as exc:
+                print(f"  [warn] rss fallback failed: {exc}")
+
         # Batch-score all headlines in one FinBERT round-trip
         _scores = _batch_score([a["headline"] for a in articles])
         for _art, _sc in zip(articles, _scores):

@@ -37,7 +37,9 @@ if sys.platform == "win32":
 ROOT       = Path(__file__).parent
 API_URL    = "http://127.0.0.1:5000"
 HEALTH_URL = f"{API_URL}/api/health"
-DASHBOARD  = ROOT / "frontend" / "index.html"
+DIST_DIR   = ROOT / "backend" / "static"
+DIST_INDEX = DIST_DIR / "index.html"
+FRONTEND   = ROOT / "frontend"
 
 
 # ── Colour helpers (no third-party deps) ──────────────────────────────────────
@@ -118,13 +120,17 @@ def main():
 
     print()
     print(DIM("  [4/4] Opening dashboard in browser..."))
-    webbrowser.open(DASHBOARD.as_uri())
-    print(OK(f"  Dashboard: {DASHBOARD.as_uri()}"))
+    if not DIST_INDEX.exists():
+        print(WARN("  React build not found — run: cd frontend && npm install && npm run build"))
+        print(WARN(f"  Then refresh {API_URL}"))
+    webbrowser.open(API_URL)
+    print(OK(f"  Dashboard: {API_URL}"))
 
     print()
     print(BOLD("  ─────────────────────────────────────────────"))
-    print(f"  {OK('API')}       http://127.0.0.1:5000/api/health")
-    print(f"  {OK('Dashboard')} {DASHBOARD.as_uri()}")
+    print(f"  {OK('API')}       {API_URL}/api/health")
+    print(f"  {OK('Dashboard')} {API_URL}")
+    print(DIM(f"  Dev mode: cd {FRONTEND.name} && npm run dev   (Vite hot-reload)"))
     print(BOLD("  ─────────────────────────────────────────────"))
     print(DIM("  Warm-up runs in background (~60 s for full data load)"))
     print(DIM("  Press Ctrl+C to stop.\n"))
