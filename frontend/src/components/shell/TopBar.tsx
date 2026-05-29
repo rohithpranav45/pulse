@@ -2,7 +2,8 @@ import { useClock } from '@/lib/hooks';
 import { fmt } from '@/lib/fmt';
 import { Chip } from '@/components/ui/Chip';
 import { TICKER_KEYS } from '@/lib/api';
-import { Activity, RefreshCw, Maximize2 } from 'lucide-react';
+import { Activity, RefreshCw, Maximize2, Printer, HelpCircle } from 'lucide-react';
+import { resetOnboarding } from '@/components/onboarding/OnboardingTour';
 import clsx from 'clsx';
 
 type Quote = { price: number; change_abs?: number; change_pct?: number };
@@ -83,11 +84,25 @@ export function TopBar({ ticker, onRefresh, refreshing }: { ticker: TickerData |
           <RefreshCw className={clsx('w-4 h-4', refreshing && 'animate-spin')} />
         </button>
         <button
+          onClick={() => window.print()}
+          title="Print daily briefing sheet (P)"
+          className="p-2 rounded hover:bg-bg-hover text-text-tertiary hover:text-gold transition-colors"
+        >
+          <Printer className="w-4 h-4" />
+        </button>
+        <button
           onClick={() => document.documentElement.requestFullscreen?.()}
           title="Fullscreen (F)"
           className="p-2 rounded hover:bg-bg-hover text-text-tertiary hover:text-gold transition-colors"
         >
           <Maximize2 className="w-4 h-4" />
+        </button>
+        <button
+          onClick={() => resetOnboarding()}
+          title="Restart onboarding tour"
+          className="p-2 rounded hover:bg-bg-hover text-text-tertiary hover:text-gold transition-colors"
+        >
+          <HelpCircle className="w-4 h-4" />
         </button>
       </div>
     </header>

@@ -1,0 +1,1472 @@
+﻿giv
+OIL MACRO
+TRADING
+A Complete Grounding in the Global Oil Market
+From wellhead to futures curve: supply, logistics, refining, demand,
+inventory, pricing benchmarks, and geopolitical risk
+10 Chapters  Â·  Covering All Core Modules
+Training Material for Graduate Oil Market Analysts
+Contents
+Chapter 1
+Industry Overview
+Upstream, Midstream, Downstream â€” the value chain
+Chapter 2
+Upstream â€” Supply Creation
+NOCs, IOCs, shale, capital cycles, OPEC+
+Chapter 3
+Midstream â€” Logistics
+Pipelines, tankers, hubs, storage economics
+Chapter 4
+Downstream â€” Refining
+Distillation, crack spreads, product markets
+Chapter 5
+Demand Structure
+Sectors, seasonality, EV risk, EM growth
+Chapter 6
+Inventory System
+OECD stocks, EIA data, floating storage, SPR
+Chapter 7
+Measurement Layer
+EIA, IEA, OPEC MOMR, rig counts, tanker tracking
+Chapter 8
+Market Pricing
+Benchmarks, forward curves, 4 historical case studies
+Chapter 9
+Benchmark Relationships
+Brent-WTI, Dubai, OSPs, quality spreads
+Chapter 10
+Geopolitics & Risk
+Wars, sanctions, Hormuz, producer alliances
+C H A P T E R   ONE
+Industry Overview
+The global oil machine: how crude is born, moved, and consumed
+Oil is the world's most actively traded commodity, underpinning not just energy markets but the entire architecture of modern industrial civilization. To trade oil macro â€” to hold a view on the direction of the oil price over weeks, months, or years â€” you need a mental model of the entire supply chain, from the wellhead to the car engine. This chapter provides that framework.
+The oil industry is conventionally divided into three segments: Upstream (exploration and production), Midstream (transportation, storage, and logistics), and Downstream (refining and product distribution). Understanding where each segment adds value, what its constraints are, and how it responds to price signals is the foundation of all oil market analysis.
+The Three Segments at a Glance
+UPSTREAM
+Find & Extract
+â–¶
+MIDSTREAM
+Move & Store
+â–¶
+DOWNSTREAM
+Refine & Sell
+â–¶
+END USER
+Consume
+Segment
+Core Activity
+Key Price Drivers
+Upstream
+Exploration, drilling, production of crude oil and natural gas
+Oil price, decline rates, capex cycles, geology
+Midstream
+Pipelines, tankers, storage terminals, LNG trains
+Freight rates, differentials, storage economics
+Downstream
+Crude distillation, cracking, product blending and distribution
+Crack spreads, product demand, refinery margins
+Why Understanding the Whole Chain Matters for Market Analysis
+A price signal in oil does not simply reflect "supply and demand" in the abstract â€” it reflects the intersection of specific physical constraints at every layer of the supply chain. The 2020 WTI negative price event was not caused by too much crude in the world; it was caused by a specific shortage of storage capacity at Cushing, Oklahoma â€” a midstream problem. The 2022 diesel crisis in Europe was not caused by insufficient global crude â€” it was a downstream problem caused by refinery capacity losses and an embargo on Russian product.
+Those who analyze the markets but only watch headline crude production and demand miss the structural levers that set prices. This book is designed to build intuition across the entire chain.
+The Integrated Mental Model
+Think of the oil market as a pipeline with valves at every junction. Upstream opens or closes the source. Midstream sets the route and speed. Downstream converts the crude into what consumers actually need. A blockage anywhere â€” a strike at a refinery, ice at a terminal, sanctions on a tanker fleet â€” creates a price reaction disproportionate to its physical size.
+The Oil Value Chain in Numbers
+  Global Oil Market Scale (2024 approximate)
+  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  Global liquids demand (mbd)      103  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ
+  OPEC production (mbd)          35  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ
+  Non-OPEC production (mbd)       68  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ
+  Refinery throughput (mbd)       82  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ
+  Seaborne crude trade (mbd)       42  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ
+  OECD inventories (bn bbls)        3  â–ˆ
+  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+How Oil is Measured
+Unit
+Definition and Use
+Barrel (bbl)
+42 US gallons / 159 litres. The standard unit of crude oil volume.
+mbd
+Million barrels per day. Standard for production/consumption rates.
+kbd
+Thousand barrels per day. Used for smaller flows, field-level production.
+Million barrels (mmbbls)
+Used for inventory levels, strategic reserves.
+Metric tonne (mt)
+~7.3 barrels for average crude (varies by density/API). Used in Europe and Asia.
+API gravity (Â°API)
+Measure of crude density. Higher = lighter. <22Â° heavy, 22-31Â° medium, >31Â° light.
+Energy equivalent
+~6.1 GJ per barrel crude. Conversions to LNG, coal, etc.
+CHAPTER SUMMARY
+The oil industry is divided into Upstream (production), Midstream (logistics), and Downstream (refining).
+Macro price signals emerge from bottlenecks anywhere in the chain â€” not just headline supply/demand.
+Global liquids demand is ~103 mbd; seaborne crude trade ~42 mbd â€” much of the market flows invisibly through pipelines.
+A barrel is 42 US gallons; API gravity measures crude density and determines refinery yield economics.
+C H A P T E R   TWO
+Upstream â€” Supply Creation
+From drill bit to pipeline: who produces oil, how fast, and at what cost
+The upstream sector is where oil is found and extracted from the ground. It is the source of price volatility. When those who analyse the markets talk about "supply," they mean upstream. When they debate whether OPEC will cut, whether US shale can grow, or whether a new deepwater discovery changes the long-run price floor â€” all of that is upstream analysis. This chapter builds a complete framework for upstream thinking.
+1. Industry Participants
+The upstream landscape is a hierarchy of organizations with different cost structures, decision-making timescales, and motivations. Understanding who is producing helps explain why supply responds slowly or quickly to price signals.
+National Oil Companies (NOCs)
+NOCs are state-owned producers. They control roughly 70% of the world's proven reserves. Saudi Aramco, ADNOC, NIOC, PDVSA, Kuwait Petroleum, and Iraq's INOC are the most systemically important. NOCs operate with mandates that go beyond profit maximization â€” they fund government budgets, maintain employment, and pursue geopolitical objectives.
+NOC
+Country
+2024 Production (mbd)
+Saudi Aramco
+Saudi Arabia
+~9.0
+NIOC (National Iranian Oil)
+Iran
+~3.2
+Iraq NOC / SOMO
+Iraq
+~4.2
+Kuwait Petroleum
+Kuwait
+~2.4
+ADNOC
+UAE
+~3.1
+PDVSA
+Venezuela
+~0.8
+PEMEX
+Mexico
+~1.8
+NOC Libya
+Libya
+~1.2
+NOC vs IOC Investment Logic
+NOCs do not need to earn a commercial return on equity. This means they can sustain production at prices below the IOC breakeven, and they do not respond to low oil prices by shutting wells. Saudi Aramco's lifting cost is ~$3/bbl; its budget breakeven is ~$70-80/bbl â€” but it will produce whether or not the market price covers fiscal needs. This creates asymmetric supply dynamics: NOC supply is sticky downward.
+International Oil Companies (IOCs)
+IOCs are publicly listed, shareholder-owned companies: ExxonMobil, Shell, BP, Chevron, TotalEnergies, Equinor. They operate globally, access reserves through concessions and PSAs (production sharing agreements), and must justify capital allocation to investors. This makes them price-sensitive â€” they cut capex when prices fall, and they are the primary drivers of non-OPEC for conventional supply growth.
+IOC Characteristic
+Implication for Supply
+Shareholder return mandate
+Capex cut sharply in downturns; supply lags price recovery by 2-4 years
+Access restrictions
+Denied entry to best NOC reserves; forced into higher-cost frontier areas
+Portfolio diversification
+Natural gas, LNG, renewables increasingly competing for capex
+Reserve replacement pressure
+Must find new barrels to replace production â€” drives exploration cycles
+ESG / energy transition pressure
+Increasingly reluctant to sanction long-cycle upstream projects
+Independent E&P Companies
+Independent E&Ps are pure-play upstream producers, typically US-listed: Pioneer Natural Resources (now part of Exxon), Devon Energy, EOG Resources, Diamondback Energy. They are the heartbeat of US shale production. They are highly responsive to price signals â€” most run short-cycle, low-commitment drilling programmes that can be started or stopped in weeks.
+Oilfield Services Companies
+OFS companies (Schlumberger/SLB, Halliburton, Baker Hughes, Weatherford) provide the drilling rigs, completion of equipment, seismic surveys, and engineering expertise that NOCs and IOCs deploy. They are a leading indicator of upstream activity â€” when oilfield service day-rates and backlog data rise, it signals that E&P companies are increasing spending. OFS capacity constraints can bottleneck supply responses even when E&P companies want to drill.
+2. Supply Types and Elasticity
+Not all barrels are equal. The most important dimension for those who analyse the markets is not the absolute cost of oil but its elasticity â€” how quickly supply can respond to a price change. A low-cost barrel that takes five years to bring on-stream is less elasticity-relevant than a higher-cost barrel that can be added in four months.
+Global Supply Stack â€” Cost & Elasticity (Approximate Breakevens)
+Middle East conventional (NOC)  Cost: $3â€“12/bbl         Volume: ~18 mbd
+Russia / FSU onshore            Cost: $8â€“18/bbl         Volume: ~11 mbd
+Onshore conventional (rest)     Cost: $15â€“30/bbl        Volume: ~20 mbd
+US shale / tight oil         Cost: $35â€“55/bbl        Volume: ~13 mbd
+Offshore shallow water       Cost: $25â€“45/bbl        Volume: ~8 mbd
+Offshore deepwater           Cost: $40â€“65/bbl        Volume: ~8 mbd
+Oil sands (Canada, Venezuela) Cost: $45â€“80/bbl        Volume: ~5 mbd
+Ultra-deepwater / Arctic      Cost: $60â€“90/bbl        Volume: ~2 mbd
+US Shale / Tight Oil
+US tight oil, concentrated in the Permian Basin, Eagle Ford, and Bakken formations, is the defining supply of innovation of the past 15 years. It transformed the US from the world's largest oil importer to a net exporter. The key characteristics that matter for market analysis:
+Short lead time: A new shale well can be drilled and completed in 3-6 months, versus 5-7 years for a deepwater project. This makes shale a price-elastic, "swing supply" in the short to medium term.
+High decline rates: A shale well typically declines 65-80% in its first year of production. The treadmill problem: operators must continuously drill just to maintain flat production, let alone grow. This creates a capex-intensity floor.
+Breakeven sensitivity: The average Permian well breaks even at $40-55/bbl WTI at the corporate level. Below $45, activity falls rapidly. Above $70, the basin grows aggressively. This creates a natural  supply ceiling and floor around those prices.
+DUC wells (Drilled but Uncompleted): Wells that have been drilled but not yet hydraulically fractured. They represent latent supply that can be activated rapidly. The DUC inventory is a key leading indicator for near-term supply growth.
+The Shale Treadmill Trade
+When US rig count drops sharply (as in 2020 or late 2015), shale decline rates mean that production begins falling within 6-9 months even with no further rig reductions. Conversely, a sharp rig count increase signals supply growth 3-6 months forward.
+Offshore Conventional
+Deepwater and ultra-deepwater projects (Gulf of Mexico, Brazil pre-salt, West Africa, North Sea) have the following characteristics relevant to market analysis:
+Long lead times: 5-8 years from FID (Final Investment Decision) to first oil.
+Low decline rates once on plateau: Offshore fields decline at 5-15% annually, far lower than shale.
+High capital but low operating cost: Once built, the per-barrel operating cost is low. Projects are not shut in below breakeven during temporary price dips.
+Concentrated in few basins: Brazil, GOM, West Africa, North Sea. Geopolitical or operational disruptions are localised but impactful.
+Oil Sands and Heavy Oil
+Canadian oil sands (Alberta) and Venezuelan heavy oil represent some of the world's largest resource bases but are extraordinarily capital-intensive and environmentally contentious. Canadian production (~4.8 mbd) is growing slowly but is primarily committed to existing projects. New oil sands projects are essentially uninvestable in the current ESG/cost environment. Venezuela's production (~0.8 mbd) is a fraction of its historical peak (3.5 mbd in 1998) due to chronic underinvestment and mismanagement.
+3. Supply Dynamics: The Capital Cycle
+The single most important framework for thinking about medium-term oil supply is the capital cycle. Oil supply does not respond smoothly to price. It responds with long, lumpy lags because the investments required to develop new production are large, risky, and take years to bear fruit. This creates the boom-bust cycle that characterizes oil markets.
+  THE OIL CAPITAL CYCLE
+  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  Phase 1: LOW PRICE ENVIRONMENT
+    â†’ E&P companies cut capex
+    â†’ FIDs deferred or cancelled
+    â†’ Rig counts fall
+    â†’ DUC inventory draws down
+    â†’ Oilfield service capacity shrinks
+  Phase 2: SUPPLY RESPONSE (6 months â€“ 3 years)
+    â†’ Existing fields decline
+    â†’ New project pipelines thin
+    â†’ Inventories draw
+    â†’ Price recovers / spikes
+  Phase 3: HIGH PRICE ENVIRONMENT
+    â†’ E&P companies increase capex
+    â†’ FIDs sanctioned
+    â†’ Rig counts rise
+    â†’ Service sector capacity strained, costs rise
+    â†’ 3-7 years of drilling â†’ new supply arrives
+  Phase 4: SUPPLY OVERHANG
+    â†’ Multiple projects come online simultaneously
+    â†’ Demand growth insufficient to absorb
+    â†’ Inventories build
+    â†’ Price falls â†’ back to Phase 1
+  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  Typical cycle length: 5â€“10 years (longer for deepwater/oil sands)
+  Shale compresses the cycle to 12â€“24 months for marginal barrels
+FIDs â€” Final Investment Decisions
+An FID is the point at which an oil company formally commits capital to a new production project. It is the most important leading indicator of future non-OPEC supply growth, typically with a 4â€“6-year lead time for offshore projects. Global FID activity collapsed in 2015-2016 (following the 2014 price crash) and in 2020 (following COVID). The resulting supply deficit became apparent in 2021-2022 when demand recovered but project pipelines were empty.
+FID Drought and the 2021-2022 Supply Deficit
+The 2015-2016 capex cuts were the largest in industry history: global upstream investment fell from ~$780bn in 2014 to ~$430bn in 2016. The consequence was felt 4-6 years later: non-OPEC ex-US supply growth stalled in 2021-2022 exactly when post-COVID demand recovered, contributing to the price spike to $130/bbl in March 2022.
+4. OPEC and OPEC+
+The Organisation of the Petroleum Exporting Countries (OPEC) was founded in 1960. Its original members were Iraq, Iran, Kuwait, Saudi Arabia, and Venezuela. In 2016, OPEC expanded its coordination to include Russia and other non-OPEC producers, forming the "OPEC+" coalition. This alliance represents roughly 48% of global oil production and holds ~80% of proven reserves.
+Country
+Quota (mbd)
+Actual (mbd)
+Compliance (%)
+Saudi Arabia
+9.0
+9.0
+100%
+Iraq
+4.0
+4.2
+91%
+UAE
+2.9
+3.1
+88%
+Kuwait
+2.4
+2.4
+101%
+Iran*
+exempt
+3.2
+â€”
+Russia
+9.5
+9.5
+100%
+Kazakhstan
+1.5
+1.6
+94%
+Nigeria
+1.5
+1.4
+107%
+Venezuela*
+exempt
+0.8
+â€”
+Algeria
+0.9
+0.9
+101%
+* Iran and Venezuela are exempt from quotas due to sanctions.
+OPEC+ Decision-Making Mechanics
+OPEC+ meets formally every 2-6 months (in recent years often virtually). Decisions are made by consensus, though Saudi Arabia holds a de facto veto through its willingness to act unilaterally. The key levers are:
+Production quotas: Targets set for each member country. Compliance is monitored by a Joint Ministerial Monitoring Committee (JMMC).
+Voluntary additional cuts: Individual members (most often Saudi Arabia) can announce voluntary cuts beyond the quota framework. These are the most powerful short-term signal.
+Baseline adjustments: The "reference" production level from which cuts are calculated is politically negotiated and can be gamed â€” members lobby for higher baselines to minimise the actual reduction required.
+OPEC+ Compliance and "Paper Cuts"
+OPEC+ announcements of production cuts are not the same as actual production cuts. Compliance rates are often poor â€” particularly for Iraq, Kazakhstan, and the UAE, which chronically overproduce. A 1.5 mbd announced cut with 80% compliance is a ~1.2 mbd actual cut. Markets initially react to the announcement, then recalibrate as compliance data emerges from tanker trackers and EIA/IEA monthly reports.
+The Saudi Arabia Swing Producer Concept
+Saudi Arabia is the only country with the combination of: (a) substantial spare capacity (~2-3 mbd), (b) the fiscal flexibility to operate at variable production levels for extended periods, and (c) the institutional willingness to act as market manager. This makes it the global swing producer.
+The concept of a swing producer means that when markets are oversupplied, Saudi Arabia cuts output to drain inventories and support prices. When markets are undersupplied, it increases output from spare capacity. The limitation is that this requires sacrificing market share, which creates fiscal pressure and internal political tension â€” as demonstrated in the 2020 price war with Russia.
+5. Spare Capacity
+Spare capacity is the volume of production that a producer can bring online within 30 days and sustain for 90 days. It is the most important single measure of the market's ability to absorb supply disruptions. When spare capacity is low, markets are fragile â€” any geopolitical disruption to supply sends prices spiking because there is no buffer. When it is high, markets absorb shocks with modest price responses.
+  Global Spare Crude Capacity â€” Approximate Historical Levels
+  (mbd)
+  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  2008 (pre-crisis)          2.5mbd  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ
+  2011 (Arab Spring)           3mbd  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ
+  2014 (shale boom)          4.5mbd  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ
+  2016 (OPEC+ cut)             3mbd  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ
+  2019 (pre-COVID)           2.8mbd  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ
+  2020 (COVID cuts)            9mbd  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ
+  2022 (tight market)        1.5mbd  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆ
+  2024 (current est.)        4.5mbd  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ
+  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+Spare Capacity Quality Matters
+Not all spare capacity is equal. Saudi and UAE spare capacity is light/medium sour crude that most complex refineries can process. When the remaining spare capacity is concentrated in heavy sour barrels (as it was in 2007-2008), refineries configured for light sweet crude cannot easily use it. Low headline spare capacity numbers can mask an even tighter effective market for light sweet crude.
+CHAPTER SUMMARY
+NOCs control 70% of reserves but are not profit- maximising â€” supply is sticky even in low price environments.
+US shale is the world's swing supply: short cycle, high decline rates, price-elastic in the $40-70/bbl range.n
+The capital cycle creates multi-year boom-bust dynamics: FID droughts today mean supply shortfalls in 4-6 years.
+OPEC+ controls ~48% of supply; compliance varies; Saudi Arabia acts as swing producer using ~2-3 mbd spare capacity.
+Spare capacity below ~2 mbd creates acute geopolitical risk premium in oil prices.
+C H A P T E R   THREE
+Midstream â€” Logistics & Transportation
+How crude moves from wellhead to refinery: the plumbing of the oil market
+Midstream is the plumbing of the oil market. It receives crude from producers, moves it thousands of miles by pipe, tanker, and rail, holds it in storage terminals, and delivers it to refineries. Those who analyse the markets and understand midstream understand why crude price differentials exist, why prices at different hubs diverge, and why a hurricane in the Gulf of Mexico or ice at a Baltic terminal creates a price spike thousands of miles away.
+1. Transportation Infrastructure
+Pipelines
+Pipelines are the most cost-efficient method of moving crude over land. They are capital-intensive to build, politically complex to route, but once operational carry oil at ~$2-5/bbl compared to ~$8-15/bbl by rail. Pipeline capacity is fixed â€” it cannot be quickly expanded â€” which means that when production in a region grows faster than pipeline capacity, a bottleneck develops and the crude price at the wellhead falls relative to the pipeline exit price.
+The Keystone XL saga: Years of regulatory battles delayed pipeline takeaway from Canadian oil sands, causing Western Canadian Select (WCS) crude to trade at discounts of $30-40/bbl to WTI at peak pipeline congestion in 2018.
+Permian Basin takeaway: Rapid Permian shale growth in 2017-2018 overwhelmed existing pipeline capacity, causing Permian crude (WTI Midland) to trade at a $20/bbl discount to WTI Cushing.
+Russian pipelines: The Druzhba pipeline carries ~1 mbd of Russian crude to Central Europe. The Novorossiysk/CPC system carries ~1.8 mbd of Kazakh crude to the Black Sea.  routes were central to the 2022 sanctions analysis.
+Tankers
+Seaborne transport is the backbone of international crude trade. ~42 mbd of crude moves by sea â€” roughly 40% of global supply. Tanker vessels are segmented by size:
+Vessel Class
+Size (DWT)
+Typical Route
+VLCC (Very Large Crude Carrier)
+200,000-320,000
+Middle East â†’ Asia (AG-J); Middle East â†’ US; W Africa â†’ Asia
+Suezmax
+120,000-200,000
+West Africa â†’ Europe; Black Sea â†’ Med; North Sea
+Aframax
+80,000-120,000
+North Sea, Caribbean, Baltic, Mediterranean short-haul
+Panamax
+55,000-80,000
+Atlantic basin trades, US Gulf
+Handysize / MR
+25,000-45,000
+Products: gasoline, diesel, jet fuel regional trades
+Freight rates are quoted in Worldscale (WS) â€” a percentage of a notional flat rate. WS 100 is the flat rate; WS 60 is a 40% discount; WS 140 is a 40% premium. The key crude freight route for those analysing the markets is TD3C (VLCC, Arabian Gulf to China). When TD3C rates spike, it adds to the delivered cost of Middle East crude in Asia and can widen Dubai crude differentials.
+The Freight Rate Signal
+Tanker freight rates are a leading indicator of oil trade flow changes. When the Houthi campaign closed the Red Sea in late 2023, VLCC and Suezmax rates spiked because voyages rerouted around the Cape of Good Hope, adding 10-15 days and absorbing more vessels. Monitoring freight rate moves â€” available from Baltic Exchange, Clarksons, and Fearnleys â€” gives advance warning of flow shifts.
+Rail
+Rail is the most expensive and capacity-constrained mode of crude transport. In North America, it became critical during the shale boom when pipeline capacity was insufficient. Crude-by-rail (CBR) typically costs $10-20/bbl, making it economic only when pipeline alternatives are unavailable or differentials are wide enough. Rail volumes respond quickly to price signals and serve as a valve when pipeline constraints bite.
+Storage
+Storage is the interface between supply and demand. When production exceeds consumption, crude goes into storage. When consumption exceeds production, it comes out. Storage is not passive â€” it is actively traded. The economics of storage are central to the contango/backwardation structure of the forward curve (covered in depth in Chapter 8).
+2. Key Global Hubs
+Crude hubs are points of convergence â€” where multiple supply sources meet, where pricing occurs, and where storage, pipeline connections, and refinery access concentrate. Four hubs dominate global crude pricing:
+Hub / Location
+Function and Significance
+Cushing, Oklahoma (USA)
+The delivery point for NYMEX WTI futures. ~85 mmbbl storage capacity. The intersection of ~20 pipelines from Canada, Permian, Bakken, and Midcontinent. When Cushing fills, WTI weakens vs Brent; when it draws, WTI strengthens. The 2020 negative WTI price occurred because Cushing was essentially full.
+Rotterdam, Netherlands
+Europe's largest oil terminal and refining hub. ARA (Amsterdam-Rotterdam-Antwerp) is the reference point for Brent-linked crude and gasoil/diesel pricing. Rotterdam storage (~50 mmbbl) also serves as European strategic buffer. It is the landing point for much North Sea, West African, and US crude.
+Fujairah, UAE
+The global bunkering hub and a critical point in Middle East crude logistics. Located outside the Strait of Hormuz, allowing tankers to load without transiting the strait. Increasingly important as a pricing reference for Middle East sour crude and as a floating storage hub during contango markets.
+Singapore / Johor
+Asia's equivalent of Rotterdam: massive refining and storage hub, pricing reference for Asian products (MOPS â€” Mean of Platts Singapore). Singapore grades VLSFO, HSFO, and gasoil are global bunker benchmarks. Johor Strait floating storage is closely watched for inventory signals.
+Hub Inventory Dynamics as Price Signals
+Hub inventory data is released weekly (EIA for Cushing) or with a short lag (Euroilstock for ARA, Singapore EDB). Sustained draws at a major hub signal physical tightness and tend to support nearby futures prices. Sustained builds signal oversupply and tend to weaken prices. The relationship is not immediate â€” markets discount 4-6 weeks of expected inventory changes â€” but large unexpected draws or builds move markets intraday.
+Cushing 2020: The Anatomy of Negative Oil
+In April 2020, WTI front-month futures briefly traded at -$37/bbl. COVID had collapsed demand globally. Cushing storage was at 95%+ capacity. Anyone holding a WTI May futures contract that was going to physically expire needed to find storage â€” and there was none. Rather than pay for delivery, market participants sold the contract at any price to exit, creating the extraordinary negative price. This was not a global oil price of -$37; Brent remained positive at ~$25/bbl. It was a pure Cushing storage bottleneck.
+3. Logistics Dynamics
+Export Flows and Their Significance
+Tracking where crude is going â€” from which producer region to which refinery region â€” is a core skill in physical oil markets and increasingly accessible to those who analyse the markets through satellite tanker tracking services (Kpler, Vortexa, TankerTrackers). The key flow relationships:
+Origin
+Primary Destination
+Key Route / Chokepoint
+Persian Gulf (Saudi, Iraq, UAE)
+Asia (China, Japan, Korea)
+Strait of Hormuz â†’ Malacca â†’ NE Asia
+Persian Gulf
+Europe
+Suez Canal / SUMED / Cape
+Russia (Ural, ESPO)
+Asia (China, India)
+Baltic / Black Sea / Pacific pipeline
+West Africa (Angola, Nigeria)
+Asia, US Gulf, Europe
+Atlantic basin / Cape
+North Sea (Brent, Forties)
+Europe, US East Coast
+Atlantic / NW Europe
+US Gulf (WTI Midland, Eagle Ford)
+Asia, Europe
+Gulf â†’ Atlantic / Panama
+Pipeline Bottlenecks
+Pipeline bottlenecks create basis differentials â€” the price gap between two geographically related crude grades. When a pipeline fills up, the crude trapped on the upstream side trades at a discount to the benchmark it would otherwise track. When new pipeline capacity opens, the discount collapses and the upstream crude re-rates to near-benchmark. These events create large, predictable spread opportunities for informed market participants.
+Permian Basis Differential Trade
+In 2018, WTI Midland (Permian crude at Midland, Texas) traded at a discount of up to $18/bbl to WTI Cushing because pipeline takeaway from the Permian was insufficient. New pipeline capacity (Sunrise, EPIC, Cactus II) came online in stages through 2019, and the basis gradually compressed to ~$1-2/bbl. Those who understood the pipeline schedule captured substantial P&L in the WTI Midland-Cushing spread.
+Storage Economics
+Storage is only economic when the forward price of oil is high enough to cover the cost of storing it. The full carry cost of storage has three components: (1) financing cost of the oil itself (~$1-2/bbl per month at SOFR + 50bp), (2) physical storage lease cost (~$0.30-0.60/bbl per month for tank), and (3) insurance and inspection costs (~$0.05/bbl per month). Total: ~$1.5-3/bbl per month for land-based storage.
+This means that a contango (forward premium) of ~$1.5-3/bbl per month is required to incentivise storage. When contango exceeds full carry cost, storage fills. When it is below full carry, storage empties. This relationship is fundamental to understanding when inventories build or draw and how the forward curve structure relates to physical market tightness.
+CHAPTER SUMMARY
+Pipelines are cheapest but fixed capacity; bottlenecks create basis differentials that are tradeable.
+VLCCs carry Middle East crude to Asia; TD3C freight is a key market signal for delivered crude costs.
+Cushing, Rotterdam, Fujairah, and Singapore are the four pricing hubs that anchor global crude and product benchmarks.
+Storage economics: contango > full carry cost (~$1.5-3/bbl/month) triggers inventory builds; less than full carry triggers draws.
+Tanker tracking data (Kpler, Vortexa) provides near-real-time visibility on crude flows â€” the key midstream data feed for those analysing the markets.
+C H A P T E R   FOUR
+Downstream â€” The Refining System
+Turning crude into value: distillation, cracking, margins, and product markets
+The downstream sector converts crude oil into the products that consumers and industry actually use: gasoline, diesel, jet fuel, heating oil, naphtha, and fuel oil. From a macro trading perspective, the downstream is where crude price translates into product price â€” and where the spread between the two (the crack spread) reveals the health and tightness of refining economics globally. Refinery margins are both a driver of crude demand and a leading indicator of product market conditions.
+1. How a Refinery Works
+A crude oil refinery is an industrial facility that separates and upgrades the hydrocarbon molecules in crude oil into usable products. The complexity of a refinery determines which crudes it can process and which products it produces. This has profound implications for crude pricing â€” a shift in refinery complexity mix changes the global demand for specific crude grades.
+Atmospheric Distillation â€” The First Step
+Crude oil is heated in a furnace and fed into an atmospheric distillation column (ADU). Different hydrocarbon fractions boil at different temperatures and separate as vapours that condense at different heights in the column. The lighter (lower-boiling) fractions collect at the top; heavier fractions at the bottom.
+  ATMOSPHERIC DISTILLATION COLUMN â€” PRODUCT YIELDS
+  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  â‰ˆ 350Â°C top â†’  Naphtha / Gasoline     ~15-25% of crude
+                 (petrol, petrochemical feedstock)
+  â‰ˆ 250-350Â°C â†’  Kerosene / Jet Fuel     ~5-10%
+                 (aviation fuel)
+  â‰ˆ 200-350Â°C â†’  Gas Oil / Diesel        ~20-35%
+                 (road diesel, heating oil)
+  Residue â†“   â†’  Atmospheric Residue     ~35-55%
+                 (feedstock for vacuum unit or direct FO)
+  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  Light crude (high API) = more naphtha/gasoline yield
+  Heavy crude (low API)  = more residue, less high-value products
+Secondary Processing â€” Upgrading the Residue
+A simple refinery (hydroskimming) stops at atmospheric distillation. A complex refinery uses secondary units to upgrade the heavy residue into higher-value products. This is where refinery complexity â€” measured by the Nelson Complexity Index (NCI) â€” adds value. Higher complexity = higher capital cost, but ability to process cheap heavy sour crude and convert it into premium products.
+Secondary Unit
+Function
+Vacuum Distillation (VDU)
+Separates atmospheric residue into vacuum gas oil (VGO) and vacuum residue under reduced pressure
+Fluid Catalytic Cracker (FCC)
+Converts VGO into gasoline and LPG; the workhorse of US refining; produces high gasoline yields
+Hydrocracker (HCK)
+Converts VGO and residue into diesel/jet fuel using hydrogen; European refineries prefer this configuration
+Coker (Delayed Coker)
+Converts vacuum residue into distillates and petroleum coke; used in US Gulf and India
+Hydrotreater
+Removes sulphur from products to meet fuel specs (ULSD 10ppm sulphur requires hydrotreating)
+Alkylation / Reforming
+Produces high-octane gasoline blending components
+Nelson Complexity Index
+The NCI assigns a complexity weight to each refinery unit as a multiple of basic distillation capacity. A hydroskimming refinery scores ~2-3; a fully complex upgrading refinery with FCC, HCK, and coker scores 10-15+. The global average is approximately 6.7.
+Complexity and Crude Appetite
+A high-complexity refinery can process cheap heavy sour crude (Arab Heavy, Iraqi Basrah, Venezuelan) and still earn a healthy margin because it converts the heavy residue into premium products. A simple refinery must use light sweet crude to produce acceptable yields. This is why the quality differential (light-heavy spread) expands in refinery-tight markets and contracts when heavy crude is abundant.
+2. Crude Quality: Light vs Heavy, Sweet vs Sour
+Not all crude oil is equal. Two dimensions matter most: gravity (API) and sulphur content. These determine both what a refinery yields from a crude and how much upgrading is required.
+Crude Grade
+API Gravity
+Sulphur %
+Refinery Configuration Needed
+WTI Cushing
+39.6Â°
+0.24%
+Any â€” premium light sweet crude
+Brent Blend
+38.3Â°
+0.37%
+Any â€” benchmark light sweet
+Arab Light
+32.8Â°
+1.80%
+Medium complexity with hydrotreater
+Arab Heavy
+27.4Â°
+2.80%
+Complex refinery with upgrading units
+Dubai
+31.0Â°
+2.10%
+Complex with desulphurisation
+Urals
+31.7Â°
+1.55%
+Complex refinery
+Bonny Light
+37.1Â°
+0.16%
+Any â€” premium sweet African crude
+WCS (Oil Sands)
+20.2Â°
+3.40%
+Very complex with coker; heavy sour specialist
+  API Gravity of Key Crude Grades
+  (Higher = Lighter = More Premium Products)
+  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  WTI Cushing              39.6Â°API  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ
+  Brent Blend              38.3Â°API  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ
+  Bonny Light              37.1Â°API  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ
+  Arab Light               32.8Â°API  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ
+  Dubai                      31Â°API  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ
+  Urals                    31.7Â°API  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ
+  Arab Heavy               27.4Â°API  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ
+  WCS Dilbit               20.2Â°API  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ
+  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+The IMO 2020 Sulphur Transition
+In January 2020, the IMO introduced a 0.5% global cap on bunker fuel sulphur content (down from 3.5%). This structurally changed the demand profile for high-sulphur fuel oil (HSFO) â€” collapsing it â€” while boosting demand for very low-sulphur fuel oil (VLSFO) and marine gasoil. The Hi-Lo spread (VLSFO-HSFO) became a key trading spread virtually overnight. Refineries with cokers and hydrotreaters that could maximise VLSFO production and minimise HSFO output earned windfall margins.
+3. Product Markets
+The five major refined products that matter most for trading are: gasoline (mogas), diesel/gasoil, jet fuel/kerosene, naphtha, and fuel oil. Each has its own demand drivers, seasonal patterns, and refinery yield economics.
+Product
+Key Use / Market
+Pricing Reference
+Gasoline (92/95 RON)
+Road transportation in US/EU/EM, petrochemical feedstock
+RBOB NYMEX (US); Eurobob NWE (Europe); MOPS 92 (Asia)
+Diesel / Gasoil (0.1% S)
+Trucks, trains, agriculture, heating, industrial, European heating oil season.
+ICE Gasoil (London); ULSD NYMEX (US); Singapore gasoil
+Jet fuel / Kerosene
+Commercial and military aviation
+Jet NWE differential to Gasoil ICE; Singapore Jet (MOPS)
+Naphtha (full range)
+Petrochemical feedstock (ethylene, propylene cracker feed), gasoline blending
+NWE naphtha CIF; Japan naphtha; Singapore naphtha
+Fuel Oil (HSFO 380/VLSFO)
+Marine bunkers, power generation, residual fuel
+HSFO Singapore 380; VLSFO Singapore 0.5%
+4. Crack Spreads and Refining Margins
+A crack spread is the price difference between crude oil and a refined product, expressed in dollars per barrel. It represents the gross refining margin â€” the revenue a refiner earns per barrel of crude processed before accounting for operating costs. Crack spreads are the most important downstream indicator for oil macro market analysis.
+The 3-2-1 Crack Spread
+The 3-2-1 crack spread is the simplest proxy for US refinery margins. It assumes a refinery processes 3 barrels of crude to produce 2 barrels of gasoline and 1 barrel of distillate (ULSD). The formula is:
+  3-2-1 CRACK SPREAD FORMULA
+  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  3-2-1 Crack = [(2 Ã— RBOB) + (1 Ã— ULSD) - (3 Ã— WTI)] / 3
+  At approximate current levels ($/bbl):
+  RBOB:  ~$2.40/gal = ~$100.8/bbl
+  ULSD:  ~$2.50/gal = ~$105.0/bbl
+  WTI:   ~$78.0/bbl
+  3-2-1 = [(2 Ã— 100.8) + (1 Ã— 105.0) - (3 Ã— 78.0)] / 3
+        = [201.6 + 105.0 - 234.0] / 3
+        = 72.6 / 3
+        = $24.2/bbl
+  This means the refinery earns ~$24/bbl gross margin
+  before operating costs (~$4-8/bbl for a simple refinery)
+  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+Other Key Crack Spreads
+Crack Spread
+Formula / Description
+Typical Range ($/bbl)
+1-1 Gasoil Crack
+ICE Gasoil â€“ Brent ICE (Europe's most traded crack)
+$10-30/bbl
+Jet Crack (NWE)
+Jet fuel NWE â€“ Brent ICE
+$14-28/bbl
+Gasoline Crack
+RBOB â€“ WTI or Eurobob â€“ Brent
+$5-25/bbl (seasonal)
+Naphtha Crack
+Naphtha NWE â€“ Brent (often negative)
+â€“$5 to +$5/bbl
+HSFO Crack
+HSFO 380 â€“ Brent (almost always negative)
+â€“$10 to â€“$25/bbl
+Hi-Lo Spread
+VLSFO â€“ HSFO (marine fuel quality premium)
+$80-200/mt
+Light-Heavy Differential
+WTI â€“ WCS or Brent â€“ Dubai
+$3-25/bbl
+What Wide Cracks Tell You
+A very wide gasoil crack (>$30/bbl) signals that diesel/heating oil supply is tight relative to demand. This is often seen in winter, post-refinery outage, or during sanctions on product exporters (e.g., Russia 2022). Wide cracks incentivise refiners to maximise throughput, support crude demand, and attract product imports. They also incentivise shipping crude to the most crack-friendly market (often Asia or Europe depending on the spread differential). Wide cracks are therefore a bullish signal for crude demand.
+Refinery Utilisation
+Refinery utilisation is the percentage of nameplate capacity actually running. Global utilisation averages ~82-84% in normal conditions. Utilisation drops during scheduled maintenance (turnarounds), unplanned outages, or when margins are so poor that running at full rate is uneconomic. High utilization with tight margins means refiners are being forced to run to meet product demand despite poor economics â€” a sign that the product market is very tight.
+  Global Refinery Utilisation by Region (approximate 2024)
+  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  US                            90%  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ
+  India                        102%  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ
+  China                         76%  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ
+  Middle East                   88%  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ
+  Europe                        83%  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ
+  Japan/Korea                   86%  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ
+  Latin America                 75%  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ
+  Africa                        68%  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ
+  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+CHAPTER SUMMARY
+Refinery complexity (Nelson Complexity Index) determines which crudes can be processed and which products are yielded.
+API gravity (lightness) and sulphur content (sweetness/sourness) are the two key crude quality dimensions that set differentials.
+The 3-2-1 crack spread is the benchmark US refinery margin: [(2Ã—RBOB)+(1Ã—ULSD)-(3Ã—WTI)]/3.
+Crack spreads are the most important downstream indicator: wide cracks signal product tightness and support crude demand.
+IMO 2020 permanently altered product demand: HSFO demand collapsed; VLSFO and marine gasoil demand structurally increased.
+C H A P T E R   FIVE78945612378954654123576179
+Demand Structure
+Who burns oil, when, and why â€” the consumption side of the equation
+Supply gets most of the attention in oil market commentary, but demand is equally important â€” and in some respects harder to forecast. Supply is observable with modest lag; demand is estimated with significant uncertainty and revised substantially after the fact. The IEA, EIA, and OPEC MOMR demand estimates frequently diverge by 0.5-1.5 mbd for the same quarter. Understanding the structure of global oil demand, its drivers, and its seasonality is essential for forming a complete market view.
+1. End-Use Demand Structure
+Global liquids demand is approximately 103 mbd (2024 estimate). This is broken down by sector:
+  Global Oil Demand by Sector (mbd, approximate 2024)
+  Source: IEA/EIA estimates
+  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  Road transport (gasoline)    26mbd  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ
+  Road transport (diesel)     28mbd  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ
+  Petrochemicals / feedstocks    16mbd  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ
+  Aviation (jet/kerosene)      8mbd  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ
+  Marine bunkers               5mbd  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆ
+  Power generation             4mbd  â–ˆâ–ˆâ–ˆâ–ˆ
+  Industry (heat/process)      8mbd  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ
+  Residential/heating oil      4mbd  â–ˆâ–ˆâ–ˆâ–ˆ
+  Other                        4mbd  â–ˆâ–ˆâ–ˆâ–ˆ
+  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+Road Transportation â€” The Dominant Sector
+Road transport (passenger cars and commercial vehicles) consumes roughly 50-55% of all oil. This makes it the most important demand sector. It splits almost equally between:
+Gasoline: Dominated by personal vehicles in the United States, China, and emerging markets.   US gasoline consumption alone (~8.7 mbd) is 8.5% of global demand. Highly sensitive to driving season patterns and gasoline prices at the pump.
+Diesel: Commercial trucking, agriculture, construction, and rail. Less price-elastic than gasoline because commercial operators have limited substitution options in the near term. Diesel demand is highly correlated with industrial activity and GDP.
+The EV Demand Displacement Risk
+Battery electric vehicles (BEVs) directly reduce gasoline and diesel demand. The IEA's "Announced Pledges" scenario implies peak oil demand in the late 2020s. In China, BEV penetration has reached ~30% of new car sales (2024), which the CNPC ETRI estimates already displaces ~0.5-0.7 mbd of Chinese gasoline demand vs a counterfactual. By 2030, EV displacement could be 2-3 mbd globally. This is a structural headwind that must be incorporated into long-horizon demand forecasts.
+Petrochemicals â€” The Growth Driver
+Petrochemical feedstocks are the fastest-growing segment of oil demand. Naphtha, LPG, and ethane are cracked in steam crackers to produce ethylene, propylene, and other building blocks of plastics, synthetic fibres, and resins. Unlike transportation fuels, petrochemicals are extremely difficult to electrify â€” plastics must be made from carbon feedstocks. This makes petrochemical demand structurally resilient even in a world of aggressive electrification.
+China is the dominant driver of petrochemical demand growth. Its massive expansion of ethylene and paraxylene capacity through the 2020s absorbed significant naphtha and LPG volumes. Monitoring Chinese patches cracker operating rates is a leading indicator for Asian naphtha demand.
+Aviation
+Aviation demand (~8 mbd) is uniquely exposed to discrete shocks: pandemics, terrorism incidents, geopolitical crises, and economic recessions all hit air travel disproportionately. COVID-19 reduced aviation demand by ~60% in 2020. The sector recovered to near pre-COVID levels by 2023. Jet fuel is the highest-value distillate â€” it commands a premium to gasoil of $5-15/bbl â€” and is the main product driver for kerosene-maximising refineries in Asia.
+Marine Bunkers
+The global shipping fleet burns approximately 5 mbd of bunker fuel. Post-IMO 2020, this splits roughly 60% VLSFO (0.5% S), 30% marine gasoil (0.1% S), and 10% HSFO (with scrubbers). LNG-powered vessels are growing slowly. Bunker demand is closely tied to global trade volumes â€” a leading indicator of which is the Baltic Dry Index (BDI).
+2. Demand Seasonality
+Oil demand is highly seasonal. Those who analyse the markets and understand the seasonal patterns can anticipate demand changes with considerable lead time â€” seasonal shifts are among the most predictable forces in the oil market. The two major seasonal demand patterns are:
+  OIL DEMAND SEASONALITY â€” SIMPLIFIED CALENDAR
+  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  Q1 (Janâ€“Mar):
+    + Heating oil / natural gas switch demand (cold winters NE US, Europe)
+    + Chinese New Year post-holiday industrial restart
+    â€“ Low gasoline demand (cold weather, shorter daylight)
+    â€“ Refinery spring maintenance season begins (throughput falls)
+  Q2 (Aprâ€“Jun):
+    + US driving season begins (Memorial Day, May)
+    + RBOB futures seasonally bid up Marâ€“May (gasoline stock builds)
+    + European refinery turnarounds mostly complete; throughput rises
+    â€“ Heating oil demand falls sharply in Northern Hemisphere
+  Q3 (Julâ€“Sep):
+    + PEAK US driving season (July 4, summer holidays)
+    + Peak air conditioning / power generation demand (Middle East, Asia)
+    + Chinese summer industrial demand high
+    â€“ Refinery fall maintenance begins late September
+  Q4 (Octâ€“Dec):
+    + Heating demand builds (Europe, NE US)
+    + Diesel demand rises (autumn harvest, pre-winter logistics)
+    + Holiday air travel boost (Thanksgiving, Christmas)
+    â€“ Gasoline demand seasonally weak
+    â€“ Chinese New Year preparation; some industrial slowdown
+  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  Net seasonal demand swing: ~3-5 mbd between Q1 low and Q3 high
+Refinery Maintenance and Throughput Seasonality
+Refineries schedule maintenance (turnarounds) during low-demand shoulder seasons â€” typically March-April and September-October â€” to minimise lost margin. During maintenance, crude runs fall and product output falls. This creates predictable crude demand weakness in March-April and September-October even if end-consumer demand is unchanged. These patterns can be anticipated months in advance.
+The Spring Crack Trade
+Refineries emerge from spring turnarounds in April-May with fresh catalysts and clean equipment, running at high utilisation just as US driving season demand builds. The combination of rising gasoline demand and full refinery output creates strong crack spread seasonality in March-May. Historically, the March-May period has been the most reliable window for long gasoline crack spreads in North America.
+Emerging Market Demand Growth
+The incremental barrel of demand comes overwhelmingly from non-OECD markets. India, Southeast Asia, the Middle East, and Sub-Saharan Africa are the primary growth regions. China, while still a growth market, is increasingly plateauing in oil demand as EV penetration grows. The key EM demand metrics to watch:
+Country/Region
+Key Demand Driver
+Indicator to Watch
+China
+Industrial activity, road transport, aviation
+NBS PMI, weekly crude runs, Kpler imports, CNPC demand reports
+India
+Road transport, LPG cooking, petrochemicals
+PPAC monthly petroleum product consumption data
+Middle East
+Power generation, petrochemicals
+Seasonal temperature (peak summer AC demand)
+Southeast Asia
+Road transport, aviation, petrochemicals
+ASEAN trade data, Platts Singapore product reports
+Sub-Saharan Africa
+Fuel for generators, transport
+IMF GDP growth forecasts, USAID energy access data
+CHAPTER SUMMARY
+Road transport (gasoline + diesel) is ~50% of global demand; petrochemicals are the fastest-growing segment.
+Seasonal demand swings of 3-5 mbd are predictable: Q3 peak (US driving + EM power), Q1 trough (post-heating, pre-driving).
+EV displacement is the structural headwind: ~0.5-0.7 mbd already displaced in China, 2-3 mbd globally by 2030.
+Refinery turnaround seasons (Mar-Apr, Sep-Oct) depress crude demand even when end-consumer demand is flat.
+Incremental demand growth is entirely non-OECD: India, Southeast Asia, and Middle East are the marginal demand drivers.
+C H A P T E R   SIX
+The Inventory System
+Stocks as the shock absorber: how inventories transmit supply-demand imbalances into prices
+Inventories are the oil market's shock absorber. When production exceeds consumption, inventories rise; when consumption exceeds production, they fall. The direction and rate of inventory change is the most direct, observable signal of whether the oil market is tight or oversupplied â€” and by how much. Sophisticated market analysts monitor inventory data more closely than any other single variable. This chapter explains how the inventory system works, how to interpret it, and how to use it in market analysis.
+1. The Global Inventory Structure
+Global oil inventories consist of several distinct categories, each with different roles, ownership, and reporting frequencies. The total global stock is estimated at approximately 7-8 billion barrels (including oil in transit and unreported stocks).
+Inventory Category
+Volume (approx)
+OECD commercial crude stocks
+~800-900 mmbbls
+OECD commercial product stocks
+~1,100-1,200 mmbbls
+US Strategic Petroleum Reserve (SPR)
+~360 mmbbls (post-2022 releases)
+Other government strategic reserves
+~400-500 mmbbls est.
+China commercial & SPR (estimated)
+~900-1000 mmbbls est.
+Floating storage (crude on tankers)
+~80-200 mmbbls (varies)
+Pipeline fill and in-transit crude
+~300-400 mmbbls est.
+OECD Inventories â€” The Market Benchmark
+The IEA tracks commercial oil inventories for OECD countries. The aggregate OECD stock level is compared to the 5-year seasonal average to assess whether inventories are above or below "normal." The number that matters is not the absolute level but the deviation from seasonal norms â€” and the direction of change.
+The 5-Year Average Framework
+The IEA, EIA, and OPEC all reference OECD commercial inventories relative to the 5-year average. When stocks are above the 5-year average, the market is considered oversupplied and price-negative. When below the 5-year average, the market is tight and price-positive. OPEC+ explicitly states its goal is to keep OECD inventories "at or below the 5-year average." During 2022-2023, OECD stocks fell well below this average, providing fundamental support for $90-100/bbl Brent.
+US EIA Weekly Data â€” The Market-Moving Release
+The US Energy Information Administration (EIA) publishes weekly petroleum data on Wednesdays at 10:30 AM EST. It is the single most market-moving regular data release in oil markets. The report covers:
+Crude oil stocks: Cushing and total US. Consensus surveys (Reuters, Bloomberg) poll analysts and market participants for expected changes. A surprise draw (stocks fall more than expected) is bullish; a surprise build is bearish.
+Gasoline stocks: Compares to seasonal norms. Low gasoline stocks in May ahead of driving season is a strong positive signal for RBOB futures.
+Distillate stocks (diesel + heating oil): Critical in October-November for winter heating season and always for trucking/rail demand.
+Crude production estimate: A weekly estimate of US crude output. Closely watched for shale production trends.
+Implied demand (product supplied): A proxy for consumption derived from refinery inputs and stock changes.
+API vs EIA â€” Don't Confuse the Two
+The American Petroleum Institute (API) publishes its own inventory data on Tuesday evenings (the night before EIA). API data is based on voluntary company reporting and is less comprehensive than EIA. However, it is released first and serves as a preview â€” markets often move on the API number on Tuesday evening and then recalibrate on the official EIA Wednesday morning release.
+China â€” The Critical Unknown
+China is the world's largest crude importer (~11 mbd in 2024) and its inventory situation is the biggest uncertainty in global oil balances. China does not publish reliable commercial inventory data. Analysts estimate Chinese inventory changes by comparing:
+Customs import data (crude imports into China)
+Independent refinery run estimates (from Kpler, Vortexa, Ursa data)
+Tanker tracking of unloading at major Chinese ports
+Satellite imagery of floating roof tank shadow lengths at key storage facilities
+When Chinese imports significantly exceed estimated refinery runs plus exports, the "missing barrels" are assumed to be going into SPR or strategic storage. This calculation â€” imprecise but important â€” can imply 0.5-1.5 mbd of "invisible" demand that affects global balances.
+2. Inventory Metrics
+Days of Forward Demand Cover
+The most useful normalisation of inventory data is "days of forward demand cover" â€” how many days of total oil consumption the current stock level represents. This adjusts for the growing absolute size of the oil market over time and allows comparison across years.
+  DAYS OF FORWARD DEMAND COVER
+  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  Formula:
+  Days Cover = Total Commercial Stocks / (Daily Demand)
+  Example:
+  OECD commercial crude + products = ~2,000 mmbbls
+  OECD demand = ~47 mbd
+  Days Cover = 2,000 / 47 = ~42.6 days
+  Historical reference ranges (OECD commercial, days):
+  2020 COVID peak: ~72 days (massive demand collapse + builds)
+  2022 tight market: ~53 days (below 5-year average ~57 days)
+  Normal range: 56-62 days
+  Critical low: < 54 days (associated with $90+ Brent)
+  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  Note: 1 mbd change in balance = ~30 mmbbls/month stock change
+  = ~0.6 days of cover per month
+Draws vs Builds â€” The Supply/Demand Balance
+The direction and magnitude of inventory changes â€” whether stocks are drawing or building â€” is the most direct indicator of the supply/demand balance. The relationship is simple but powerful:
+Balance Condition
+Inventory Signal
+Demand > Supply by 1 mbd
+Stocks draw ~30 mmbbls per month
+Demand > Supply by 2+ mbd
+Stocks draw ~60 mmbbls per month
+Supply = Demand
+Stocks flat (seasonal adjustment required)
+Supply > Demand by 1 mbd
+Stocks build ~30 mmbbls per month
+Supply > Demand by 2+ mbd
+Stocks build ~60 mmbbls per month
+Floating Storage
+Floating storage refers to crude oil held on tankers that are anchored or drifting, neither loading nor discharging. It occurs when:
+The forward curve is in deep contango (storage is economic)
+Onshore storage is full or unavailable
+Buyers want to delay delivery for price reasons
+Refineries are running below capacity (COVID 2020)
+Floating storage volumes are tracked by Kpler, Vortexa, and TankerTrackers using AIS (Automatic Identification System) vessel positioning data. A sharp rise in floating storage is a strongly bearish signal â€” it means the market is so oversupplied that the excess crude cannot find a home on land. The collapse of floating storage in 2021 as the market tightened was a powerful bullish signal.
+The 2020 Floating Storage Surge
+In April-May 2020, global floating storage reached an estimated 180-200 mmbbls as COVID demand collapsed and the OPEC+ supply war added 2-3 mbd of unwanted supply. At peak, approximately 200 VLCCs were engaged in floating storage worldwide â€” roughly 400 mmbbls of crude at sea. This overwhelmed onshore storage, triggering the negative WTI futures price. When demand recovered and OPEC+ cut production, floating storage unwound over 6-9 months, acting as a persistent headwind to price recovery.
+Strategic Petroleum Reserves
+Strategic Petroleum Reserves (SPRs) are government-owned emergency stockpiles designed to buffer against supply disruptions. The US SPR is the largest single reserve at ~360 mmbbls post-2022 releases (peak was ~726 mmbbls in 2010). IEA member countries collectively hold ~1.5 billion barrels across various strategic reserve structures.
+The 2022 SPR release (180 mmbbls over 6 months from the US SPR alone) was unprecedented. It effectively added ~1 mbd of supply to a tight market, capping the price rise following the Russia-Ukraine conflict. However, it also left the US SPR at its lowest level since 1984, raising questions about whether it retains sufficient buffer for a genuine supply emergency.
+SPR Releases: Temporary not Structural
+SPR releases suppress prices temporarily but must eventually be refilled. The US SPR at 360 mmbbls vs a pre-release level of 590 mmbbls means the government needs to buy ~230 mmbbls over the coming years. This is a structural source of demand that is price-contingent â€” the stated buy level for refill is "below $79/bbl WTI." This creates a price floor around that level as a policy backstop.
+CHAPTER SUMMARY
+OECD inventories vs 5-year average is the key tightness metric; below average = bullish, above = bearish.
+EIA Wednesday 10:30 EST is the single most market-moving regular data release â€” know the consensus before it.
+Days of forward demand cover: <54 days for OECD is historically associated with $90+ Brent.
+Floating storage is a real-time oversupply signal; unwinding is bullish. Track via Kpler/Vortexa.
+Chinese inventory estimation is an art, not a science â€” the "missing barrels" calculation can imply 0.5-1.5 mbd of invisible demand.
+C H A P T E R   SEVEN
+The Measurement Layer
+Data, agencies, and signals: building an informational edge in oil markets
+Oil markets are data-intensive. The challenge is not absence of information â€” it is that data is released with lags, subject to revision, published by competing agencies with different methodologies, and often contradictory in the short term. Building a coherent market view requires understanding not just what the data says but how reliable it is, how it will be revised, and what leading indicators are available before official data is published.
+1. Key Reporting Institutions
+EIA â€” US Energy Information Administration
+The EIA is the most data-rich oil market information source. It publishes weekly US petroleum data (the most market-moving regular release), monthly Short-Term Energy Outlook (STEO), and the annual Long-Term Energy Outlook. Key EIA releases:
+EIA Publication
+Frequency
+Weekly Petroleum Status Report
+Weekly (Wed 10:30 EST)
+Drilling Productivity Report
+Monthly
+Short-Term Energy Outlook (STEO)
+Monthly (2nd week)
+Petroleum Supply Monthly
+Monthly (60-day lag)
+Annual Energy Outlook
+Annual
+EIA STEO as Monthly Anchor
+The EIA STEO is the most detailed monthly global balance update available. When the STEO revises global demand upward or supply downward, it often confirms or validates the prior month's price move and provides a framework for the next month's trading. Comparing the STEO to the IEA OMR and OPEC MOMR in the same month reveals where the key analytical disagreements lie â€” those disagreements are often where the trade is.
+IEA â€” International Energy Agency
+The IEA was founded in 1974 in response to the OPEC oil embargo. It represents OECD countries and focuses on energy security. The IEA's Oil Market Report (OMR), published monthly, is the most widely read global oil market analysis document. It provides:
+Global supply and demand balance estimates for current and next year
+OECD inventory data and deviation from 5-year averages
+Refinery throughput data by region
+Commentary on key market developments
+The IEA tends to be more demand-optimistic and more willing to forecast oil price declines than OPEC or the EIA. It has been criticised for underestimating Chinese demand in multiple years. Its estimates are treated as credible by institutional investors and government policymakers.
+OPEC MOMR â€” Monthly Oil Market Report
+OPEC publishes its Monthly Oil Market Report (MOMR) every month, approximately one week after the IEA OMR. The MOMR provides:
+OPEC's view of global supply and demand balances
+Secondary source production data for OPEC members (Reuters, Argus, Platts)
+Non-OPEC supply growth estimates
+The "call on OPEC" â€” the implied demand for OPEC production given non-OPEC supply and demand estimates
+The "call on OPEC" is critical: if the call is 33 mbd but OPEC is producing 35 mbd, the implied balance is oversupplied and OPEC is building stocks â€” bearish. The OPEC MOMR is often viewed with healthy scepticism because OPEC has an obvious incentive to underestimate non-OPEC supply and overestimate demand â€” both of which justify keeping quotas restrictive.
+JODI â€” Joint Organisations Data Initiative
+JODI is a collaboration between the IEA, Eurostat, OLADE, APEC, UNSD, and the UN Statistics Division to collect and harmonise oil data from over 100 countries. Its key value is providing data for non-OECD countries that do not report to the IEA individually. JODI data has long publication lags (2-3 months) but is useful for cross-checking IEA and OPEC estimates for developing country production and consumption.
+2. High-Frequency Data Sources
+The limitation of official agency data is its lag â€” the IEA OMR published in February covers January data. For active trading, high-frequency alternative data sources provide near-real-time signals that precede official releases by weeks or months.
+Data Type
+Primary Sources
+Weekly US crude/product inventories
+EIA (Wed AM), API (Tue PM)
+Tanker tracking / vessel positions
+Kpler, Vortexa, TankerTrackers
+US rig count
+Baker Hughes (weekly, Fri PM)
+Refinery throughput (China)
+NBS (monthly), estimated (Kpler, ICIS)
+Satellite imagery (tank levels)
+Kayrros, Ursa Space, RS Metrics
+Coal/gas prices (power switching)
+EEX, ICE, CME
+Chinese customs import data
+GACC (monthly)
+Port congestion / loading schedules
+Platts, Argus, Kpler
+US crude export data
+EIA (weekly)
+The Baker Hughes Rig Count
+Published every Friday at 1 PM EST, the Baker Hughes US rig count is the most widely followed leading indicator of US shale activity. The oil rig count (focusing on rigs targeting oil) correlates with production growth with approximately a  4-6 month lag.
+  BAKER HUGHES RIG COUNT â€” PRODUCTION RELATIONSHIP
+  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  Rule of thumb:
+  Each active oil rig = ~400-600 bopd of production
+  Rig cycle from start to first oil: ~3-5 months (Permian)
+  DUC completion: can add production in ~1-2 months
+  Key level thresholds (US, approximate):
+  > 600 active oil rigs â†’ shale production growing 300-500 kbd/yr
+  400-600 rigs          â†’ roughly flat production (treadmill)
+  < 350 rigs            â†’ production begins declining within 6 months
+  Peak: 1,609 rigs (Oct 2014)    Low: 172 rigs (Aug 2020)
+  Current range: ~480-520 rigs (2024)
+  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  Note: Efficiency improvements mean fewer rigs are needed
+  today to produce the same barrels vs 2014.
+Tanker Tracking: Kpler and Vortexa
+AIS-based tanker tracking has revolutionised oil market intelligence. Before AIS data became commercially available, cargo flows were opaque and estimated with 1-2 month lags. Now, analysts can see in near real-time:
+How many VLCCs are loading at Ras Tanura or Kharg Island this week
+Whether Russian Urals exports to India have increased or decreased
+How many tankers are in the Suez Canal vs rerouting around the Cape
+The current floating storage volume globally or at specific regions
+Where US crude exports are going (Europe, Asia, Latin America)
+Kpler and Vortexa are the two dominant commercial platforms, with annual subscription costs of $50,000-200,000+ for full access. Their data is increasingly referenced directly in trading desk analysis and in bank research notes.
+Russia Export Tracking Post-Sanctions
+After the EU imposed its crude embargo on Russia in December 2022, the question was where Russian crude (primarily Urals and ESPO) would find new buyers. Tanker tracking data showed within weeks that Russian exports had rerouted to India and China, with some volumes to Turkey and the Middle East. This allowed those analysing the markets to quickly assess that the Russian supply disruption was smaller than feared â€” the barrels had simply redirected â€” which was a bearish signal for European crude prices and contributed to the retreat from the $130/bbl peak.
+Reconciling Conflicting Data
+In any given month, the EIA, IEA, and OPEC may publish materially different estimates of global demand, non-OPEC supply, or inventory changes. This is a reality that must be navigated when analysing the markets. The general hierarchy of data reliability:
+Data Type
+Reliability
+US EIA weekly inventories
+High for US domestic market; lower for production
+Tanker tracking flows
+High real-time signal; volume estimates can be off +/-5%
+IEA global demand estimate
+Moderate; OECD is better tracked than non-OECD
+OPEC secondary source production
+Moderate; known divergence from self-reported data
+Chinese official data
+Low confidence; selective publication; NBS figures often smoothed
+Global balances (implied stock change)
+Lower; calculated as residual; aggregates all errors
+CHAPTER SUMMARY
+EIA Weekly (Wed 10:30 EST) is the #1 market-moving data event; know the consensus; track Cushing and distillate stocks.
+IEA OMR provides the monthly global balance framework; compare its "call on OPEC" to actual OPEC production.
+Baker Hughes rig count (Fri 1 PM EST) is the best leading indicator of US shale production with a 4-6 month lag.
+Tanker tracking (Kpler, Vortexa) gives near-real-time crude flow visibility â€” indispensable for flow disruption analysis.
+When EIA, IEA, and OPEC estimates diverge significantly, the disagreement itself is the trade signal â€” find which is right.
+C H A P T E R   EIGHT
+Market Pricing
+Benchmarks, forward curves, and the language of oil futures markets
+Oil price is not a single number. There are dozens of crude benchmarks, hundreds of product grades, and a futures curve stretching years into the future for each. Understanding how prices are set, how futures markets work, and what the shape of the forward curve reveals about physical market conditions is a core technical skill for oil macro market analysis. This chapter builds that foundation, including four case studies of major historical curve events.
+1. The Three Global Benchmarks
+Three crude benchmarks dominate global oil pricing. Together they are used as the reference price for ~75% of globally traded crude:
+Benchmark
+Exchange
+Specification
+Brent ICE
+ICE Futures Europe (London)
+Physical: mix of Brent, Forties, Oseberg, Ekofisk, Troll (BFOET). ~38Â° API, ~0.4% S. Delivery North Sea. Most widely used global crude benchmark.
+WTI NYMEX
+CME (Chicago/NY)
+Physical: light sweet crude delivered at Cushing, Oklahoma. ~39.6Â° API, ~0.24% S. Most liquid short-end futures contract in the world. US domestic benchmark.
+Dubai / Oman
+DME (Dubai Mercantile Exchange)
+Physical: medium sour crude. ~31Â° API, ~2% S. Delivery: FOB Oman/Dubai. The reference benchmark for Middle East crude priced into Asia. The "sour" benchmark.
+A fourth benchmark deserves mention: ESPO (East Siberia Pacific Ocean), a Russian light crude delivered at Kozmino on the Pacific coast, increasingly used as the marginal pricing reference for Russian crude exports to China.
+How Benchmarks Are Priced
+Crude benchmarks are priced through a combination of futures markets and physical assessed prices. Platts (S&P Global Commodity Insights), Argus Media, and ICIS publish assessed prices based on actual reported trades and bids/offers during defined market-on-close (MOC) assessment windows. These assessments drive physical crude pricing globally â€” cargo invoices reference "Dated Brent" or "Platts Dubai" plus a differential.
+Dated Brent vs ICE Brent Futures
+ICE Brent futures are financial contracts settling on the ICE Brent Index â€” an average of physical BFOET trades in the assessment period. "Dated Brent" is the Platts physical price assessment for BFOET cargoes loading 10-25 days forward. The spread between Dated Brent and the front-month ICE Brent futures (the "cash-futures EFP") reflects the basis between physical and financial markets. This spread widens when physical demand is strong relative to futures.
+2. Forward Curve Structure
+The forward curve (sometimes called the futures curve or term structure) is the set of futures prices for delivery of oil at different future dates. It is not a forecast â€” it is the market's current best estimate of fair value for oil at each delivery date, incorporating all available supply/demand information, storage costs, and risk premium.
+Backwardation
+When near-term prices are higher than longer-dated prices, the curve is in backwardation. This is the normal structure for a commodity with physical scarcity. It reflects:
+Current demand for physical delivery is strong (tight market)
+Storage is not incentivised (no reward for storing oil because future prices are lower)
+Supply disruption risk premium in the near term
+Contango
+When near-term prices are lower than longer-dated prices, the curve is in contango. This reflects:
+Current physical oversupply (buyers can source oil cheaply now)
+Storage is incentivised (buy now at spot, sell forward at a premium that exceeds storage costs)
+Bearish market sentiment about near-term demand or supply disruption risk
+  FORWARD CURVE SHAPES â€” Brent M1-M12 ($)
+  â—† Strong Backwardation (tight market)   â—‹ Deep Contango (oversupply)
+  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  $100/bbl â”¤
+          â”‚ â—†   â—†                                        
+          â”‚         â—†   â—†   â—†                            
+          â”‚                     â—†   â—†   â—†   â—†   â—†   â—†    
+          â”‚                                             â—†
+          â”‚                                              
+          â”‚                                              
+          â”‚                             â—‹   â—‹   â—‹   â—‹   â—‹
+          â”‚                 â—‹   â—‹   â—‹                    
+          â”‚         â—‹   â—‹                                
+          â”‚ â—‹   â—‹                                        
+  $72/bbl â”¤
+         â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+          M1  M2  M3  M4  M5  M6  M7  M8  M9  M10 M11 M12
+Time Spreads â€” The Analystâ€™s Instrument
+Rather than trading outright Brent or WTI prices, market analysts often focus on time spreads â€” the price difference between two adjacent contract months. The M1-M2 spread (first month minus second month) is the most liquid and most watched. Time spreads move much more in response to physical market signals than outright prices, making them a purer expression of supply-demand fundamentals.
+  TIME SPREADS: KEY RELATIONSHIPS
+  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  M1-M2 Brent spread (front month vs next month):
+    +$1.50   = strong backwardation, tight physical market
+    +$0.30   = mild backwardation, balanced market
+     0.00    = flat (roughly balanced)
+    -$0.50   = mild contango, mild oversupply
+    -$2.00   = deep contango, significant oversupply
+  When M1-M2 spikes strongly backwardated intraday:
+  â†’ Physical player urgently needs prompt barrels (refinery restart,
+    pipeline surprise, cargo delayed)
+  â†’ Buy the spread, sell it back when urgency fades
+  When M1-M2 collapses into contango suddenly:
+  â†’ Cargo cancellation, unexpected supply surge, demand weakness
+  â†’ Consider short outright or carry trades
+  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+Storage Arbitrage and Contango Limits
+Contango cannot be unlimited. The maximum level of contango is bounded by the full cost of carrying oil in storage. When the M1-M12 Brent contango exceeds approximately $15-18/bbl (storage + financing for 11 months), storing a VLCC of oil (2 million barrels) becomes profitable. This brings in physical market participants who buy spot, sell 12 months forward, charter a tanker, and lock in the spread. Their buying of prompt crude and selling of deferred futures caps the contango and brings it back toward full carry.
+3. Historical Curve Case Studies
+Case Study 1: The 2008 Oil Spike ($147/bbl)
+The 2008 oil price spike to $147/bbl in July 2008 was driven by a combination of fundamental supply constraints and speculative excess. The underlying fundamentals were genuine: OPEC spare capacity had fallen to ~1.5 mbd, non-OPEC supply growth was disappointing, and Chinese demand was surging ahead of the Beijing Olympics. The forward curve was in steep backwardation throughout 2007-2008, validating the physical tightness.
+Key Factor
+Description
+OPEC spare capacity
+Fell to ~1.5 mbd â€” lowest since early 2000s; any disruption hit prices immediately
+Dollar weakness
+The Fed cut rates aggressively in 2007-2008; a weak dollar inflated USD oil prices
+Speculative positioning
+CFTC managed money net long in crude reached record levels; contributed to overshoot
+Demand
+Chinese demand grew ~800 kbd in 2007; pre-Olympics construction at peak
+Non-OPEC disappointment
+Russia, North Sea, Mexico all underperformed supply forecasts
+Correction
+Lehman Brothers (Sep 2008) triggered demand collapse; oil fell from $147 to $32 in 5 months
+2008 Lesson: Backwardation and the Supply Risk Premium
+In tight markets with low spare capacity, even small supply disruptions have outsized price impact. The 2008 Nigerian militant attacks (MEND, removing ~0.3 mbd) contributed to the final push above $100/bbl. In a 1.5 mbd spare capacity world, 0.3 mbd matters. In a 4 mbd spare capacity world, it is noise. Spare capacity is the denominator that converts news into price.
+Case Study 2: The 2014 Shale Crash
+Between June 2014 and January 2016, Brent fell from $115/bbl to $27/bbl. The trigger was the combination of surging US shale supply and OPEC's decision (in November 2014) to abandon its role as swing producer and defend market share instead of price.
+Phase
+Period
+What Happened
+Oversupply builds
+Jan-Jun 2014
+US shale adds 1.5 mbd year-on-year; OPEC production flat; global stocks build
+OPEC surprise
+Nov 2014
+OPEC meeting in Vienna; Saudi Arabia refuses to cut; "fight for market share"
+Cascade lower
+Dec 2014 - Feb 2016
+WTI falls from $80 to $26; US rig count collapses from 1,500+ to 400
+Stabilisation
+Feb 2016
+US production decline convinces Saudi Arabia to negotiate OPEC+ agreement
+OPEC+ formation
+Nov 2016
+First OPEC+ cut agreement; Russia joins supply coordination for first time
+  2014-2016 SHALE CRASH: KEY METRICS
+  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  Brent price peak:         $115/bbl (Jun 2014)
+  Brent price trough:        $27/bbl (Jan 2016)
+  Decline:                          -76%
+  US Baker Hughes oil rigs: 1,609 (Oct 2014) â†’ 404 (May 2016)
+  US shale production peak: ~9.7 mbd (Apr 2015)
+  US shale decline:         fell to ~8.4 mbd by mid-2016
+  Global OECD stock build:  +280 mmbbls (Jun 2014 to Jan 2016)
+  Contango M1-M12 at peak:  ~$12/bbl (early 2015)
+  Recovery trigger:         OPEC+ November 2016 Vienna Agreement
+  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+Case Study 3: The 2020 COVID Contango
+The COVID-19 pandemic created the most extreme demand shock in oil market history. Global demand fell by ~20 mbd (20%) in April 2020 â€” a fall that had never been seen before in absolute or relative terms. The market moved from modest backwardation in January 2020 to the deepest contango on record within eight weeks.
+Event
+Date
+WHO COVID emergency declared
+Jan 30, 2020
+Italy lockdown
+Mar 10, 2020
+Saudi price war announcement
+Mar 8, 2020
+Global demand collapse
+Apr 2020
+WTI May futures negative
+Apr 20, 2020
+OPEC+ emergency cut
+Apr 12, 2020
+Vaccine announcement
+Nov 9, 2020
+2020 Lesson: Physical Limits Create Discontinuous Prices
+The -$37 WTI print was not a "real" oil price â€” it was a financial accident caused by the interaction of physical storage limits and derivative contract mechanics. Understanding the physical plumbing (Cushing storage capacity) allowed those analysing the markets to both explain the negative price and identify the inevitable recovery once OPEC+ cut production and demand normalised.
+Case Study 4: The 2022 Energy Crisis
+The 2022 energy crisis was fundamentally different from 2008 or 2014. It was a multi-fuel crisis affecting oil, natural gas, coal, and electricity simultaneously, triggered by Russia's invasion of Ukraine in February 2022. Oil reached $130/bbl in March 2022 before retreating; European natural gas (TTF) reached â‚¬340/MWh â€” nearly 10x its historical average.
+Driver
+Impact on Oil
+Impact on Gas/Power
+Russia-Ukraine war (Feb 2022)
+Russian crude/products sanctioned by EU; ~2-3 mbd rerouted to Asia
+Russian pipeline gas cut to Europe; TTF surged to record levels
+SPR release (coordinated IEA)
+180 mmbbls released; capped crude price rise
+N/A for gas market
+European product shortage
+Russia product ban (Feb 2023); diesel/gasoil tight in Europe
+Fuel oil burn in power sector increased as gas substitute
+USD strength
+Strong USD counteracted some of the supply-driven price rise
+Eurozone energy cost amplified by weak EUR
+Chinese lockdowns (2022)
+~0.5-1 mbd Chinese demand reduction; dampened price peak
+Reduced LNG demand; diverted LNG to Europe
+Demand destruction
+High prices reduced EM fuel demand; product cracks eventually fell
+Industrial demand curtailment in Europe
+CHAPTER SUMMARY
+Brent (light sweet, North Sea), WTI (light sweet, Cushing), and Dubai (medium sour, ME) are the three global price benchmarks.
+Backwardation = tight market, physical scarcity, no storage incentive. Contango = oversupply, storage incentivised.
+Time spreads (M1-M2) are a purer fundamental signal than outright prices â€” track them more closely than the headline price.
+Full carry contango (~$1.5-3/bbl/month) sets the ceiling for contango; storage arbitrage collapses spreads beyond this level.
+2008: spare capacity exhaustion + speculation; 2014: shale supply + OPEC strategy; 2020: COVID demand collapse; 2022: war + energy crisis.
+C H A P T E R   NINE
+Benchmark Relationships
+Brent-WTI, quality spreads, and the geography of crude pricing
+The relationship between crude oil benchmarks is one of the richest areas of oil market analysis. Spreads between Brent and WTI, between light and heavy crude, between sweet and sour grades, and between regional crude benchmarks are all driven by identifiable, tradeable fundamentals. Understanding what drives these differentials provides informational edge over those who only track the headline crude price.
+1. The Brent-WTI Spread
+The Brent-WTI spread (Brent minus WTI) is the most widely traded crude oil spread in the world. It typically trades between -$3/bbl and +$10/bbl under normal market conditions, but has traded as wide as +$28/bbl (2012-2013) and as narrow as -$5/bbl (2019). Its drivers are fundamentally different from either outright crude price:
+Driver
+Direction / Mechanism
+US crude export capacity
+When US cannot export freely, WTI builds at Cushing â†’ WTI weakens relative to Brent. More US exports â†’ WTI tracks Brent more closely.
+Cushing storage levels
+High Cushing stocks â†’ WTI surplus â†’ WTI discount widens vs Brent.
+US shale production growth
+Faster US supply growth â†’ more WTI barrels chasing fixed pipeline/export capacity â†’ WTI weakens.
+North Sea disruptions
+Any supply disruption in BFOET grades tightens Brent physical supply â†’ Brent premium widens.
+Refinery configuration
+US Gulf refineries configured for heavy sour may prefer WTI premium; Atlantic Basin refineries configure for Brent.
+Geopolitical risk (non-US)
+Middle East or Russian supply risk â†’ Brent (global benchmark) gets risk premium â†’ Brent strengthens vs WTI.
+Dollar index
+Strong dollar reduces USD oil prices generally; but Brent, priced in USD, can diverge from WTI based on physical flows.
+  BRENT-WTI SPREAD: HISTORICAL REFERENCE POINTS
+  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  2008:          ~+$2-4/bbl    (normal range; US exports banned)
+  2011-2013:     +$15-28/bbl   (Cushing pipeline crisis; US cannot
+                                export; shale flood at Cushing)
+  2015:          +$3-8/bbl     (shale growth but pipeline relief)
+  2018-2019:     +$5-12/bbl    (Permian growth; some Cushing builds)
+  2020:          +$3-5/bbl     (brief WTI collapse April; then normalised)
+  2022:          +$2-8/bbl     (US exports strong; Russia disruption lifts Brent)
+  2024:          +$3-6/bbl     (normal; high US exports offsetting shale premium)
+  Signal: Brent-WTI > $8/bbl â†’ US export bottleneck or North Sea
+          disruption. Brent-WTI < $2/bbl â†’ US exports flooding market.
+  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+The 2011-2013 Brent-WTI Blow-Out
+US tight oil production grew from ~1 mbd in 2008 to ~3 mbd by 2012, all landing at Cushing. But until 2014, US law banned crude oil exports (a legacy of the 1975 Energy Policy and Conservation Act). WTI crude piled up at Cushing; Brent remained tight on global supply concerns. The spread reached $28/bbl in September 2011. The spread collapsed in 2015-2016 as the Seaway pipeline was reversed (allowing Cushing crude to reach the Gulf Coast) and eventually as US export restrictions were lifted in December 2015.
+2. Brent vs Dubai: The Sour Spread
+The Brent-Dubai spread (sometimes called the East-West spread or light-heavy/sweet-sour spread for Middle East crude) measures the quality and geographic premium of North Sea light sweet crude over Middle East medium sour crude. It is the key spread determining whether Middle East crude flows to Asia (where it is most competitive) or to Europe (where it competes with Brent-linked grades).
+Brent-Dubai Driver
+Mechanism
+Light-heavy spread
+When complex refinery margins are wide, heavy sour crude is more valuable â†’ Dubai strengthens vs Brent (spread narrows)
+Atlantic-Pacific arbitrage
+When Atlantic Basin light crude is scarce, refiners use more ME crude â†’ Dubai gets bid, spread narrows
+OPEC cuts (ME crude)
+OPEC production cuts reduce Dubai supply â†’ Dubai premiums rise, Brent-Dubai narrows
+US shale exports to Asia
+US light crude exports to Asia compete with Brent-linked and ME crudes â†’ can widen Brent-Dubai
+Refinery sulphur capacity (Asia)
+New complex refineries in Asia (India, China) can process more Dubai â†’ structural support for Dubai vs Brent
+3. Regional Crude Differentials
+Every crude grade in the world trades at a differential to one of the three major benchmarks. These differentials reflect quality, location, and supply-demand balance for that specific crude. Understanding regional differentials helps physical market participants identify which crude is cheapest for a given refinery configuration and helps those analysing the markets identify which direction a specific flow disruption will push prices.
+Crude Grade
+Benchmark
+Typical Differential
+Main Driver
+WTI Midland (Permian)
+WTI Cushing
++$0-3/bbl
+Pipeline capacity from Permian to Cushing/Gulf
+WCS (Canadian heavy)
+WTI Cushing
+-$10-25/bbl
+Pipeline takeaway from Alberta; upgrader capacity
+Urals (Russia)
+Brent ICE
+-$2-15/bbl
+Sanctions, buyer pool, freight; was -$1-3 pre-2022
+Bonny Light (Nigeria)
+Brent ICE
++$0-3/bbl
+Quality premium; upstream disruption risk premium
+Arab Light
+Dubai
+Fixed OSP
+Saudi official selling price; OPEC strategy signal
+ESPO Blend (Russia)
+Dubai
++$2-8/bbl
+Quality premium; Pacific delivery; China demand
+Forcados (Nigeria)
+Brent ICE
++$1-4/bbl
+Light sweet quality; Nigeria supply reliability risk
+The Saudi OSP â€” A Market Signal
+Saudi Aramco publishes monthly Official Selling Prices (OSPs) for its crude grades to each destination region (Asia, Europe, Americas). The OSP is the price at which Aramco sells to its contract customers, expressed as a differential to the applicable benchmark (e.g., Arab Light to Asia = Dubai/Oman + $X/bbl).
+OSP changes are a key market signal. When Aramco raises its OSP to Asia, it means demand for Saudi crude in Asia is strong (it can charge more). When it cuts the OSP, it may be trying to defend market share against competing crudes or responding to weaker demand. An unexpected OSP cut to Europe, for example, signals that Aramco is worried about losing market share to Russian, US, or North African crude.
+Monthly OSP as Market Thermometer
+Saudi OSP announcements (typically the 5th of each month) are closely watched by physical crude market participants. An OSP that is higher than expected signals Aramco sees tight demand for its crude â€” a bullish signal for Asian crude markets. A cut is bearish. Cross-referencing the OSP with independent assessments of Middle East crude supply/demand gives insight into the physical market conditions that precede futures price moves.
+4. Quality Spreads
+Quality spreads measure the price difference between crude grades of different API gravity or sulphur content. They are driven by refinery margin economics and refinery configuration globally.
+Quality Spread
+Measures
+Widens When...
+Light-Heavy (e.g., Brent-Maya)
+API premium of light over heavy crude
+Complex refinery margins are low; heavy crude cannot be upgraded economically
+Sweet-Sour (e.g., Brent-Urals)
+Sulphur premium of low-S over high-S crude
+Hydrotreater capacity is tight; ULSD demand strong; sulphur allowances tighten
+WTI-WCS
+Light premium over Canadian heavy sour oil
+Pipeline bottlenecks in Alberta; US complex refinery demand for heavy crude falls
+Naphtha-Gasoil
+Relative product yield economics
+Gasoline demand weak vs diesel; petrochemical demand low vs transport
+CHAPTER SUMMARY
+Brent-WTI spread is driven by US export capacity, Cushing stocks, and North Sea supply disruptions â€” not general oil market fundamentals.
+Brent-Dubai (East-West spread) reflects light-heavy quality premium and Atlantic-Pacific arbitrage economics.
+Regional crude differentials are set by quality, location, and supply/demand for that specific grade â€” monitor to identify flow changes.
+Saudi OSP changes (monthly, ~5th of month) are a leading physical market signal â€” above consensus = bullish; below = bearish.
+Quality spreads (light-heavy, sweet-sour) reflect refinery configuration and margin economics â€” they inform which crudes refiners are bidding for.
+C H A P T E R   TEN
+Geopolitics & Risk
+Wars, sanctions, chokepoints, and producer alliances: the political economy of oil
+Oil is the world's most geopolitically sensitive commodity. Its geographic concentration in politically unstable regions, its role in funding sovereign governments, and its strategic importance to military operations mean that geopolitical events can and regularly do override fundamental supply-demand analysis. This final chapter provides a framework for assessing geopolitical risk in oil markets â€” how to identify what matters, how to size the risk, and how to trade it.
+1. Wars, Conflicts, and Supply Disruptions
+Historically, the most significant oil price spikes have been associated with supply disruptions caused by conflict in producing regions. The key lesson of oil market history is that geopolitical supply disruptions are most price-impactful when spare capacity is low. With high spare capacity, disruptions are absorbed. With low spare capacity, even modest disruptions cause outsized price moves.
+Conflict
+Period
+Supply Impact (approx)
+Arab-Israeli War / OPEC Embargo
+1973
+~3 mbd disruption; price 4x in 3 months
+Iranian Revolution
+1978-79
+~4 mbd disruption; price 2x
+Iran-Iraq War
+1980-88
+2-3 mbd combined loss; price volatile
+Gulf War I (Kuwait invasion)
+1990
+~4.3 mbd Kuwait+Iraq; price 2x in 3 months
+Iraqi Freedom / Gulf War II
+2003
+~2 mbd disruption; muted due to spare capacity
+Libya Civil War
+2011
+~1.3 mbd; Brent +$20 in weeks; spare capacity low
+Russia-Ukraine War
+2022
+~2-3 mbd rerouted (not lost); Brent to $130
+Hamas/Houthi (Red Sea)
+2023-24
+~1-2 mbd re-routing; freight +300%
+  GEOPOLITICAL RISK SCORING FRAMEWORK
+  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  Score each event on three dimensions:
+  1. SUPPLY AT RISK (mbd)          Weight: 40%
+     < 0.5 mbd  = 2pts
+     0.5-1 mbd  = 4pts
+     1-2 mbd    = 6pts
+     2-4 mbd    = 8pts
+     > 4 mbd    = 10pts
+  2. GLOBAL SPARE CAPACITY (mbd)   Weight: 40%
+     > 4 mbd spare = 2pts (cushioned)
+     2-4 mbd spare = 5pts (moderate risk)
+     1-2 mbd spare = 8pts (vulnerable)
+     < 1 mbd spare = 10pts (critical)
+  3. DURATION UNCERTAINTY          Weight: 20%
+     Days-weeks  = 2pts
+     Weeks-months = 5pts
+     Multi-year   = 8pts
+     Structural/permanent = 10pts
+  Total composite score â†’ implied price risk premium:
+  2-4 pts = $2-5/bbl premium     8-9 pts = $15-25/bbl premium
+  5-6 pts = $5-10/bbl premium    10 pts  = $25-50/bbl premium
+  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+2. Sanctions and Their Oil Market Impact
+Economic sanctions targeting oil-producing countries are one of the most powerful geopolitical tools affecting oil markets. Unlike military conflict, sanctions operate through financial and commercial channels and can be precisely calibrated. Their impact depends on whether buyers can find alternative sources and whether the sanctioned country can find alternative buyers.
+Major Sanctions Regimes in Oil
+Sanctions Target
+Start
+Iran (nuclear programme)
+2012 (reimposed 2018)
+Russia (Ukraine invasion)
+2022
+Venezuela (Maduro regime)
+2019
+Libya (civil conflict)
+Various, 2011-2024
+Sanctions vs Embargo: The Rerouting Problem
+Sanctions rarely "destroy" supply â€” they reroute it. Russian Urals lost its European customer base in 2022 but found new buyers in India and China at discounted prices. Iranian crude flows to China despite US secondary sanctions. The market impact of sanctions is: (1) the discount the sanctioned country must accept; (2) the cost and delay of rerouting; and (3) the indirect impact on the oil price as Western buyers must source replacement barrels at market price. The net effect is usually smaller than the headline "X mbd sanctioned" figure.
+The Price Cap â€” A Novel Sanctions Tool
+In December 2022, the G7 introduced a novel sanctions mechanism: a price cap on Russian oil ($60/bbl for crude). The mechanism allowed non-sanctioning countries to continue buying Russian crude, but denied Western shipping, insurance, and financing services to transactions above $60/bbl. This was designed to keep Russian oil flowing (preventing a supply shock) while limiting Russian revenues.
+The real-world effectiveness was limited: Russia developed a "shadow fleet" of tankers insured by non-Western providers. By mid-2023, Russian crude was reportedly trading above $60/bbl in many transactions. The experiment showed the limitations of secondary sanctions in a world where alternative logistics and financial infrastructure exists.
+3. Maritime Chokepoints
+Approximately 40% of global oil trade passes through a small number of maritime chokepoints â€” narrow straits where geography forces tankers into confined channels. These chokepoints are the most acute single-point supply disruption risks in oil markets. Unlike production disruptions, chokepoint closures can simultaneously affect multiple supply sources.
+Chokepoint
+Daily Flow (approx)
+Risk Level
+Strait of Hormuz
+~17 mbd (20% global supply)
+CRITICAL â€” Iran can threaten closure; no viable alternative for Gulf crude
+Strait of Malacca
+~16 mbd (Asia gateway)
+MODERATE â€” territorial waters of Malaysia/Indonesia/Singapore; well-patrolled
+Bab el-Mandeb (Red Sea)
+~4-5 mbd
+HIGH â€” Houthi attacks disrupted from Nov 2023; Cape reroute adds 10-15 days
+Suez Canal
+~9% of global trade
+HIGH â€” Canal operational but Red Sea risk affects feeder traffic; SUMED pipeline alternative
+Bosphorus
+~2-3 mbd Russian crude
+MODERATE â€” Turkey controls; used P&I insurance as leverage post-Ukraine
+Cape of Good Hope
+Bypass route (unlimited)
+LOW risk itself; HIGH cost for rerouted tankers (+$2-4/bbl delivered cost
+Danish Straits (Skagerrak)
+~2-3 mbd Baltic Russian crude
+MODERATE â€” shadow fleet dominant; NATO chokepoint if Baltic conflict escalates
+Panama Canal
+~0.5-1 mbd, mostly LNG/products
+LOW-MODERATE â€” drought restrictions in 2023-2024; seasonal water level risk
+Strait of Hormuz â€” The Doomsday Scenario
+The Strait of Hormuz is 21 miles wide at its narrowest point and carries approximately 17 mbd of crude oil â€” roughly 17% of global supply and 20% of global crude trade. All Saudi, UAE, Kuwaiti, and most Iraqi and Iranian crude exports pass through Hormuz. The only meaningful bypass options are:
+Petroline (Saudi East-West pipeline): 1.5-2 mbd capacity to Yanbu on the Red Sea. Has not been used at full capacity in decades; maintenance status uncertain.
+ADNOC Abu Dhabi Crude Oil Pipeline (Habshan-Fujairah): ~1.5 mbd capacity delivering to Fujairah outside Hormuz.
+Total bypass capacity: ~3-3.5 mbd vs 17 mbd through Hormuz. A closure would mean ~13-14 mbd of supply disruption â€” an unprecedented shock.
+Hormuz Closure: The Unthinkable Trade
+A complete Hormuz closure has never occurred and would likely trigger immediate US military response. However, partial disruption â€” Iran mining tanker lanes, IRGC tanker seizures, missile attacks on Saudi terminal at Ras Tanura â€” are lower-probability but non-zero scenarios. In 2019, IRGC seized the British-flagged Stena Impero; in 2023, seized the Suez Rajan. Markets price a risk premium of $3-8/bbl for Hormuz risk at any given time. A confirmed military escalation in the Gulf could add $20-30/bbl within hours.
+4. Producer Alliances and Political Risk
+OPEC+ as a producer alliance has already been covered in the upstream chapter. But the political dynamics within and around producer countries create a distinct layer of risk. The key risk typologies:
+Country-Level Political Risk
+Country
+Risk Type
+Libya
+Civil conflict, rival factions controlling oil terminals
+Nigeria
+Delta militancy, pipeline vandalism, fiscal mismanagement
+Iraq
+Baghdad-Erbil conflict, sectarian tensions, Iranian influence
+Venezuela
+Maduro regime, US sanctions, PDVSA collapse
+Kazakhstan
+Post-Soviet political fragility; CPC pipeline dependent on Russia
+Iran
+Theocracy; nuclear programme tensions; US sanctions
+The Russia Factor
+Russia is the world's second-largest crude exporter (~5 mbd) and one of the largest gas exporters. Its integration into OPEC+ since 2016 was a geopolitical as much as an economic decision â€” Russia gained influence over global oil prices while benefiting financially from production restraint.
+The 2022 Ukraine invasion fundamentally changed Russia's role in the oil market. Its crude and products were sanctioned by the EU and G7. Its export revenues fell (due to discounts to India and China). Its oil infrastructure came under Ukrainian drone attack. The key remaining uncertainty is the durability of Russian production â€” declining fields, constrained access to Western technology, and limited oilfield services capacity suggest a gradual decline in Russian output over the medium term, even if short-term volumes have been maintained.
+Russia Oil Revenue Dependency
+Oil and gas revenues represent ~35-45% of Russian federal budget revenues (varying with price). At $60/bbl Urals, Russia runs a fiscal deficit. At $80/bbl Urals, it roughly balances. The EU sanctions and price cap mechanism was explicitly designed to keep Russian oil flowing to global markets (preventing a supply shock) while reducing the price received and therefore the fiscal revenue. Whether it achieved this goal remains debated.
+Geopolitical Risk â€” Sizing the Premium
+Geopolitical events typically inject a risk premium into oil prices that fades over time as markets reassess the actual supply impact. The fading pattern is fairly consistent:
+  GEOPOLITICAL RISK PREMIUM: TYPICAL FADE PATTERN
+  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  Day 0   : Event announced/confirmed
+            Price +5-20% immediately (spike)
+  Day 1-3 : Initial assessment of supply impact
+            Price stabilises or extends if impact confirmed
+            Premium = full uncertainty value
+  Day 7-14: Rerouting/replacement supply identified
+            Price begins to fade if supply is restored/rerouted
+            Premium = residual disruption + duration uncertainty
+  Day 30+ : Market adjusts fully to new supply reality
+            Residual premium = only ongoing risk of escalation
+            Fade: 50-80% of initial spike typically reversed
+  EXCEPTION: If supply is not restored, premium persists and
+  fundamental drivers take over (inventory draws, spare capacity)
+  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  Market analysis: Buy the spike only if supply is genuinely
+  disrupted AND spare capacity is insufficient to absorb.
+  Fade the spike if rerouting or replacement supply is visible.
+CHAPTER SUMMARY
+Geopolitical supply disruptions are most price-impactful when global spare capacity is below ~2 mbd â€” spare capacity is the buffer.
+Sanctions redirect supply rather than destroy it; the price impact depends on the cost of rerouting and the discount the displaced barrels must accept.
+Hormuz carries ~17 mbd; total bypass capacity is ~3.5 mbd. A closure is the single largest theoretical supply shock in the oil market.
+Political risk within producer countries (Libya, Nigeria, Iraq, Venezuela) creates chronic volatility of 0.3-1 mbd per country.
+Geopolitical risk premiums fade when supply is restored or rerouted; persist when physical disruption is confirmed and lasting.
+C H A P T E R   E L E V E N
+The Products
+Contract specifications, exchange mechanics, and trading conventions for BRN, CL, RBOB, HO, and Gasoil
+The previous chapters built a framework for understanding the physical oil market â€” supply, logistics, refining, demand, inventory, and geopolitics. This chapter grounds that knowledge in the instruments you will actually trade. Every view on oil macro is ultimately expressed through a futures contract, and every futures contract has a precise specification that determines what you own, how it settles, and what risks you are taking on. Understanding the contract is not a technicality â€” it is the difference between expressing your trade and accidentally taking on basis risk, roll exposure, or physical delivery obligations you did not intend.
+This chapter covers the five contracts that form the core of an energy trading desk: Brent Crude (BRN/B), WTI Crude (CL), RBOB Gasoline, Heating Oil/ULSD, and ICE Gasoil. For each, we cover the exchange listing, contract size, settlement mechanism, delivery terms, expiry schedule, and the practical trading conventions a desk needs to know.
+1. Brent Crude Futures (BRN / B) â€” ICE Futures Europe
+Brent is the worldâ€™s most important crude oil benchmark, the pricing reference for approximately 70% of internationally traded crude. It trades on ICE Futures Europe in London. The contract has evolved significantly since its inception: the â€œBrentâ€ of today is technically BFOET â€” a basket of five North Sea crude streams (Brent, Forties, Oseberg, Ekofisk, and Troll) â€” introduced as production from individual fields declined. This evolution is important: Brent is not one physical crude; it is a financially settled contract linked to a complex of physical assessments.
+Specification
+Detail
+Exchange
+ICE Futures Europe (London). Ticker: B (ICE) / BRN (Bloomberg).
+Contract Size
+1,000 barrels (42,000 US gallons). One lot = 1,000 bbl.
+Quotation
+USD per barrel. Minimum tick: $0.01/bbl = $10 per contract.
+Settlement
+Cash-settled against the ICE Brent Index â€” a weighted average of BFOET physical cargo prices in the 25-day window. No physical delivery. This is critical: holding Brent to expiry does not result in receiving crude oil.
+Expiry / Roll
+Monthly contracts. Expiry: last business day of the month preceding the delivery month (e.g., the January contract expires in late December). Curve listed up to 7+ years forward. Front-month roll typically occurs 3â€“5 days before expiry when volume migrates to M2.
+Underlying Quality
+BFOET basket: ~38Â° API, ~0.4% sulphur. Light sweet. The â€œcheapest to deliverâ€ mechanism in the physical market means Forties (the most sulphurous leg) often sets the price floor for the basket.
+Trading Hours
+Nearly 24 hours: Sun 23:00 â€“ Fri 23:00 London time (with brief daily break at 22:00â€“23:00). Open: Sun 23:00 London / Close: Fri 23:00 London. Most active: 07:00â€“17:30 London. Official daily settlement: 19:30â€“20:00 London time (ICE settlement window). Platts MOC window: 16:00â€“16:30 London (physical price assessment; can cause sharp vol at close). Exchange: ICE Futures Europe, London.
+Key Spread Products
+Brent-WTI spread (B-CL); Brent-Dubai EFS; ICE Brent calendar spreads (M1-M2, M1-M3, Q1-Q2); Brent vs ICE Gasoil crack.
+Trading Desk Note: Brent Cash vs Futures
+The ICE Brent futures contract and â€œDated Brentâ€ are not the same thing. Dated Brent is the Platts physical assessment for BFOET cargoes loading 10â€“25 days forward. The EFP (Exchange for Physical) spread â€” the difference between Dated Brent and the ICE front-month â€” reflects the basis between physical and financial markets. When physical demand is strong (e.g., refinery restarts, cargo shortfalls), the EFP widens: physical trades at a premium to paper. Those who only watch the ICE screen miss this signal entirely. Physical market participants who quote in Dated Brent differentials are effectively quoting a different price from the ICE screen, and the EFP is the bridge.
+2. WTI Crude Futures (CL) â€” CME / NYMEX
+WTI (West Texas Intermediate) trades on the NYMEX division of the CME Group and is the most liquid crude futures contract in the world by open interest. It is the primary North American crude benchmark and the reference price for US domestic crude transactions. Unlike Brent, WTI is a physically delivered contract â€” a detail that has profound practical implications, as the April 2020 negative price episode demonstrated. The delivery point is Cushing, Oklahoma, a landlocked pipeline hub with finite storage capacity.
+Specification
+Detail
+Exchange
+NYMEX (CME Group). Ticker: CL. Also traded as e-mini (QM, 500 bbl) for smaller positions.
+Contract Size
+1,000 barrels. Minimum tick: $0.01/bbl = $10/contract.
+Settlement
+Physical delivery at Cushing, Oklahoma. EFP (Exchange for Physical) transactions allow off-exchange settlement against physical. Holders of open positions at expiry receive or deliver crude at Cushing. This is the mechanism behind negative prices in 2020: physical delivery into a full hub with no storage available.
+Expiry
+3rd business day prior to the 25th calendar day of the month preceding delivery. e.g., the June contract expires around May 20â€“22. Roll activity begins 5â€“7 days before expiry; volume concentrates in M2 approximately 3 days before expiry.
+Quality
+Light sweet crude: 37Â°â€“42Â° API gravity, max 0.42% sulphur. Several domestic US grades can be delivered at differentials, but the contract effectively tracks WTI Cushing 39.6Â° API as the par grade.
+Trading Hours
+CME Globex: Sun 18:00 â€“ Fri 17:00 CT (with 60-minute daily break at 17:00â€“18:00 CT). Open: Sun 18:00 CT / Close: Fri 17:00 CT. Most active: 08:00â€“14:30 CT (New York hours). Official daily settlement: 14:28â€“14:30 CT (CME two-minute VWAP settlement window). EIA data release (Wed 10:30 ET) is the highest-volatility window of the week. Exchange: CME / NYMEX, Chicago & New York.
+Key Spreads
+WTI-Brent (CL-B); WTI calendar spreads (M1-M2); WTI-WCS heavy differential; 3-2-1 crack spread (CL vs RBOB+HO); WTI Midland-Cushing basis.
+3. RBOB Gasoline Futures (RB) â€” CME / NYMEX
+RBOB (Reformulated Blendstock for Oxygenate Blending) is the US benchmark for gasoline futures. It is the feedstock for retail gasoline â€” blenders add ethanol (typically 10%) before it reaches the pump. RBOB is the most seasonally volatile energy futures contract: it is heavily driven by the US driving season (Aprilâ€“September), refinery maintenance schedules, and RVP (Reid Vapour Pressure) specification changes between winter and summer grades. The contract is physically delivered but rarely taken to delivery by financial participants; most positions are rolled before expiry.
+Specification
+Detail
+Exchange
+NYMEX (CME Group). Ticker: RB.
+Contract Size
+42,000 US gallons (1,000 barrels). Quoted in USD per gallon. Minimum tick: $0.0001/gal = $4.20/contract. To convert $/gal to $/bbl, multiply by 42.
+Settlement
+Physical delivery at New York Harbor (NYH) area facilities. In practice, most participants use EFP to exit before expiry. Delivery spec: RBOB meeting ASTM D 4814 summer or winter grade depending on contract month.
+Expiry
+Last business day of the month prior to delivery month. RBOB expires one day before the corresponding CL contract. Note the spec change: summer-grade RBOB (lower RVP) for Aprilâ€“September delivery; winter-grade for Octoberâ€“March. This creates a structural price discontinuity at the October and April roll.
+Trading Hours
+CME Globex: Sun 18:00 â€“ Fri 17:00 CT (with 60-minute daily break at 17:00â€“18:00 CT). Open: Sun 18:00 CT / Close: Fri 17:00 CT. Most active: 08:00â€“14:30 CT. Official daily settlement: 14:28â€“14:30 CT (CME two-minute VWAP settlement window). Exchange: CME / NYMEX.
+Seasonal Pattern
+RBOB crack (vs WTI) peaks in Marchâ€“May as refineries emerge from maintenance and gasoline demand builds ahead of Memorial Day. Historically weakens Augustâ€“September as driving season ends. Long RBOB crack (long RB, short CL) in Febâ€“April is one of the most consistent seasonal trades in energy markets.
+Key Spreads
+RBOB crack (RB â€“ CL); RBOB vs Eurobob (transatlantic arb); RBOB calendar spreads; 3-2-1 crack (2xRB + 1xHO â€“ 3xCL).
+4. Heating Oil / ULSD Futures (HO) â€” CME / NYMEX
+The NYMEX Heating Oil contract (ticker: HO) is the US benchmark for distillate fuel â€” a product that straddles the domestic heating oil market (Northeast US) and ultra-low-sulphur diesel (ULSD, 15ppm sulphur max). The contract was originally designed for No. 2 heating oil; in 2013 the CME updated the spec to align with ULSD, reflecting the structural shift in distillate demand from residential heating to road transport and marine. HO is the US product contract most sensitive to global diesel/distillate supply tightness â€” including European gas oil markets â€” and is a key leg in the 3-2-1 crack spread.
+Specification
+Detail
+Exchange
+NYMEX (CME Group). Ticker: HO. Formally called â€œNY Harbor ULSD Futuresâ€ since the 2013 spec update.
+Contract Size
+42,000 US gallons (1,000 barrels). Quoted in USD per gallon. Minimum tick: $0.0001/gal = $4.20/contract. Multiply by 42 to convert to $/bbl.
+Settlement
+Physical delivery at NY Harbor area facilities (Buckeye Pipe Line, Kinder Morgan terminals). ULSD spec: max 15ppm sulphur. In practice, most participants roll before expiry; physical delivery is rare for financial desks.
+Expiry
+Last business day of the month prior to delivery. Same schedule as RBOB. The October contract (winter heating oil demand) and February contract (late-winter heating season) tend to carry the highest seasonal premium vs summer months.
+Trading Hours
+CME Globex: Sun 18:00 â€“ Fri 17:00 CT (with 60-minute daily break at 17:00â€“18:00 CT). Open: Sun 18:00 CT / Close: Fri 17:00 CT. Most active: 08:00â€“14:30 CT (New York hours). Official daily settlement: 14:28â€“14:30 CT (CME two-minute VWAP settlement window). Shares the same trading session as RBOB (RB) and WTI (CL). Exchange: CME / NYMEX.
+HO vs ICE Gasoil
+HO and ICE Gasoil are close but not identical products. HO is ULSD (15ppm S) delivered to NYH; Gasoil is 0.1% S delivered to ARA. The HO-GO spread (expressed in $/bbl after unit conversion) reflects the Atlantic transatlantic diesel arbitrage. When this spread widens, US diesel is cheap relative to Europe and arbitrage barrels flow East.
+Key Spreads
+HO crack (HO â€“ CL); HO-RBOB spread (diesel premium vs gasoline); HO vs ICE Gasoil (transatlantic diesel arb); 3-2-1 crack; heating oil seasonal calendar (Oct vs Apr).
+5. ICE Gasoil Futures (GO) â€” ICE Futures Europe
+ICE Low Sulphur Gasoil (commonly called â€œGasoilâ€ or â€œGOâ€ on trading systems) is Europeâ€™s benchmark distillate futures contract and the most liquid diesel-related instrument globally by volume. It is the European equivalent of NYMEX HO and the primary instrument for expressing a view on European refinery margins, the diesel crack spread, and winter heating oil demand in Northern Europe. The contract is physically deliverable to ARA (Amsterdam-Rotterdam-Antwerp) but is overwhelmingly financially settled in practice. Gasoil is also the reference price for jet fuel and heating oil in Europe, and most European physical distillate contracts are priced as a differential to ICE Gasoil.
+Specification
+Detail
+Exchange
+ICE Futures Europe (London). Ticker: GO (ICE) / QS (Bloomberg). Full name: â€œICE Low Sulphur Gasoil Futures.â€
+Contract Size
+100 metric tonnes (MT). Quoted in USD per metric tonne. Minimum tick: $0.25/MT = $25/contract. To convert $/MT to $/bbl, divide by approximately 7.45 (density-dependent). Note: this is a different unit from BRN and CL â€” critical for spread calculations.
+Settlement
+Physically deliverable to ARA at designated storage terminals (Netherlands, Belgium). Product spec: 0.1% sulphur max (EN 590 road diesel standard). In practice, most volume is cash-settled via Exchange for Physical (EFP) before expiry. The contract is the pricing reference for European diesel and heating oil physical cargoes.
+Expiry
+2nd business day before the 14th calendar day of the delivery month. E.g. the January GO contract expires approximately January 10â€“12. Monthly contracts listed up to 3 years forward. Roll occurs approximately 3â€“5 days before expiry as volume migrates to M2.
+Trading Hours
+ICE Futures Europe: Sun 23:00 â€“ Fri 23:00 London time (with brief daily break at 22:00â€“23:00 London). Open: Sun 23:00 London / Close: Fri 23:00 London. Most active: 07:00â€“17:30 London. Official daily settlement: 19:30â€“20:00 London time (ICE settlement window â€“ same window as Brent). The Gasoil crack (GO minus BRN, in matched units) is one of the most actively traded energy spreads globally during European hours. Exchange: ICE Futures Europe, London.
+Key Spreads
+ICE Gasoil crack (GO â€“ BRN, unit-adjusted); GO calendar spreads; GO vs HO (transatlantic diesel arb); Jet/Gasoil spread (NWE jet differential); GO vs naphtha (diesel-naphtha spread, refinery configuration signal).
+Critical: Unit Conversion When Trading GO vs BRN or HO
+ICE Gasoil is quoted in $/MT while Brent is in $/bbl and HO is in $/gallon. A common source of error for new market analysts is computing the GO crack without converting units. The standard conversion: 1 MT of gasoil â‰ˆ 7.45 barrels (using a density of 0.845 kg/litre for 0.1% S gasoil). So a GO price of $700/MT equates to approximately $700 Ã· 7.45 = $93.96/bbl. When quoting the gasoil crack against Brent, always convert to a common unit ($/bbl) before computing the spread. Similarly, to match GO lot size against BRN: 1 GO lot (100 MT) â‰ˆ 745 bbls vs 1 BRN lot = 1,000 bbls â€” so a ratio trade of 3 GO lots vs 4 BRN lots is common for balanced DV01 exposure.
+6. Contract Comparison and Desk Reference
+The table below summarises the key contractual differences across the five core energy futures. Bookmark this page: these are the parameters you will verify every time you put on a new position or compute a spread.
+BRN (Brent)
+CL (WTI)
+RB (RBOB)
+HO (ULSD)
+GO (Gasoil)
+Notes
+Exchange
+ICE Europe
+CME/NYMEX
+CME/NYMEX
+CME/NYMEX
+ICE Europe
+BRN + GO on ICE; CL/RB/HO on CME
+Size
+1,000 bbl
+1,000 bbl
+42,000 gal
+42,000 gal
+100 MT
+GO in MT â‰  bbl; convert at ~7.45
+Quote unit
+$/bbl
+$/bbl
+$/gallon
+$/gallon
+$/MT
+x42 to get $/bbl for RB/HO
+Settlement
+Cash (ICE Index)
+Physical (Cushing)
+Physical (NYH)
+Physical (NYH)
+Physical (ARA)
+Physical for RB/HO/GO; cash for BRN
+Min Tick
+$0.01 = $10
+$0.01 = $10
+$0.0001 = $4.20
+$0.0001 = $4.20
+$0.25 = $25
+GO tick larger in $ terms
+Delivery Pt.
+N/A (cash)
+Cushing, OK
+NY Harbor
+NY Harbor
+ARA
+US = NYH; Europe = ARA
+Trading Hours
+Sun 23:00â€“Fri 23:00 London
+Sun 18:00â€“Fri 17:00 CT
+Sun 18:00â€“Fri 17:00 CT
+Sun 18:00â€“Fri 17:00 CT
+Sun 23:00â€“Fri 23:00 London
+ICE = London time; CME = CT
+Daily Settlement
+19:30â€“20:00 London
+14:28â€“14:30 CT
+14:28â€“14:30 CT
+14:28â€“14:30 CT
+19:30â€“20:00 London
+ICE = London close; CME = VWAP window
+CHAPTER SUMMARY
+Brent (BRN) is the global crude benchmark: cash-settled, ICE Futures Europe, 1,000 bbl/lot, priced in $/bbl. The BFOET basket and the cash-futures EFP spread are critical nuances that separate physical from financial Brent.
+WTI (CL) is the most liquid crude contract by open interest: physically delivered at Cushing, Oklahoma. The physical delivery mechanism is the reason for the 2020 negative price event â€” always roll before expiry if you do not intend physical settlement.
+RBOB (RB) is the US gasoline benchmark: 42,000 gallons, quoted in $/gal, delivered to NY Harbor. Its summer/winter spec change at the April and October roll creates predictable seasonal price discontinuities. The long RBOB crack in Febâ€“May is one of the most reliable seasonal trades in energy.
+Heating Oil/ULSD (HO) is the US distillate benchmark: 42,000 gallons, $/gal, NYH delivery. Now specced as ULSD (15ppm S) since 2013. HO vs ICE Gasoil spread (unit-converted) is the transatlantic diesel arbitrage trade.
+ICE Gasoil (GO) is Europeâ€™s diesel benchmark: 100 MT, quoted in $/MT, delivered to ARA. Always convert $/MT to $/bbl (divide by ~7.45) before computing cracks vs Brent. Lot size ~745 bbl vs Brentâ€™s 1,000 bbl â€” use 3:4 ratio for balanced spread trades.
+The three most important cross-contract spreads for a quant energy desk: Brent-WTI (BRN-CL); 3-2-1 crack (2Ã—RB + 1Ã—HO â€“ 3Ã—CL); ICE Gasoil crack (GO â€“ BRN, unit-adjusted). These three spreads summarise the crude quality, refinery margin, and product market signals that drive daily oil price action.
