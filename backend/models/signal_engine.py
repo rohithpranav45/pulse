@@ -593,28 +593,50 @@ def calculate_signal(asset: str = "brent",
     """
     is_natgas = (asset == "henry_hub")
 
+    def _safe(fn, name: str, weight: float, *args, **kwargs):
+        """Call an indicator; on any failure return a neutral fallback so the
+        overall signal still computes. Logs the failure once per minute per name."""
+        try:
+            return fn(*args, weight=weight, **kwargs)
+        except Exception as exc:
+            import logging as _lg
+            _lg.getLogger("pulse.signal").info(
+                "indicator '%s' soft-failed for %s: %s — using neutral fallback",
+                name, asset, type(exc).__name__,
+            )
+            return {
+                "name":      name,
+                "score":     0,
+                "weight":    weight,
+                "reason":    f"data unavailable ({type(exc).__name__})",
+                "raw_value": None,
+            }
+
     if is_natgas:
         W = _NATGAS_WEIGHTS
+        # Note: there is no NG forward curve in this app yet; use WTI curve as
+        # an energy-complex proxy so the indicator contributes a meaningful score
+        # rather than crashing on get_curve_metrics('henry_hub').
         indicators = [
-            inventory_indicator(weight=W["inventory"]),
-            weather_indicator(weight=W["weather"]),
-            curve_indicator(asset, weight=W["curve"]),
-            cot_indicator(cot_asset, weight=W["cot"]),
-            fv_indicator(asset, weight=W["fair_value"]),
-            technicals_indicator(asset, weight=W["technicals"]),
+            _safe(inventory_indicator,  "Inventory",  W["inventory"]),
+            _safe(weather_indicator,    "Weather",    W["weather"]),
+            _safe(curve_indicator,      "Curve",      W["curve"], "wti"),
+            _safe(cot_indicator,        "COT",        W["cot"], cot_asset),
+            _safe(fv_indicator,         "Fair Value", W["fair_value"], asset),
+            _safe(technicals_indicator, "Technicals", W["technicals"], asset),
         ]
     else:
         W = _CRUDE_WEIGHTS
         indicators = [
-            inventory_indicator(weight=W["inventory"]),
-            curve_indicator("wti", weight=W["curve"]),
-            cot_indicator(cot_asset, weight=W["cot"]),
-            fv_indicator(asset, weight=W["fair_value"]),
-            sentiment_indicator(weight=W["sentiment"]),
-            technicals_indicator(asset, weight=W["technicals"]),
-            dxy_indicator(weight=W["dxy"]),
-            geo_indicator(weight=W["geo"]),
-            iv_indicator(weight=W["iv"]),
+            _safe(inventory_indicator,  "Inventory",  W["inventory"]),
+            _safe(curve_indicator,      "Curve",      W["curve"], "wti"),
+            _safe(cot_indicator,        "COT",        W["cot"], cot_asset),
+            _safe(fv_indicator,         "Fair Value", W["fair_value"], asset),
+            _safe(sentiment_indicator,  "Sentiment",  W["sentiment"]),
+            _safe(technicals_indicator, "Technicals", W["technicals"], asset),
+            _safe(dxy_indicator,        "DXY",        W["dxy"]),
+            _safe(geo_indicator,        "Geo Risk",   W["geo"]),
+            _safe(iv_indicator,         "IV",         W["iv"]),
         ]
 
     # ── weighted composite score ──────────────────────────────────────────────

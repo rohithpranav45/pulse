@@ -231,10 +231,21 @@ def _fetch_front_price(ticker: str) -> Optional[float]:
     Fetch the latest close price for a futures ticker from yfinance.
     Uses Ticker.history() to avoid tz-naive/tz-aware join errors.
     Returns None if unavailable or data is empty.
+
+    Silences yfinance's noisy ERROR logging when dated symbols are missing
+    (we already handle None gracefully).
     """
     try:
         import yfinance as yf
-        hist  = yf.Ticker(ticker).history(period="5d", auto_adjust=True)
+        import logging as _lg
+        # yfinance dumps to ERROR for delisted/missing symbols — silence it.
+        _yf_log = _lg.getLogger("yfinance")
+        _prev_level = _yf_log.level
+        _yf_log.setLevel(_lg.CRITICAL)
+        try:
+            hist = yf.Ticker(ticker).history(period="5d", auto_adjust=True)
+        finally:
+            _yf_log.setLevel(_prev_level)
         close = hist["Close"].dropna() if "Close" in hist.columns else pd.Series(dtype=float)
         if close.empty:
             return None
@@ -276,28 +287,55 @@ def get_yf_strip(prefix: str, n: int = 12) -> list[dict]:
     """
     Fetch M1-M12 prices for a CME/NYMEX product.
 
-    M1 uses the continuous front-month contract ({prefix}=F) which always
-    has data.  M2-M12 use the dated Yahoo Finance format ({prefix}{code}{yy}=F)
-    and fall back to None when a contract is not available.
+    M1 uses the continuous front-month contract ({prefix}=F).
+    M2-M12 first try individual dated tickers ({prefix}{code}{yy}=F).
+    When dated tickers are deprecated/delisted by Yahoo (now the norm for
+    WTI/NG/RB/HO M2+), we derive M2-M12 from the M1 price using a
+    Brent-curve-shape proxy (WTI) or a flat-decay proxy (NG/RB/HO).
+    This keeps the term-structure view populated even when individual
+    contract symbols are unavailable.
 
     Returns:
       [{"month": "M1", "ticker": "CL=F", "price": float|None}, ...]
     """
     months = _contract_months_from_today(n)
-    strip  = []
+    strip: list[dict] = []
+    m1_price: Optional[float] = None
+
     for idx, (m, y) in enumerate(months):
         if idx == 0:
-            # M1: always use the continuous front-month — guaranteed data
             ticker = f"{prefix}=F"
+            price = _fetch_front_price(ticker)
+            m1_price = price
         else:
-            # M2+: individual contract month in Yahoo Finance =F format
             ticker = _build_dated_ticker(prefix, m, y)
-        price = _fetch_front_price(ticker)
-        strip.append({
-            "month":  f"M{idx + 1}",
-            "ticker": ticker,
-            "price":  price,
-        })
+            price = _fetch_front_price(ticker)
+        strip.append({"month": f"M{idx + 1}", "ticker": ticker, "price": price})
+
+    # If most dated contracts are missing (Yahoo deprecation), back-fill from
+    # M1 using a sensible shape so the strip isn't almost-empty.
+    missing = sum(1 for r in strip[1:] if r["price"] is None)
+    if missing >= max(3, len(strip) // 2) and m1_price is not None:
+        try:
+            brent_strip = get_brent_strip(len(strip))
+            brent_m1 = brent_strip[0]["price"] if brent_strip and brent_strip[0]["price"] else None
+            # For crude (WTI), borrow Brent's curve shape and apply M1 basis.
+            if prefix.upper() == "CL" and brent_m1:
+                for i, row in enumerate(strip[1:], start=1):
+                    if row["price"] is None and i < len(brent_strip) and brent_strip[i]["price"]:
+                        basis = m1_price - brent_m1
+                        row["price"] = round(brent_strip[i]["price"] + basis, 3)
+                        row["ticker"] = row["ticker"] + "*"  # mark as derived
+            else:
+                # Other products: gentle exponential decay 0.4% per month — typical
+                # of NG/refined storage flatness over the curve.
+                for i, row in enumerate(strip[1:], start=1):
+                    if row["price"] is None:
+                        row["price"] = round(m1_price * (1.0 - 0.004 * i), 4)
+                        row["ticker"] = row["ticker"] + "*"
+        except Exception as exc:
+            log.debug("strip back-fill failed for %s: %s", prefix, exc)
+
     return strip
 
 

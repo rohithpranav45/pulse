@@ -61,8 +61,42 @@ logging.basicConfig(
 )
 log = logging.getLogger("pulse.api")
 
-app = Flask(__name__)
+_STATIC_DIR = os.path.join(_BACKEND, "static")
+app = Flask(__name__, static_folder=_STATIC_DIR, static_url_path="/assets")
 CORS(app)   # allow all origins — dashboard may be served from a different port
+
+
+# ─── Serve built React app ───────────────────────────────────────────────────
+from flask import send_from_directory  # type: ignore
+
+
+@app.route("/")
+def _index():
+    idx = os.path.join(_STATIC_DIR, "index.html")
+    if os.path.exists(idx):
+        return send_from_directory(_STATIC_DIR, "index.html")
+    return (
+        "<html><body style='background:#070b14;color:#eef2f9;font-family:sans-serif;padding:40px'>"
+        "<h2 style='color:#d4af37'>PULSE — React build missing</h2>"
+        "<p>Run <code>cd frontend && npm install && npm run build</code>, then refresh.</p>"
+        "<p>Or run <code>cd frontend && npm run dev</code> and open <a href='http://127.0.0.1:5173' style='color:#22d3ee'>http://127.0.0.1:5173</a></p>"
+        "</body></html>",
+        200,
+    )
+
+
+@app.route("/<path:path>")
+def _static_proxy(path):
+    if path.startswith("api/"):
+        return ("Not found", 404)
+    full = os.path.join(_STATIC_DIR, path)
+    if os.path.exists(full) and os.path.isfile(full):
+        return send_from_directory(_STATIC_DIR, path)
+    # SPA fallback
+    idx = os.path.join(_STATIC_DIR, "index.html")
+    if os.path.exists(idx):
+        return send_from_directory(_STATIC_DIR, "index.html")
+    return ("Not found", 404)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # SQLite-backed TTL cache (db/cache.py) — drop-in replacement
