@@ -21,24 +21,26 @@ function normalizeAll(raw: any): any {
   if (!raw) return null;
   const unwrap = (v: any) => (v && typeof v === 'object' && 'data' in v ? v.data : v);
   return {
-    prices:        unwrap(raw.prices),
-    curve:         unwrap(raw.curve),
-    fair_value:    raw.fair_value, // {brent, wti} — no data wrapper
-    signal:        unwrap(raw.signal),
-    correlations:  unwrap(raw.correlations),
-    fundamentals:  unwrap(raw.fundamentals),
-    news:          unwrap(raw.news),
-    weather:       unwrap(raw.weather),
-    technicals:    unwrap(raw.technicals),
-    term_structure:unwrap(raw.term_structure),
-    macro:         unwrap(raw.macro),
-    patterns:      unwrap(raw.patterns),
-    iv:            unwrap(raw.iv),
-    cracks:        unwrap(raw.cracks),
-    steo:          unwrap(raw.steo),
-    analyst_watch: unwrap(raw.analyst_watch),
-    tanker_watch:  unwrap(raw.tanker_watch),
-    timestamp:     raw.timestamp,
+    prices:          unwrap(raw.prices),
+    curve:           unwrap(raw.curve),
+    fair_value:      raw.fair_value, // {brent, wti} — no data wrapper
+    signal:          unwrap(raw.signal),
+    correlations:    unwrap(raw.correlations),
+    fundamentals:    unwrap(raw.fundamentals),
+    news:            unwrap(raw.news),
+    weather:         unwrap(raw.weather),
+    technicals:      unwrap(raw.technicals),
+    term_structure:  unwrap(raw.term_structure),
+    macro:           unwrap(raw.macro),
+    patterns:        unwrap(raw.patterns),
+    iv:              unwrap(raw.iv),
+    cracks:          unwrap(raw.cracks),
+    steo:            unwrap(raw.steo),
+    analyst_watch:   unwrap(raw.analyst_watch),
+    tanker_watch:    unwrap(raw.tanker_watch),
+    spreads_history: unwrap(raw.spreads_history),
+    seasonality:     unwrap(raw.seasonality),
+    timestamp:       raw.timestamp,
   };
 }
 
@@ -64,6 +66,8 @@ export const api = {
   steo:          () => getJSON('/api/steo'),
   analystWatch:  () => getJSON('/api/analyst-watch'),
   tankerWatch:   () => getJSON('/api/tanker-watch'),
+  spreadsHistory:() => getJSON('/api/spreads-history'),
+  seasonality:   () => getJSON('/api/seasonality'),
   all:           async () => normalizeAll(await getJSON('/api/all', 120000)),
 };
 
