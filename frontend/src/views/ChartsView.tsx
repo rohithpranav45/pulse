@@ -4,8 +4,11 @@ import { Chip } from '@/components/ui/Chip';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { fmt } from '@/lib/fmt';
 import { createChart, ColorType, CandlestickSeries, HistogramSeries, LineSeries } from 'lightweight-charts';
-import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, ReferenceLine, Area, AreaChart, CartesianGrid } from 'recharts';
+import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import clsx from 'clsx';
+import { SeasonalityChart } from '@/components/charts/SeasonalityChart';
+import { SpreadChart } from '@/components/charts/SpreadChart';
+import { CurveEvolutionChart } from '@/components/charts/CurveEvolutionChart';
 
 const CHART_THEME = {
   layout: { background: { type: ColorType.Solid, color: 'transparent' }, textColor: '#aebccf', fontFamily: 'JetBrains Mono, monospace', fontSize: 11 },
@@ -145,47 +148,22 @@ function CurveChart({ curve }: { curve: any }) {
   );
 }
 
-function SpreadChart({ history }: { history: any }) {
-  if (!history?.brent || !history?.wti) return <Skeleton className="h-56 w-full" />;
-  const brent = history.brent;
-  const wti = history.wti;
-  const dateKey = (d: any) => d.date ?? d.t ?? d.timestamp;
-  const closeKey = (d: any) => d.close ?? d.c;
-  const map: Record<string, number> = {};
-  wti.forEach((d: any) => { map[dateKey(d)] = closeKey(d); });
-  const data = brent
-    .filter((d: any) => map[dateKey(d)] !== undefined)
-    .map((d: any) => ({ date: String(dateKey(d)).slice(5, 10), spread: +(closeKey(d) - map[dateKey(d)]).toFixed(2) }));
-  if (data.length === 0) return <Skeleton className="h-56 w-full" />;
-  const mean = data.reduce((s: number, d: any) => s + d.spread, 0) / data.length;
-  return (
-    <ResponsiveContainer width="100%" height={220}>
-      <AreaChart data={data} margin={{ top: 10, right: 10, bottom: 0, left: 0 }}>
-        <defs>
-          <linearGradient id="spreadGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#22d3ee" stopOpacity={0.4} />
-            <stop offset="100%" stopColor="#22d3ee" stopOpacity={0} />
-          </linearGradient>
-        </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="#1c2745" />
-        <XAxis dataKey="date" tick={{ fontSize: 9, fill: '#6b809e' }} axisLine={{ stroke: '#1c2745' }} interval={Math.floor(data.length / 8)} />
-        <YAxis tick={{ fontSize: 9, fill: '#6b809e' }} axisLine={{ stroke: '#1c2745' }} />
-        <Tooltip contentStyle={{ background: '#0f1729', border: '1px solid #1c2745', borderRadius: 6, fontSize: 11 }} />
-        <ReferenceLine y={mean} stroke="#d4af37" strokeDasharray="4 4" label={{ value: `μ ${mean.toFixed(2)}`, fontSize: 10, fill: '#d4af37' }} />
-        <Area type="monotone" dataKey="spread" stroke="#22d3ee" strokeWidth={2} fill="url(#spreadGrad)" />
-      </AreaChart>
-    </ResponsiveContainer>
-  );
-}
+// (Brent-WTI quick chart removed — replaced by SpreadChart with full 1y series from /api/spreads-history)
 
 export function ChartsView({ all, history, ohlcv }: { all: any; history: any; ohlcv: any }) {
   const [asset, setAsset] = useState<'brent' | 'wti'>('brent');
   const curve = all?.curve;
   const prices = all?.prices;
   const q = prices?.[asset];
+  const spreadsHist = all?.spreads_history ?? {};
+  const seasonality = all?.seasonality;
+
+  const brentContracts = curve?.brent?.contracts ?? [];
+  const wtiContracts   = curve?.wti?.contracts   ?? [];
 
   return (
     <div className="space-y-4">
+      {/* HERO — Candlestick + price */}
       <Panel
         title={asset === 'brent' ? 'Brent Crude · ICE' : 'WTI Crude · NYMEX'}
         subtitle="Intraday OHLCV · 5m"
@@ -219,14 +197,70 @@ export function ChartsView({ all, history, ohlcv }: { all: any; history: any; oh
         <Candle ohlcv={ohlcv} asset={asset} />
       </Panel>
 
+      {/* Forward curve + evolution */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <Panel title="Forward Curve" subtitle="M1 → M12 · Brent vs WTI">
           <CurveChart curve={curve} />
         </Panel>
-        <Panel title="Brent–WTI Spread" subtitle="90-day daily">
-          <SpreadChart history={history} />
-        </Panel>
+        <CurveEvolutionChart
+          brent={brentContracts}
+          wti={wtiContracts}
+          asset={asset}
+        />
       </div>
+
+      {/* SEASONALITY — full width */}
+      <SeasonalityChart data={seasonality} />
+
+      {/* SPREADS — RBOB-HO + 3-2-1 historical */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <SpreadChart
+          title="RBOB − Heating Oil"
+          subtitle="Gasoline premium over diesel · $/bbl · 1y"
+          series={spreadsHist.rbob_ho ?? []}
+          stats={spreadsHist.stats?.rbob_ho}
+          color="#10d997"
+          bullishHigh
+        />
+        <SpreadChart
+          title="3-2-1 Crack Spread"
+          subtitle="(2×RBOB + 1×HO − 3×WTI) / 3 · US refinery margin"
+          series={spreadsHist.crack_321 ?? []}
+          stats={spreadsHist.stats?.crack_321}
+          color="#d4af37"
+          bullishHigh
+        />
+      </div>
+
+      {/* Gasoline crack + Distillate crack */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <SpreadChart
+          title="Gasoline Crack · RBOB − WTI"
+          subtitle="Refinery gasoline margin · $/bbl"
+          series={spreadsHist.gasoline_crack ?? []}
+          stats={spreadsHist.stats?.gasoline_crack}
+          color="#22d3ee"
+          bullishHigh
+        />
+        <SpreadChart
+          title="Distillate Crack · HO − WTI"
+          subtitle="Refinery diesel margin · $/bbl"
+          series={spreadsHist.distillate_crack ?? []}
+          stats={spreadsHist.stats?.distillate_crack}
+          color="#a78bfa"
+          bullishHigh
+        />
+      </div>
+
+      {/* Brent-WTI cross-Atlantic spread */}
+      <SpreadChart
+        title="Brent − WTI Cross-Atlantic Spread"
+        subtitle="Regional crude premium · daily · 1y"
+        series={spreadsHist.brent_wti ?? []}
+        stats={spreadsHist.stats?.brent_wti}
+        color="#f0cf5f"
+        bullishHigh={false}
+      />
     </div>
   );
 }

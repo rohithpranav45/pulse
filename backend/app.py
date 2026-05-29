@@ -138,6 +138,7 @@ TTL_CRACKS         = 600   # crack spreads — refresh every 10 min
 TTL_STEO           = 86400 # EIA STEO — daily publication cycle
 TTL_ANALYST_WATCH  = 900   # Nitter/Truth Social RSS — 15-min refresh
 TTL_TANKER_WATCH   = 300   # AIS snapshot — 5-min refresh
+TTL_SPREADS_HIST   = 3600  # daily spread history — once per hour
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -571,6 +572,36 @@ def _fetch_tanker_watch():
     return data
 
 
+def _spreads_history():
+    from fetchers.spreads_history import get_spreads_history
+    return get_spreads_history(days=365)
+
+def _fetch_spreads_history():
+    cached = get_cached("spreads_history", TTL_SPREADS_HIST)
+    if cached is not None:
+        return cached
+    data = safe_fetch(_spreads_history, {"rbob_ho": [], "crack_321": [],
+                                          "gasoline_crack": [], "distillate_crack": [],
+                                          "brent_wti": [], "stats": {},
+                                          "timestamp": _now()})
+    set_cache("spreads_history", data)
+    return data
+
+
+def _seasonality():
+    from fetchers.seasonality import get_seasonality
+    return get_seasonality()
+
+def _fetch_seasonality():
+    cached = get_cached("seasonality", TTL_SPREADS_HIST)
+    if cached is not None:
+        return cached
+    data = safe_fetch(_seasonality, {"products": [], "current_month": 0,
+                                      "current_month_name": "", "data_years": 5})
+    set_cache("seasonality", data)
+    return data
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # APScheduler refresh jobs — one per cache key, called on interval
 # ─────────────────────────────────────────────────────────────────────────────
@@ -668,6 +699,15 @@ def _refresh_steo():
                                           "current_supply": None, "current_demand": None,
                                           "current_balance": None, "as_of": None}))
 
+def _refresh_spreads_history():
+    set_cache("spreads_history", safe_fetch(_spreads_history,
+        {"rbob_ho": [], "crack_321": [], "gasoline_crack": [],
+         "distillate_crack": [], "brent_wti": [], "stats": {}, "timestamp": _now()}))
+
+def _refresh_seasonality():
+    set_cache("seasonality", safe_fetch(_seasonality,
+        {"products": [], "current_month": 0, "current_month_name": "", "data_years": 5}))
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Scheduler — fires at TTL intervals; slow jobs fire immediately on start
@@ -700,6 +740,8 @@ _scheduler.add_job(lambda: set_cache("analyst_watch", safe_fetch(_analyst_watch,
                    "interval", seconds=TTL_ANALYST_WATCH, next_run_time=_NOW, id="_refresh_analyst_watch")
 _scheduler.add_job(lambda: set_cache("tanker_watch", safe_fetch(_tanker_watch, {"available": False, "chokepoints": [], "note": "Loading…", "timestamp": _now()})),
                    "interval", seconds=TTL_TANKER_WATCH, next_run_time=_NOW, id="_refresh_tanker_watch")
+_scheduler.add_job(_refresh_spreads_history, "interval", seconds=TTL_SPREADS_HIST, next_run_time=_NOW, id="_refresh_spreads_history")
+_scheduler.add_job(_refresh_seasonality,     "interval", seconds=TTL_SPREADS_HIST, next_run_time=_NOW, id="_refresh_seasonality")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -845,6 +887,20 @@ def tanker_watch_route():
     return jsonify({"data": data, "timestamp": _now()})
 
 
+@app.route("/api/spreads-history")
+def spreads_history_route():
+    """Daily history of RBOB-HO, 3-2-1 crack, gasoline/distillate cracks, Brent-WTI."""
+    data = _fetch_spreads_history()
+    return jsonify({"data": data, "timestamp": _now()})
+
+
+@app.route("/api/seasonality")
+def seasonality_route():
+    """5-product monthly seasonal returns (Brent/WTI/NG/RBOB/HO)."""
+    data = _fetch_seasonality()
+    return jsonify({"data": data, "timestamp": _now()})
+
+
 @app.route("/api/all")
 def all_data():
     """Assemble all data from individual caches in one response."""
@@ -868,6 +924,8 @@ def all_data():
         "steo":           {"data": _fetch_steo()},
         "analyst_watch":  {"data": _fetch_analyst_watch()},
         "tanker_watch":   {"data": _fetch_tanker_watch()},
+        "spreads_history":{"data": _fetch_spreads_history()},
+        "seasonality":    {"data": _fetch_seasonality()},
         "timestamp":      _now(),
     })
 
