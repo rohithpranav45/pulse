@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Panel } from '@/components/ui/Panel';
 import { Chip } from '@/components/ui/Chip';
 import { ScoreBar } from '@/components/ui/ScoreBar';
@@ -5,8 +6,11 @@ import { Sparkline } from '@/components/ui/Sparkline';
 import { Stat } from '@/components/ui/Stat';
 import { SkeletonRows } from '@/components/ui/Skeleton';
 import { fmt, signalLabel } from '@/lib/fmt';
-import { ArrowUpRight, ArrowDownRight, Minus, Shield, AlertTriangle, BookOpen } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, Minus, Shield, AlertTriangle, BookOpen, ChevronRight } from 'lucide-react';
 import clsx from 'clsx';
+import { PriceDecomposition } from '@/components/panels/PriceDecomposition';
+import { GeoRiskCalculator } from '@/components/panels/GeoRiskCalculator';
+import { IndicatorDrillDown } from '@/components/panels/IndicatorDrillDown';
 
 const ASSETS = [
   { key: 'brent',     label: 'BRENT',   sub: 'ICE · BZ=F' },
@@ -39,7 +43,12 @@ function ScoreToVerdict({ score }: { score: number | null }) {
   );
 }
 
-function SignalCard({ asset, signal, price }: { asset: { key: string; label: string; sub: string }; signal: any; price: any }) {
+function SignalCard({ asset, signal, price, onIndicatorClick }: {
+  asset: { key: string; label: string; sub: string };
+  signal: any;
+  price: any;
+  onIndicatorClick?: (assetKey: string, indicator: any) => void;
+}) {
   const score = signal?.score ?? null;
   const tone = score === null ? 'neut' : score >= 0.4 ? 'bull' : score <= -0.4 ? 'bear' : 'neut';
   const conv = signal?.conviction ?? '—';
@@ -91,20 +100,28 @@ function SignalCard({ asset, signal, price }: { asset: { key: string; label: str
       )}
 
       {indicators.length > 0 && (
-        <div className="space-y-1.5">
-          <div className="text-[9px] font-mono text-text-muted uppercase tracking-widest mb-2">Indicator Breakdown</div>
-          {indicators.slice(0, 7).map((ind, i) => {
+        <div className="space-y-1">
+          <div className="text-[9px] font-mono text-text-muted uppercase tracking-widest mb-2 flex items-center justify-between">
+            <span>Indicator Breakdown</span>
+            <span className="text-text-muted/70">click for detail</span>
+          </div>
+          {indicators.slice(0, 9).map((ind, i) => {
             const s = ind.score ?? 0;
             const t = s > 0.2 ? 'bull' : s < -0.2 ? 'bear' : 'neut';
             return (
-              <div key={i} className="grid grid-cols-[80px_28px_42px_1fr] items-center gap-2 text-[10px] font-mono tabular">
-                <span className="text-text-secondary truncate">{ind.name}</span>
+              <button
+                key={i}
+                onClick={() => onIndicatorClick?.(asset.key, ind)}
+                className="grid grid-cols-[80px_28px_42px_1fr_12px] items-center gap-2 text-[10px] font-mono tabular w-full text-left py-1 px-1 -mx-1 rounded hover:bg-bg-hover/50 cursor-pointer transition-colors group"
+              >
+                <span className="text-text-secondary truncate group-hover:text-text-primary">{ind.name}</span>
                 <span className="text-text-muted text-right">{Math.round((ind.weight ?? 0) * 100)}%</span>
                 <span className={clsx('text-center font-semibold', t === 'bull' && 'text-bull', t === 'bear' && 'text-bear', t === 'neut' && 'text-neut')}>
                   {s >= 0 ? '+' : ''}{s.toFixed(1)}
                 </span>
                 <span className="text-text-tertiary truncate text-[9.5px]">{ind.reason}</span>
-              </div>
+                <ChevronRight className="w-3 h-3 text-text-muted opacity-0 group-hover:opacity-100 transition-opacity" />
+              </button>
             );
           })}
         </div>
@@ -270,6 +287,17 @@ export function SignalView({ all, tradeIdea, alerts }: { all: any; tradeIdea: an
   const signal = all?.signal ?? {};
   const fv = all?.fair_value;
   const macro = all?.macro;
+  const curve = all?.curve;
+  const brentSpot = prices?.brent?.price ?? null;
+  // Derive a rough spare-capacity estimate from EIA STEO if available, else fall back.
+  const steoSpare =
+    all?.steo?.opec_spare_capacity ??
+    all?.steo?.spare_capacity ??
+    null;
+  const spareCapacity = typeof steoSpare === 'number' && steoSpare > 0 ? steoSpare : 4.5;
+
+  // Drill-down modal state
+  const [drill, setDrill] = useState<{ asset: string; indicator: any } | null>(null);
 
   return (
     <div className="space-y-4">
@@ -278,17 +306,41 @@ export function SignalView({ all, tradeIdea, alerts }: { all: any; tradeIdea: an
       {/* Hero signal cards */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {ASSETS.map(a => (
-          <SignalCard key={a.key} asset={a} signal={signal[a.key]} price={prices[a.key]} />
+          <SignalCard
+            key={a.key}
+            asset={a}
+            signal={signal[a.key]}
+            price={prices[a.key]}
+            onIndicatorClick={(assetKey, indicator) => setDrill({ asset: assetKey, indicator })}
+          />
         ))}
       </div>
 
-      {/* Row 2: trade idea + fair value */}
+      {/* Row 2 — Price Decomposition Waterfall (the standout visual) */}
+      <PriceDecomposition fairValue={fv} signal={signal} curve={curve} />
+
+      {/* Row 3: trade idea + fair value */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2">
           <TradeIdeaCard idea={tradeIdea} />
         </div>
         <FairValueCard fv={fv} />
       </div>
+
+      {/* Row 4 — Geo Risk Premium Calculator (curriculum chapter 10 framework) */}
+      <GeoRiskCalculator
+        defaultSpareCapacity={spareCapacity}
+        brentPrice={brentSpot}
+      />
+
+      {/* Indicator drill-down modal */}
+      <IndicatorDrillDown
+        open={drill !== null}
+        onClose={() => setDrill(null)}
+        indicator={drill?.indicator}
+        asset={drill?.asset ?? ''}
+      />
+
 
       {/* Row 3: macro */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

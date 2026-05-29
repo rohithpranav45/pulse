@@ -6,9 +6,10 @@ import {
   Brain,
   Layers,
   TrendingUp,
+  FileBadge,
 } from 'lucide-react';
 
-export type ViewKey = 'signal' | 'charts' | 'fundamentals' | 'intelligence' | 'term' | 'spreads';
+export type ViewKey = 'signal' | 'charts' | 'fundamentals' | 'intelligence' | 'term' | 'spreads' | 'contracts';
 
 export const NAV_ITEMS: { key: ViewKey; label: string; icon: any; hint: string }[] = [
   { key: 'signal',        label: 'Signal',        icon: Gauge,            hint: '1' },
@@ -17,6 +18,7 @@ export const NAV_ITEMS: { key: ViewKey; label: string; icon: any; hint: string }
   { key: 'intelligence',  label: 'Intelligence',  icon: Brain,            hint: '4' },
   { key: 'term',          label: 'Term Structure',icon: Layers,           hint: '5' },
   { key: 'spreads',       label: 'Spreads & Risk',icon: TrendingUp,       hint: '6' },
+  { key: 'contracts',     label: 'Contracts',     icon: FileBadge,        hint: '7' },
 ];
 
 export function Sidebar({ active, onSelect }: { active: ViewKey; onSelect: (k: ViewKey) => void }) {
