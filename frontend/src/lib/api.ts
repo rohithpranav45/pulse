@@ -40,6 +40,8 @@ function normalizeAll(raw: any): any {
     tanker_watch:    unwrap(raw.tanker_watch),
     spreads_history: unwrap(raw.spreads_history),
     seasonality:     unwrap(raw.seasonality),
+    eia_surprise:    unwrap(raw.eia_surprise),
+    forward_cover:   unwrap(raw.forward_cover),
     timestamp:       raw.timestamp,
   };
 }
@@ -68,6 +70,8 @@ export const api = {
   tankerWatch:   () => getJSON('/api/tanker-watch'),
   spreadsHistory:() => getJSON('/api/spreads-history'),
   seasonality:   () => getJSON('/api/seasonality'),
+  eiaSurprise:   () => getJSON('/api/eia-surprise'),
+  forwardCover:  () => getJSON('/api/forward-cover'),
   all:           async () => normalizeAll(await getJSON('/api/all', 120000)),
 };
 
