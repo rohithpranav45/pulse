@@ -1,0 +1,40 @@
+# ── PULSE — Energy Trading Dashboard ─────────────────────────────────────────
+# Install: pip install -r requirements.txt
+# Python:  3.11+
+# Pinned: 2026-05-28 (pip freeze)
+
+# ── Web framework ─────────────────────────────────────────────────────────────
+Flask==3.1.3
+flask-cors==6.0.2
+
+# ── Market data ───────────────────────────────────────────────────────────────
+yfinance==1.2.0
+
+# ── Numerics / data ───────────────────────────────────────────────────────────
+numpy==2.3.1
+pandas==2.3.0
+scipy==1.16.0
+requests==2.32.4
+
+# ── Config ────────────────────────────────────────────────────────────────────
+python-dotenv==1.2.2
+
+# ── Excel / curve data ────────────────────────────────────────────────────────
+openpyxl==3.1.5
+
+# ── News (optional — fallback to NewsAPI if not set) ─────────────────────────
+apify-client==3.0.1        # needs APIFY_API_TOKEN in .env
+
+# ── News sentiment (FinBERT) ──────────────────────────────────────────────────
+# Downloads ~420 MB to ~/.cache/huggingface/ on first run — subsequent calls cached
+transformers>=4.40         # ProsusAI/finbert — sentence classification
+torch==2.11.0              # CPU-only build is fine for 8 headlines
+
+# ── Macro data ────────────────────────────────────────────────────────────────
+fredapi==0.5.2             # FRED macro fetcher — DGS10, CPI, EUR/USD
+
+# ── Background scheduling ─────────────────────────────────────────────────────
+APScheduler==3.11.2        # background data refresh jobs
+
+# ── AIS / Tanker Watch ────────────────────────────────────────────────────────
+websocket-client==1.9.0    # aisstream.io WebSocket — live ship positions (needs AISSTREAM_API_KEY)
