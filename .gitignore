@@ -27,6 +27,13 @@ data/cache/*.pkl
 *.pkl
 *.parquet
 *.feather
+backend/db/*.db
+backend/db/*.db-journal
+backend/db/*.db-wal
+backend/db/*.db-shm
+
+# ── Claude Code local settings ────────────────────────────────────────────────
+.claude/settings.local.json
 
 # ── Logs ──────────────────────────────────────────────────────────────────────
 *.log
