@@ -139,6 +139,7 @@ TTL_STEO           = 86400 # EIA STEO — daily publication cycle
 TTL_ANALYST_WATCH  = 900   # Nitter/Truth Social RSS — 15-min refresh
 TTL_TANKER_WATCH   = 300   # AIS snapshot — 5-min refresh
 TTL_SPREADS_HIST   = 3600  # daily spread history — once per hour
+TTL_EIA_SURPRISE   = 3600  # EIA surprise tracker — once per hour
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -602,6 +603,38 @@ def _fetch_seasonality():
     return data
 
 
+def _eia_surprise():
+    from fetchers.eia_surprise import get_eia_surprise
+    return get_eia_surprise(weeks=12)
+
+def _fetch_eia_surprise():
+    cached = get_cached("eia_surprise", TTL_EIA_SURPRISE)
+    if cached is not None:
+        return cached
+    data = safe_fetch(_eia_surprise, {"releases": [], "regression": None,
+                                       "next_release_utc": None,
+                                       "next_release_in_seconds": None,
+                                       "timestamp": _now()})
+    set_cache("eia_surprise", data)
+    return data
+
+
+def _forward_cover():
+    from fetchers.forward_cover import get_forward_cover_history
+    return get_forward_cover_history(years=5)
+
+def _fetch_forward_cover():
+    cached = get_cached("forward_cover", TTL_EIA_SURPRISE)  # same hourly cadence
+    if cached is not None:
+        return cached
+    data = safe_fetch(_forward_cover, {"history": [], "seasonal_band": [],
+                                        "current": None, "current_date": None,
+                                        "critical_low": 54, "comfortable_high": 65,
+                                        "timestamp": _now()})
+    set_cache("forward_cover", data)
+    return data
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # APScheduler refresh jobs — one per cache key, called on interval
 # ─────────────────────────────────────────────────────────────────────────────
@@ -708,6 +741,17 @@ def _refresh_seasonality():
     set_cache("seasonality", safe_fetch(_seasonality,
         {"products": [], "current_month": 0, "current_month_name": "", "data_years": 5}))
 
+def _refresh_eia_surprise():
+    set_cache("eia_surprise", safe_fetch(_eia_surprise,
+        {"releases": [], "regression": None, "next_release_utc": None,
+         "next_release_in_seconds": None, "timestamp": _now()}))
+
+def _refresh_forward_cover():
+    set_cache("forward_cover", safe_fetch(_forward_cover,
+        {"history": [], "seasonal_band": [], "current": None,
+         "current_date": None, "critical_low": 54, "comfortable_high": 65,
+         "timestamp": _now()}))
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Scheduler — fires at TTL intervals; slow jobs fire immediately on start
@@ -742,6 +786,8 @@ _scheduler.add_job(lambda: set_cache("tanker_watch", safe_fetch(_tanker_watch, {
                    "interval", seconds=TTL_TANKER_WATCH, next_run_time=_NOW, id="_refresh_tanker_watch")
 _scheduler.add_job(_refresh_spreads_history, "interval", seconds=TTL_SPREADS_HIST, next_run_time=_NOW, id="_refresh_spreads_history")
 _scheduler.add_job(_refresh_seasonality,     "interval", seconds=TTL_SPREADS_HIST, next_run_time=_NOW, id="_refresh_seasonality")
+_scheduler.add_job(_refresh_eia_surprise,    "interval", seconds=TTL_EIA_SURPRISE, next_run_time=_NOW, id="_refresh_eia_surprise")
+_scheduler.add_job(_refresh_forward_cover,   "interval", seconds=TTL_EIA_SURPRISE, next_run_time=_NOW, id="_refresh_forward_cover")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -901,6 +947,20 @@ def seasonality_route():
     return jsonify({"data": data, "timestamp": _now()})
 
 
+@app.route("/api/eia-surprise")
+def eia_surprise_route():
+    """EIA Wednesday Weekly Petroleum Status Report — surprise tracker."""
+    data = _fetch_eia_surprise()
+    return jsonify({"data": data, "timestamp": _now()})
+
+
+@app.route("/api/forward-cover")
+def forward_cover_route():
+    """5-year US days-of-forward-cover history + seasonal band."""
+    data = _fetch_forward_cover()
+    return jsonify({"data": data, "timestamp": _now()})
+
+
 @app.route("/api/all")
 def all_data():
     """Assemble all data from individual caches in one response."""
@@ -926,6 +986,8 @@ def all_data():
         "tanker_watch":   {"data": _fetch_tanker_watch()},
         "spreads_history":{"data": _fetch_spreads_history()},
         "seasonality":    {"data": _fetch_seasonality()},
+        "eia_surprise":   {"data": _fetch_eia_surprise()},
+        "forward_cover":  {"data": _fetch_forward_cover()},
         "timestamp":      _now(),
     })
 

@@ -7,9 +7,10 @@ import {
   Layers,
   TrendingUp,
   FileBadge,
+  History,
 } from 'lucide-react';
 
-export type ViewKey = 'signal' | 'charts' | 'fundamentals' | 'intelligence' | 'term' | 'spreads' | 'contracts';
+export type ViewKey = 'signal' | 'charts' | 'fundamentals' | 'intelligence' | 'term' | 'spreads' | 'contracts' | 'playbook';
 
 export const NAV_ITEMS: { key: ViewKey; label: string; icon: any; hint: string }[] = [
   { key: 'signal',        label: 'Signal',        icon: Gauge,            hint: '1' },
@@ -19,6 +20,7 @@ export const NAV_ITEMS: { key: ViewKey; label: string; icon: any; hint: string }
   { key: 'term',          label: 'Term Structure',icon: Layers,           hint: '5' },
   { key: 'spreads',       label: 'Spreads & Risk',icon: TrendingUp,       hint: '6' },
   { key: 'contracts',     label: 'Contracts',     icon: FileBadge,        hint: '7' },
+  { key: 'playbook',      label: 'Playbook',      icon: History,          hint: '8' },
 ];
 
 export function Sidebar({ active, onSelect }: { active: ViewKey; onSelect: (k: ViewKey) => void }) {

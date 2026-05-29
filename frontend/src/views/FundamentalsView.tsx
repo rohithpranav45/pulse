@@ -5,6 +5,8 @@ import { SkeletonRows, Skeleton } from '@/components/ui/Skeleton';
 import { fmt } from '@/lib/fmt';
 import clsx from 'clsx';
 import { Droplets, Wind, Activity, Anchor, AlertOctagon, BarChart3, Cloud } from 'lucide-react';
+import { EIASurprisePanel } from '@/components/panels/EIASurprisePanel';
+import { ForwardCoverChart } from '@/components/panels/ForwardCoverChart';
 
 function EIAInventory({ f }: { f: any }) {
   const inv = f?.inventory ?? {};
@@ -329,14 +331,22 @@ export function FundamentalsView({ all }: { all: any }) {
   const w = all?.weather;
   const c = all?.cracks;
   const news = all?.news;
+  const surprise = all?.eia_surprise;
+  const forwardCover = all?.forward_cover;
 
   return (
     <div className="space-y-4">
+      {/* HERO — EIA Surprise Tracker */}
+      <EIASurprisePanel data={surprise} />
+
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         <EIAInventory f={f} />
         <COTPanel f={f} />
         <OPECPanel f={f} />
       </div>
+
+      {/* Forward Cover historical chart — full width */}
+      <ForwardCoverChart data={forwardCover} />
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         <GeoRiskPanel f={f} />

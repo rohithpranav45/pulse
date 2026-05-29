@@ -12,6 +12,7 @@ import { IntelligenceView } from '@/views/IntelligenceView';
 import { TermStructureView } from '@/views/TermStructureView';
 import { SpreadsView } from '@/views/SpreadsView';
 import { ContractsView } from '@/views/ContractsView';
+import { PlaybookView } from '@/views/PlaybookView';
 
 export default function App() {
   const [view, setView] = useLocalStorage<ViewKey>('pulse.view', 'signal');
@@ -29,7 +30,7 @@ export default function App() {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
       const k = e.key;
-      const map: Record<string, ViewKey> = { '1':'signal','2':'charts','3':'fundamentals','4':'intelligence','5':'term','6':'spreads','7':'contracts' };
+      const map: Record<string, ViewKey> = { '1':'signal','2':'charts','3':'fundamentals','4':'intelligence','5':'term','6':'spreads','7':'contracts','8':'playbook' };
       if (map[k]) setView(map[k]);
       if (k === 'r' || k === 'R') { setRefreshing(true); refetch().finally(() => setTimeout(() => setRefreshing(false), 600)); }
       if (k === 'f' || k === 'F') document.documentElement.requestFullscreen?.();
@@ -74,6 +75,7 @@ export default function App() {
               {view === 'term'          && <TermStructureView all={merged} />}
               {view === 'spreads'       && <SpreadsView all={merged} />}
               {view === 'contracts'     && <ContractsView all={merged} />}
+              {view === 'playbook'      && <PlaybookView />}
             </ErrorBoundary>
           </div>
         </main>
