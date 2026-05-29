@@ -13,6 +13,9 @@ import { TermStructureView } from '@/views/TermStructureView';
 import { SpreadsView } from '@/views/SpreadsView';
 import { ContractsView } from '@/views/ContractsView';
 import { PlaybookView } from '@/views/PlaybookView';
+import { ChatDock } from '@/components/chat/ChatDock';
+import { OnboardingTour } from '@/components/onboarding/OnboardingTour';
+import { DailySheet } from '@/components/panels/DailySheet';
 
 export default function App() {
   const [view, setView] = useLocalStorage<ViewKey>('pulse.view', 'signal');
@@ -34,6 +37,7 @@ export default function App() {
       if (map[k]) setView(map[k]);
       if (k === 'r' || k === 'R') { setRefreshing(true); refetch().finally(() => setTimeout(() => setRefreshing(false), 600)); }
       if (k === 'f' || k === 'F') document.documentElement.requestFullscreen?.();
+      if (k === 'p' || k === 'P') { e.preventDefault(); window.print(); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -66,6 +70,9 @@ export default function App() {
             </div>
           </div>
 
+          {/* Print-only daily sheet */}
+          <DailySheet all={merged} tradeIdea={tradeIdea} />
+
           <div className="p-6 pb-12">
             <ErrorBoundary label={activeLabel}>
               {view === 'signal'        && <SignalView all={merged} tradeIdea={tradeIdea} alerts={Array.isArray(alerts) ? alerts : (alerts as any)?.alerts ?? []} />}
@@ -86,6 +93,12 @@ export default function App() {
         cracks={all?.cracks}
         lastUpdated={lastUpdated}
       />
+
+      {/* Floating RAG chat dock — '/' to open */}
+      <ChatDock />
+
+      {/* First-visit onboarding tour */}
+      <OnboardingTour onNavigate={setView} />
     </div>
   );
 }

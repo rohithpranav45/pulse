@@ -961,6 +961,57 @@ def forward_cover_route():
     return jsonify({"data": data, "timestamp": _now()})
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# RAG chat — Q&A grounded in the OilMacroTrading curriculum + live snapshot
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route("/api/ask", methods=["POST"])
+def ask_route():
+    """
+    Free-form Q&A. Body: {"question": str}.
+    Combines BM25 retrieval over the curriculum with the live PULSE snapshot,
+    then calls Ollama (if running) — falls back to extractive answer otherwise.
+    """
+    try:
+        from rag.chat import answer as rag_answer
+    except Exception as exc:
+        return jsonify({"error": f"RAG module failed to load: {exc}"}), 500
+
+    body = request.get_json(silent=True) or {}
+    question = (body.get("question") or "").strip()
+    if not question:
+        return jsonify({"error": "question is required"}), 400
+
+    # Build a compact live snapshot from the cache (no fresh fetches — fast)
+    snapshot = {
+        "prices":         _fetch_prices(),
+        "curve":          _fetch_curve(),
+        "signal":         _fetch_signal(),
+        "fair_value":     _fetch_fair_value(),
+        "fundamentals":   _fetch_fundamentals(),
+        "cracks":         _fetch_cracks(),
+        "forward_cover":  _fetch_forward_cover(),
+    }
+
+    try:
+        result = rag_answer(question, snapshot=snapshot, k=5)
+    except Exception as exc:
+        log.exception("ask failed")
+        return jsonify({"error": str(exc)}), 500
+
+    return jsonify({"data": result, "timestamp": _now()})
+
+
+@app.route("/api/ask/stats")
+def ask_stats_route():
+    """RAG index diagnostic — chunk count, vocab, book path."""
+    try:
+        from rag.retrieval import index_stats
+        return jsonify({"data": index_stats(), "timestamp": _now()})
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
 @app.route("/api/all")
 def all_data():
     """Assemble all data from individual caches in one response."""

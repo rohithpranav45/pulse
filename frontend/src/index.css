@@ -98,4 +98,37 @@
     animation: shimmer 2.4s linear infinite;
     border-radius: 4px;
   }
+
+  .prose-tight strong { @apply text-text-primary font-semibold; }
+  .prose-tight em { @apply text-text-secondary italic; }
+}
+
+/* ── Print: only show the Daily Sheet ───────────────────────────────────── */
+@media print {
+  @page {
+    size: letter;
+    margin: 0.5in;
+  }
+  html, body, #root {
+    height: auto !important;
+    overflow: visible !important;
+    background: white !important;
+    color: black !important;
+  }
+  body {
+    background: white !important;
+  }
+  /* Hide every UI chrome element */
+  header, nav, footer, aside,
+  .chat-dock, [role="dialog"],
+  .onboarding-overlay {
+    display: none !important;
+  }
+  main {
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+  /* Hide everything inside main except the sheet itself */
+  main > * { display: none !important; }
+  #daily-sheet { display: block !important; }
 }
