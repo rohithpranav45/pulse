@@ -4,21 +4,23 @@ Alert System
 Generates trading alerts from live market data.
 
 Schema: {id, type, severity, message, timestamp}
-  id        — hash(type:YYYY-MM-DD) for daily deduplication
-  type      — PRICE_SHOCK | COT_EXTREME | EIA_SURPRISE | IV_SPIKE
-  severity  — "warning" | "critical"
+  id        — hash(type:YYYY-MM-DD) for daily deduplication, or
+              hash(NEWS_BREAKING:title-slug) for news headlines (per-headline)
+  type      — PRICE_SHOCK | COT_EXTREME | EIA_SURPRISE | IV_SPIKE | NEWS_BREAKING
+  severity  — "info" | "warning" | "critical"
 
 Public API
 ----------
-  check_alerts(prices, technicals, eia, cot, iv=None) -> dict
+  check_alerts(prices, technicals, eia, cot, iv=None, news=None) -> dict
 """
 
 import hashlib
 import logging
 import os
+import re
 import sys
 import time
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timezone, timedelta
 
 _BACKEND = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 _ROOT    = os.path.abspath(os.path.join(_BACKEND, ".."))
@@ -38,6 +40,138 @@ def _alert_id(kind: str) -> str:
 
 def _ts() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _slug(text: str, length: int = 60) -> str:
+    """Stable lowercased alpha-num slug — used to build per-headline alert IDs."""
+    s = re.sub(r"[^a-z0-9]+", "-", (text or "").lower()).strip("-")
+    return s[:length]
+
+
+def _headline_alert_id(title: str) -> str:
+    """One-per-headline ID so each breaking news item only squawks once."""
+    return "news_" + hashlib.md5(_slug(title).encode()).hexdigest()[:12]
+
+
+# ── Squawk keyword sets ──────────────────────────────────────────────────────
+# Tier 1 (critical) — supply shock / geopolitical events that move the tape now.
+# Tier 2 (warning)  — sentiment-moving but slower to cash through.
+_TIER1_KEYWORDS = [
+    "hormuz", "blockade", "embargo", "tanker attack", "tanker seized",
+    "tanker hijack", "missile strike", "drone strike", "refinery fire",
+    "pipeline rupture", "pipeline blast", "force majeure", "shut down",
+    "shutdown", "shuts down", "opec emergency", "production cut",
+    "production halt", "production suspended", "war begins",
+    "ceasefire collapse", "us strikes", "israel strikes",
+    "sanctions imposed", "secondary sanctions",
+    "supply disruption", "spr release", "spr emergency",
+]
+_TIER2_KEYWORDS = [
+    "opec+", "saudi", "iran", "russia oil", "ukraine oil", "houthi",
+    "red sea", "venezuela", "nigeria", "libya", "iraq oil",
+    "rig count", "inventory build", "inventory draw", "gasoline demand",
+    "ev adoption", "demand destruction", "demand cut", "demand outlook",
+    "futures expire", "settlement", "exchange notice", "margin call",
+]
+
+
+def _is_recent(published_iso: str, max_age_min: int = 60) -> bool:
+    """True when the article's published_at timestamp is within max_age_min."""
+    if not published_iso:
+        return False
+    try:
+        dt = datetime.fromisoformat(published_iso.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return (datetime.now(timezone.utc) - dt) <= timedelta(minutes=max_age_min)
+    except Exception:
+        return False
+
+
+def _classify_headline(title: str) -> "tuple[str | None, str]":
+    """
+    Classify a headline for squawk eligibility.
+
+    Returns
+    -------
+    (severity, matched_keyword) where severity is 'critical' / 'warning' / None.
+    None means the headline is not squawk-worthy.
+    """
+    low = (title or "").lower()
+    for kw in _TIER1_KEYWORDS:
+        if kw in low:
+            return ("critical", kw)
+    for kw in _TIER2_KEYWORDS:
+        if kw in low:
+            return ("warning", kw)
+    return (None, "")
+
+
+def _check_breaking_news(news: dict, max_emit: int = 4) -> list[dict]:
+    """
+    Scan the latest news payload for headlines worth squawking.
+
+    Triggers when:
+      - the article is < 60 minutes old (fresh enough to act on)
+      - AND either matches a tier-1 supply/geo keyword (critical)
+        or a tier-2 macro/sentiment keyword (warning)
+        or is_negative=True from the upstream keyword filter (warning)
+
+    Returns up to ``max_emit`` alert dicts. Each alert ID is derived from the
+    headline slug so the same article never fires twice in a session.
+    """
+    if not isinstance(news, dict):
+        return []
+    articles = news.get("articles") or []
+    if not articles:
+        return []
+
+    ts = _ts()
+    out: list[dict] = []
+    seen_ids: set[str] = set()
+
+    # Newest first — `articles` is already sorted that way by get_energy_news()
+    for art in articles:
+        title = (art.get("title") or art.get("headline") or "").strip()
+        if not title:
+            continue
+        pub = art.get("published_at") or art.get("published") or ""
+        if not _is_recent(pub, max_age_min=60):
+            continue
+
+        severity, matched_kw = _classify_headline(title)
+        if severity is None:
+            # No keyword hit — still squawk negative-sentiment items within 30m
+            if art.get("is_negative") and _is_recent(pub, max_age_min=30):
+                severity, matched_kw = "warning", "negative-sentiment"
+            else:
+                continue
+
+        aid = _headline_alert_id(title)
+        if aid in seen_ids:
+            continue
+        seen_ids.add(aid)
+
+        # Build a short, speech-friendly message. We strip trailing source
+        # attribution like " - OilPrice.com" so the squawk doesn't read it.
+        clean = re.sub(r"\s+-\s+[^-]{3,40}$", "", title).strip()
+        source = (art.get("source") or "").strip()
+        out.append({
+            "id":         aid,
+            "type":       "NEWS_BREAKING",
+            "severity":   severity,
+            "message":    f"{clean}" + (f" ({source})" if source else ""),
+            "headline":   clean,
+            "source":     source,
+            "matched_kw": matched_kw,
+            "url":        art.get("url") or "",
+            "category":   art.get("category") or "",
+            "timestamp":  ts,
+        })
+        if len(out) >= max_emit:
+            break
+
+    return out
 
 
 def _four_week_avg_change() -> "float | None":
@@ -83,7 +217,7 @@ def _four_week_avg_change() -> "float | None":
         return _4WK_CACHE["value"]
 
 
-def check_alerts(prices, technicals, eia, cot, iv=None) -> dict:
+def check_alerts(prices, technicals, eia, cot, iv=None, news=None) -> dict:
     """
     Generate real-time trading alerts.
 
@@ -94,6 +228,8 @@ def check_alerts(prices, technicals, eia, cot, iv=None) -> dict:
     eia         : dict  full fundamentals dict (keys: inventory, snapshot, ...)
     cot         : dict  from fetchers.cot
     iv          : dict  from fetchers.options_iv (optional)
+    news        : dict  from fetchers.news (optional) — scanned for breaking
+                  geopolitical / supply-shock headlines worth squawking.
 
     Returns
     -------
@@ -186,6 +322,12 @@ def check_alerts(prices, technicals, eia, cot, iv=None) -> dict:
             })
     except Exception as exc:
         log.debug("IV spike check: %s", exc)
+
+    # ── 5. NEWS BREAKING (trading-floor squawk) ──────────────────────────────
+    try:
+        alerts_list.extend(_check_breaking_news(news or {}, max_emit=4))
+    except Exception as exc:
+        log.debug("news breaking check: %s", exc)
 
     return {
         "alerts":      alerts_list,
