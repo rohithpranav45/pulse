@@ -109,6 +109,9 @@ def main():
         stderr=subprocess.STDOUT,
         text=True,
         bufsize=1,
+        encoding="utf-8",
+        errors="replace",
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
     )
 
     print(DIM("  [3/4] Waiting for API health check..."))

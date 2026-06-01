@@ -242,12 +242,12 @@ function TradeIdeaCard({ idea }: { idea: any }) {
 function MacroPanel({ macro }: { macro: any }) {
   if (!macro) return <Panel title="Macro Signals"><SkeletonRows rows={5} /></Panel>;
   const items = [
-    { label: '10Y Yield', val: macro.DGS10?.value, unit: '%', trend: macro.DGS10?.change_pct },
-    { label: 'CPI YoY', val: macro.CPIAUCSL?.yoy_pct, unit: '%' },
-    { label: 'EUR/USD', val: macro.DEXUSEU?.value },
-    { label: 'Fed Funds', val: macro.FEDFUNDS?.value, unit: '%' },
-    { label: 'INDPRO MoM', val: macro.INDPRO?.mom_pct, unit: '%' },
-    { label: '30Y Mortgage', val: macro.MORTGAGE30US?.value, unit: '%' },
+    { label: '10Y Yield',   val: macro.dgs10?.value,    unit: '%', trend: macro.dgs10?.change },
+    { label: 'CPI YoY',     val: macro.cpi?.yoy,        unit: '%' },
+    { label: 'EUR/USD',     val: macro.eurusd?.value },
+    { label: 'Fed Funds',   val: macro.fedfunds?.value, unit: '%' },
+    { label: 'INDPRO MoM',  val: macro.indpro?.mom,     unit: '%' },
+    { label: '30Y Mortgage',val: macro.mortgage?.value, unit: '%' },
   ];
   return (
     <Panel title="Macro Signals" subtitle="FRED">

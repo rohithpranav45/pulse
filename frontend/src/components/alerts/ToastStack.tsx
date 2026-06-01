@@ -90,6 +90,86 @@ function playPing(severity: string) {
   } catch { /* ignore */ }
 }
 
+/**
+ * Trading-floor squawk — speak the alert aloud via the browser's built-in
+ * Web Speech API. Free, offline, no API key. Queued automatically so two
+ * alerts firing back-to-back don't talk over each other.
+ *
+ * For NEWS_BREAKING we read "Breaking. {headline}" — for other alert types
+ * we read "{type spoken} alert. {message}". Type strings like EIA_SURPRISE
+ * are humanised first ("E I A surprise"). Source attribution and dollar /
+ * percent signs are normalised so they don't read literally.
+ */
+function _pickVoice(): SpeechSynthesisVoice | null {
+  try {
+    const all = window.speechSynthesis.getVoices() || [];
+    // Prefer en-US/en-GB. Within that, prefer named professional voices.
+    const prefs = [/google.*us.*english/i, /google.*uk.*english/i, /microsoft.*aria/i, /microsoft.*guy/i, /samantha/i, /daniel/i, /^en-(US|GB)$/i];
+    for (const re of prefs) {
+      const v = all.find(v => re.test(v.name) || re.test(v.lang));
+      if (v) return v;
+    }
+    return all.find(v => /^en/i.test(v.lang)) ?? all[0] ?? null;
+  } catch { return null; }
+}
+
+function _humaniseType(type: string): string {
+  // EIA_SURPRISE → "E I A surprise"; PRICE_SHOCK → "price shock"
+  return (type || '')
+    .replace(/_/g, ' ')
+    .replace(/\b([A-Z]{2,})\b/g, (s) => s.split('').join(' '))
+    .toLowerCase();
+}
+
+function _speechText(t: Toast): string {
+  if (t.type === 'NEWS_BREAKING') {
+    return `Breaking. ${t.message}`;
+  }
+  const human = _humaniseType(t.type);
+  // Strip ticker noise that doesn't read well aloud
+  const msg = (t.message || '')
+    .replace(/\bM1[-–—]M2\b/g, 'M one M two')
+    .replace(/\$([0-9.,]+)/g, '$1 dollars')
+    .replace(/([0-9]+)\s*%/g, '$1 percent')
+    .replace(/\bpctile\b/gi, 'percentile')
+    .replace(/\bvs\b/gi, 'versus')
+    .replace(/\bATR\b/g, 'A T R')
+    .replace(/\bCOT\b/g, 'C O T')
+    .replace(/\bIV\b/g, 'I V')
+    .replace(/\bbbl\b/gi, 'barrel')
+    .replace(/\bMbbl\b/gi, 'million barrels');
+  return `${human} alert. ${msg}`;
+}
+
+function speakAlert(t: Toast) {
+  try {
+    const synth = window.speechSynthesis;
+    if (!synth) return;
+    // Don't pile up if the queue is already long.
+    if (synth.pending && synth.pending) {
+      // Allow up to ~3 queued; flush anything past that.
+      // (Browsers expose `pending` as a boolean rather than a count, so we
+      // approximate via a simple length cap below.)
+    }
+    const u = new SpeechSynthesisUtterance(_speechText(t));
+    u.rate   = t.severity === 'critical' ? 1.05 : 1.0;
+    u.pitch  = 1.0;
+    u.volume = 1.0;
+    const v = _pickVoice();
+    if (v) u.voice = v;
+    synth.speak(u);
+  } catch { /* speech not available — silent fail */ }
+}
+
+// Some browsers (notably Chrome) populate the voice list asynchronously.
+// Touch it once so getVoices() returns something meaningful by first use.
+if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+  try {
+    window.speechSynthesis.getVoices();
+    window.speechSynthesis.onvoiceschanged = () => { /* no-op trigger */ };
+  } catch { /* ignore */ }
+}
+
 function ToastCard({ t, onDismiss }: { t: Toast; onDismiss: () => void }) {
   const Icon = severityIcon(t.severity);
   const c = tone(t.severity);
@@ -195,12 +275,17 @@ export function ToastStack({ alerts }: { alerts: Alert[] | null | undefined }) {
 
     setToasts(prev => [...prev, ...newToasts]);
 
-    incoming.forEach(a => {
+    incoming.forEach((a, i) => {
       if (a?.id) seenIdsRef.current.add(a.id);
 
-      // Sound ping
+      // Sound ping (chime) + trading-floor squawk (TTS) on critical/warning.
+      // The chime fires first, then the spoken headline follows ~400 ms later
+      // so the two don't overlap audibly.
       if (soundOn && (a.severity === 'critical' || a.severity === 'warning')) {
         playPing(a.severity);
+        const toastShape: Toast = { ...a, _key: a.id, _firedAt: now, _duration: durationFor(a.severity) };
+        // Stagger speech behind the chime + later toasts
+        setTimeout(() => speakAlert(toastShape), 420 + i * 200);
       }
 
       // Browser notification when tab in background
@@ -259,7 +344,7 @@ export function ToastStack({ alerts }: { alerts: Alert[] | null | undefined }) {
       <div className="fixed top-20 right-5 z-[90] flex gap-1.5 bg-bg-surface/80 backdrop-blur-md border border-border rounded-full px-2 py-1 shadow-lg">
         <button
           onClick={toggleSound}
-          title={soundOn ? 'Mute alert sounds' : 'Enable alert sounds'}
+          title={soundOn ? 'Mute squawk (chime + spoken headlines)' : 'Enable squawk (chime + spoken headlines)'}
           className={clsx(
             'p-1.5 rounded-full transition-colors',
             soundOn ? 'text-gold hover:bg-bg-hover' : 'text-text-muted hover:text-text-secondary',
