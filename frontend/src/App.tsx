@@ -16,6 +16,7 @@ import { PlaybookView } from '@/views/PlaybookView';
 import { ChatDock } from '@/components/chat/ChatDock';
 import { OnboardingTour } from '@/components/onboarding/OnboardingTour';
 import { DailySheet } from '@/components/panels/DailySheet';
+import { ToastStack } from '@/components/alerts/ToastStack';
 
 export default function App() {
   const [view, setView] = useLocalStorage<ViewKey>('pulse.view', 'signal');
@@ -99,6 +100,9 @@ export default function App() {
 
       {/* First-visit onboarding tour */}
       <OnboardingTour onNavigate={setView} />
+
+      {/* Pop-up alert toast stack — slides in when /api/alerts produces a new id */}
+      <ToastStack alerts={Array.isArray(alerts) ? alerts : (alerts as any)?.alerts ?? []} />
     </div>
   );
 }
