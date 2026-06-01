@@ -10,7 +10,7 @@ What it does:
   2. Verifies required packages are installed
   3. Starts the Flask API (backend/app.py) on port 5000
   4. Polls until the API is healthy (up to 20 s)
-  5. Opens frontend/index.html in the default browser
+  5. Opens frontend/index.html in the default browserg
   6. Streams API logs to the console
 
 Press Ctrl+C to shut down.
