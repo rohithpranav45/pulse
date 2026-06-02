@@ -213,29 +213,59 @@ function PatternsPanel({ patterns }: { patterns: any }) {
 
 function AnalystWatchPanel({ watch }: { watch: any }) {
   if (!watch) return <Panel title="Analyst Watch"><SkeletonRows rows={5} /></Panel>;
-  const sources = watch.sources ?? [];
+  // Backend serves `analysts` (current) — older clients used `sources`. Accept both.
+  const sources: any[] = watch.analysts ?? watch.sources ?? [];
+  if (sources.length === 0) {
+    return (
+      <Panel title="Analyst Watch" subtitle="warming up" right={<Activity className="w-4 h-4 text-text-tertiary" />}>
+        <SkeletonRows rows={4} />
+      </Panel>
+    );
+  }
   return (
     <Panel title="Analyst Watch" subtitle="Nitter · Truth Social" right={<Activity className="w-4 h-4 text-text-tertiary" />}>
       <div className="space-y-3">
-        {sources.slice(0, 3).map((src: any, i: number) => (
-          <div key={i} className="p-3 bg-bg-card/50 rounded border border-border/60">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-8 h-8 rounded-full bg-bg-elev flex items-center justify-center font-display font-bold text-text-secondary">
-                {(src.name ?? 'X')[0]}
+        {sources.slice(0, 3).map((src: any, i: number) => {
+          const posts: any[] = src.posts ?? [];
+          return (
+            <div key={i} className="p-3 bg-bg-card/50 rounded border border-border/60">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded-full bg-bg-elev flex items-center justify-center font-display font-bold text-text-secondary">
+                  {(src.name ?? src.handle ?? 'X')[0]}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <a
+                    href={src.profile_url ?? '#'}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] font-display font-semibold tracking-wider hover:text-gold transition-colors"
+                  >
+                    {src.name}
+                  </a>
+                  <div className="text-[9px] font-mono text-text-muted truncate">
+                    {src.handle} {src.org && <span>· {src.org}</span>}
+                  </div>
+                </div>
+                <Chip tone={posts.length > 0 ? 'blue' : 'muted'}>{posts.length}</Chip>
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-[11px] font-display font-semibold tracking-wider">{src.name}</div>
-                <div className="text-[9px] font-mono text-text-muted">{src.handle ?? src.org}</div>
-              </div>
-              <Chip tone="blue">{src.posts?.length ?? 0}</Chip>
+              {posts.slice(0, 2).map((p: any, j: number) => (
+                <a
+                  key={j}
+                  href={p.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block text-[11px] text-text-secondary mt-1.5 leading-snug border-l-2 border-border pl-2 hover:text-text-primary hover:border-gold/50 transition-colors"
+                >
+                  {p.text?.slice(0, 220)}{p.text?.length > 220 ? '…' : ''}
+                  {p.ago && <span className="block text-[9px] font-mono text-text-muted mt-0.5">{p.ago}</span>}
+                </a>
+              ))}
+              {src.fallback_note && (
+                <div className="mt-2 text-[9px] font-mono text-neut/80 leading-snug">⚠ {src.fallback_note}</div>
+              )}
             </div>
-            {src.posts?.slice(0, 2).map((p: any, j: number) => (
-              <div key={j} className="text-[11px] text-text-secondary mt-1.5 leading-snug border-l-2 border-border pl-2">
-                {p.text?.slice(0, 200)}{p.text?.length > 200 ? '…' : ''}
-              </div>
-            ))}
-          </div>
-        ))}
+          );
+        })}
       </div>
     </Panel>
   );

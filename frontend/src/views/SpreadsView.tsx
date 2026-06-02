@@ -93,20 +93,24 @@ function STEOPanel({ steo }: { steo: any }) {
 function TankerWatchPanel({ tw }: { tw: any }) {
   if (!tw) return <Panel title="Tanker Watch"><SkeletonRows rows={4} /></Panel>;
   const chokepoints = tw.chokepoints ?? [];
-  const setup = tw.available === false;
-  const riskTone = (level: string): 'bull' | 'neut' | 'bear' | 'muted' => {
+  // Setup required when backend explicitly opted out (no key) or set the flag.
+  const setup = tw.setup_required || tw.available === false;
+
+  const riskTone = (level: string | undefined): 'bull' | 'neut' | 'bear' | 'muted' => {
     switch ((level ?? '').toUpperCase()) {
       case 'CRITICAL':
-      case 'HIGH':       return 'bear';
+      case 'HIGH':
+      case 'ELEVATED':   return 'bear';
       case 'MODERATE':   return 'neut';
       case 'LOW':        return 'bull';
       default:           return 'muted'; // MONITORING / unknown
     }
   };
+
   return (
     <Panel
       title="Tanker Watch · AIS"
-      subtitle={tw.note ?? 'aisstream.io'}
+      subtitle={tw.note ?? tw.source ?? 'aisstream.io / marinetraffic'}
       accent="blue"
       right={<Ship className="w-4 h-4 text-text-tertiary" />}
     >
@@ -120,28 +124,48 @@ function TankerWatchPanel({ tw }: { tw: any }) {
         <div className="space-y-3">
           {chokepoints.map((cp: any, i: number) => {
             const tone = riskTone(cp.risk_level);
-            const tankers = cp.tankers ?? 0;
+            const tankers = cp.tankers ?? cp.tanker_count ?? 0;
             const vessels = cp.vessels ?? 0;
-            const top = (cp.tanker_list ?? []).slice(0, 2).map((t: any) => t.name).join(' · ');
+            // If we have specific vessel names, show those; otherwise fall back to the context blurb.
+            const topVessels = (cp.tanker_list ?? []).slice(0, 2).map((t: any) => t.name).join(' · ');
+            const sub = topVessels || cp.context || cp.flow || '';
             return (
               <div key={i} className="flex items-center gap-3 p-2 bg-bg-card/40 rounded">
-                <Anchor className={clsx('w-4 h-4', `text-${tone}`)} />
+                <Anchor className={clsx(
+                  'w-4 h-4',
+                  tone === 'bear' && 'text-bear',
+                  tone === 'neut' && 'text-neut',
+                  tone === 'bull' && 'text-bull',
+                  tone === 'muted' && 'text-text-tertiary',
+                )} />
                 <div className="flex-1 min-w-0">
-                  <div className="text-[11px] font-display font-semibold tracking-wider">{cp.name}</div>
-                  <div className="text-[9px] font-mono text-text-muted truncate">
-                    {top || cp.context}
-                  </div>
+                  {cp.marine_traffic_url ? (
+                    <a
+                      href={cp.marine_traffic_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[11px] font-display font-semibold tracking-wider hover:text-gold transition-colors"
+                    >
+                      {cp.name}
+                    </a>
+                  ) : (
+                    <span className="text-[11px] font-display font-semibold tracking-wider">{cp.name}</span>
+                  )}
+                  <div className="text-[9px] font-mono text-text-muted truncate">{sub}</div>
                 </div>
                 <div className="text-right">
                   <div className="text-lg font-mono font-bold tabular">{tankers}</div>
                   <div className="text-[9px] font-mono text-text-muted">
-                    tankers <span className="text-text-tertiary">· {vessels} ships</span>
+                    tankers{vessels ? <span className="text-text-tertiary"> · {vessels} ships</span> : null}
                   </div>
                 </div>
-                <Chip tone={tone as any}>{cp.risk_level?.toUpperCase() ?? 'CALM'}</Chip>
+                <Chip tone={tone as any}>{(cp.risk_level || '').toUpperCase() || 'CALM'}</Chip>
               </div>
             );
           })}
+          {tw.note && (
+            <div className="mt-2 text-[9px] font-mono text-text-muted leading-snug">{tw.note}</div>
+          )}
         </div>
       )}
     </Panel>
@@ -167,12 +191,32 @@ function VLCCPanel({ cracks }: { cracks: any }) {
 function OSPPanel({ cracks }: { cracks: any }) {
   const osp = cracks?.saudi_osp;
   if (!osp) return <Panel title="Saudi OSP"><SkeletonRows rows={5} /></Panel>;
-  const grades = osp.grades ?? osp.differentials ?? [];
+  const grades = osp.grades ?? osp.differentials ?? {};
   const list = Array.isArray(grades)
     ? grades
     : Object.entries(grades).map(([name, vals]: any) => ({ name, ...vals }));
+
+  /**
+   * Backend shape:  grades.Arab Light = { Asia: {vs_benchmark, benchmark}, NWE: {...}, USGC: {...} }
+   * Older shapes:   { asia: number, nwe: number, usgc: number }
+   * Read both: deep object → vs_benchmark; flat number → direct.
+   */
+  const valueFor = (row: any, ...keys: string[]): number | null => {
+    for (const k of keys) {
+      const v = row?.[k];
+      if (v === null || v === undefined) continue;
+      if (typeof v === 'number') return v;
+      if (typeof v === 'object' && typeof v.vs_benchmark === 'number') return v.vs_benchmark;
+    }
+    return null;
+  };
+
   return (
-    <Panel title="Saudi OSP · Aramco" subtitle={osp.month ?? osp.effective ?? '—'} right={<Chip tone="muted">HARDCODED</Chip>}>
+    <Panel
+      title="Saudi OSP · Aramco"
+      subtitle={osp.as_of ?? osp.month ?? osp.effective ?? '—'}
+      right={<Chip tone="muted">{osp.data_source ?? 'HARDCODED'}</Chip>}
+    >
       <table className="w-full text-[11px] font-mono tabular">
         <thead>
           <tr className="text-text-muted text-[9px] uppercase tracking-widest border-b border-border">
@@ -184,22 +228,25 @@ function OSPPanel({ cracks }: { cracks: any }) {
         </thead>
         <tbody>
           {list.slice(0, 6).map((g: any, i: number) => {
-            const cell = (v: any) => {
-              if (v === undefined || v === null) return <span className="text-text-muted">—</span>;
+            const cell = (v: number | null) => {
+              if (v === null) return <span className="text-text-muted">—</span>;
               const tone = v >= 0 ? 'text-bull' : 'text-bear';
-              return <span className={tone}>{v >= 0 ? '+' : ''}{Number(v).toFixed(2)}</span>;
+              return <span className={tone}>{v >= 0 ? '+' : ''}{v.toFixed(2)}</span>;
             };
             return (
               <tr key={i} className="border-b border-border/40">
                 <td className="py-1.5 text-text-secondary">{g.name}</td>
-                <td className="text-right">{cell(g.asia)}</td>
-                <td className="text-right">{cell(g.nwe ?? g.europe)}</td>
-                <td className="text-right">{cell(g.usgc ?? g.us)}</td>
+                <td className="text-right">{cell(valueFor(g, 'Asia', 'asia'))}</td>
+                <td className="text-right">{cell(valueFor(g, 'NWE', 'nwe', 'europe', 'Europe'))}</td>
+                <td className="text-right">{cell(valueFor(g, 'USGC', 'usgc', 'us', 'US'))}</td>
               </tr>
             );
           })}
         </tbody>
       </table>
+      {osp.note && (
+        <div className="mt-2 text-[9px] font-mono text-text-muted leading-snug">{osp.note}</div>
+      )}
     </Panel>
   );
 }

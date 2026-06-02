@@ -45,6 +45,16 @@ def _tokenize(text: str) -> list[str]:
     return [t for t in toks if t not in _STOP and len(t) > 1]
 
 
+# Characters used in the curriculum's ASCII box-drawing diagrams that look
+# garbled when quoted back in chat. Strip them at chunk-build time.
+_BOX_CHARS = "─━│┃┄┅┆┇┈┉┊┋┌┍┎┏┐┑┒┓└┕┖┗┘┙┚┛├┝┞┟┠┡┢┣┤┥┦┧┨┩┪┫┬┭┮┯┰┱┲┳┴┵┶┷┸┹┺┻┼┽┾┿╀╁╂╃╄╅╆╇╈╉╊╋╌╍╎╏═║╒╓╔╕╖╗╘╙╚╛╜╝╞╟╠╡╢╣╤╥╦╧╨╩╪╫╬█▀▁▂▃▄▅▆▇▉▊▋▌▍▎▏▐░▒▓▔▕▖▗▘▙▚▛▜▝▞▟◆◇◈◉◊○●◐◑◒◓◔◕◖◗◘◙◚◛◜◝◞◟◠◡◢◣◤◥◦◧◨◩◪◫◬◭◮◯→←↑↓↔↕▶◀▲▼"
+_BOX_RE = re.compile(f"[{re.escape(_BOX_CHARS)}]")
+
+def _clean(text: str) -> str:
+    """Strip ASCII box-drawing characters that look garbled when echoed back."""
+    return _BOX_RE.sub(" ", text)
+
+
 # ── Chunking ────────────────────────────────────────────────────────────────
 
 @dataclass
@@ -57,7 +67,15 @@ class Chunk:
     tokens: list[str]
 
 
-_CHAPTER_RE = re.compile(r"^\s*C\s*H\s*A\s*P\s*T\s*E\s*R\s+([A-Z]+)\s*$", re.IGNORECASE)
+# Chapter header in the source looks like "C H A P T E R   ONE" — each
+# letter separated by AT LEAST ONE whitespace. The trailing word is the
+# chapter number (ONE..TWELVE) optionally with extra spaces (E L E V E N)
+# and the source has occasional OCR junk like "FIVE78945612378954654123576179"
+# that we tolerate by accepting trailing garbage and re-parsing the head.
+_CHAPTER_RE = re.compile(
+    r"^\s*C\s+H\s+A\s+P\s+T\s+E\s+R\s+([A-Z][A-Z\s]*?)(?:[^A-Z\s]+)?\s*$",
+    re.IGNORECASE,
+)
 
 # Roman / word-number -> integer
 _WORD_TO_INT = {
@@ -68,8 +86,9 @@ _WORD_TO_INT = {
 
 
 def _parse_chapter_word(word: str) -> Optional[int]:
-    """Map 'ONE', 'TWO', etc. to integers. The curriculum doc uses words."""
-    return _WORD_TO_INT.get(word.lower().strip())
+    """Map 'ONE', 'TWO', 'E L E V E N' etc. to integers. Tolerant of spaces."""
+    cleaned = re.sub(r"\s+", "", word).lower().strip()
+    return _WORD_TO_INT.get(cleaned)
 
 
 def _load_chunks() -> list[Chunk]:
@@ -91,6 +110,7 @@ def _load_chunks() -> list[Chunk]:
     def _flush():
         nonlocal cid, cur_buf
         text = " ".join(s.strip() for s in cur_buf if s.strip())
+        text = _clean(text)                       # strip ASCII art
         text = re.sub(r"\s+", " ", text).strip()
         # Drop tiny noise chunks
         if len(text) < 200:

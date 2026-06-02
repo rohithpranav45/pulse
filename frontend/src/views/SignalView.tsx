@@ -241,25 +241,38 @@ function TradeIdeaCard({ idea }: { idea: any }) {
 
 function MacroPanel({ macro }: { macro: any }) {
   if (!macro) return <Panel title="Macro Signals"><SkeletonRows rows={5} /></Panel>;
+  // Backend serves FRED data with lowercase aliases. Support both for safety.
+  const get = (a: string, b: string) => macro[a] ?? macro[b];
   const items = [
-    { label: '10Y Yield',   val: macro.dgs10?.value,    unit: '%', trend: macro.dgs10?.change },
-    { label: 'CPI YoY',     val: macro.cpi?.yoy,        unit: '%' },
-    { label: 'EUR/USD',     val: macro.eurusd?.value },
-    { label: 'Fed Funds',   val: macro.fedfunds?.value, unit: '%' },
-    { label: 'INDPRO MoM',  val: macro.indpro?.mom,     unit: '%' },
-    { label: '30Y Mortgage',val: macro.mortgage?.value, unit: '%' },
+    { label: '10Y Yield',    series: get('dgs10', 'DGS10'),         field: 'value',  unit: '%' },
+    { label: 'CPI YoY',      series: get('cpi', 'CPIAUCSL'),        field: 'yoy',    unit: '%' },
+    { label: 'EUR/USD',      series: get('eurusd', 'DEXUSEU'),      field: 'value' },
+    { label: 'Fed Funds',    series: get('fedfunds', 'FEDFUNDS'),   field: 'value',  unit: '%' },
+    { label: 'INDPRO MoM',   series: get('indpro', 'INDPRO'),       field: 'mom',    unit: '%' },
+    { label: '30Y Mortgage', series: get('mortgage', 'MORTGAGE30US'), field: 'value', unit: '%' },
   ];
   return (
     <Panel title="Macro Signals" subtitle="FRED">
       <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-        {items.map((it, i) => (
-          <div key={i} className="flex items-baseline justify-between border-b border-border/40 pb-2">
-            <span className="text-[10px] font-mono text-text-tertiary uppercase tracking-widest">{it.label}</span>
-            <span className="text-[14px] font-mono font-semibold tabular text-text-primary">
-              {it.val !== null && it.val !== undefined ? `${it.val.toFixed(2)}${it.unit ?? ''}` : '—'}
-            </span>
-          </div>
-        ))}
+        {items.map((it, i) => {
+          const v = it.series?.[it.field];
+          const ch = it.series?.change;
+          return (
+            <div key={i} className="flex items-baseline justify-between border-b border-border/40 pb-2">
+              <span className="text-[10px] font-mono text-text-tertiary uppercase tracking-widest">{it.label}</span>
+              <div className="text-right">
+                <div className="text-[14px] font-mono font-semibold tabular text-text-primary">
+                  {typeof v === 'number' ? `${v.toFixed(2)}${it.unit ?? ''}` : '—'}
+                </div>
+                {typeof ch === 'number' && Math.abs(ch) > 0 && (
+                  <div className={clsx('text-[9px] font-mono tabular', ch >= 0 ? 'text-bull' : 'text-bear')}>
+                    {ch >= 0 ? '+' : ''}{ch.toFixed(2)}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </Panel>
   );
