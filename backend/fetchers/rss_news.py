@@ -33,7 +33,20 @@ _QUERIES = [
     "Iran Russia oil sanctions",
 ]
 
-_USER_AGENT = "Mozilla/5.0 (compatible; PulseEnergy/1.0; +https://pulse.local)"
+# Direct energy-industry RSS feeds — typically minutes-to-low-hours fresh.
+# These are the lowest-latency replacements for Financial Juice (which moved
+# behind authentication and dropped its public feed).
+_DIRECT_FEEDS = [
+    ("OilPrice.com",          "https://oilprice.com/rss/main"),
+    ("Rigzone",               "https://www.rigzone.com/news/rss/rigzone_latest.aspx"),
+    ("Hellenic Shipping News","https://www.hellenicshippingnews.com/category/oil-energy/feed/"),
+]
+
+# Real browser UA — needed for sites like OilPrice that refuse generic UAs.
+_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+)
 
 
 def _fetch_rss(url: str, timeout: int = 8) -> list[dict]:
@@ -120,6 +133,52 @@ def fetch_rss_news(max_articles: int = 20) -> list[dict]:
         return it.get("published") or ""
     all_items.sort(key=_sort_key, reverse=True)
 
+    return all_items[:max_articles]
+
+
+def fetch_direct_energy_rss(max_articles: int = 20) -> list[dict]:
+    """
+    Pull headlines directly from energy-industry-specific RSS feeds.
+    No keyword filter is applied — every item from these sources is already
+    energy-related by definition.
+
+    Currently aggregates OilPrice.com, Rigzone, and Hellenic Shipping News.
+    OilPrice headlines typically run minutes to single-hours old; the others
+    backfill geopolitical / shipping coverage.
+
+    Each item retains the original publication source name (not "Google News")
+    so the dashboard can attribute correctly.
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    seen_titles: set[str] = set()
+    all_items: list[dict] = []
+
+    def _pull(label: str, url: str):
+        items = _fetch_rss(url)
+        # Stamp each item with the source label so the dedupe layer keeps the
+        # OilPrice attribution rather than overwriting with whatever <source>
+        # tag the feed embeds.
+        for it in items:
+            it.setdefault("source", label)
+            if it["source"] in (None, "", "Google News"):
+                it["source"] = label
+        return items
+
+    with ThreadPoolExecutor(max_workers=len(_DIRECT_FEEDS)) as ex:
+        futures = [ex.submit(_pull, lbl, url) for lbl, url in _DIRECT_FEEDS]
+        for fut in as_completed(futures, timeout=12):
+            try:
+                for it in fut.result():
+                    key = it["title"].lower()[:120]
+                    if key in seen_titles:
+                        continue
+                    seen_titles.add(key)
+                    all_items.append(it)
+            except Exception as exc:
+                log.debug("direct rss feed failed: %s", exc)
+
+    all_items.sort(key=lambda it: it.get("published") or "", reverse=True)
     return all_items[:max_articles]
 
 

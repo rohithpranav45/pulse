@@ -80,11 +80,17 @@ except Exception:
 AISSTREAM_KEY = os.getenv("AISSTREAM_API_KEY", "")
 
 # ── Configuration ─────────────────────────────────────────────────────────────
-COLLECT_SECS  = 12    # seconds to collect AIS messages per fetch
+COLLECT_SECS  = 30    # seconds to collect AIS messages per fetch
 MAX_TANKERS   = 5     # max tankers to include in tanker_list per chokepoint
 
 # AIS ship type codes for tankers: 80-89
 _TANKER_TYPES = set(range(80, 90))
+
+# Cross-call MMSI→ShipType cache. AIS PositionReport messages do not carry
+# ShipType; only ShipStaticData does, and static data only broadcasts every
+# 6 minutes. We persist the mapping in-process so successive 30-second fetches
+# accumulate ship-type knowledge over time.
+_MMSI_TYPE_CACHE: dict[str, int] = {}
 
 # ── Chokepoint definitions ────────────────────────────────────────────────────
 # Bounding boxes: [min_lat, min_lon, max_lat, max_lon]
@@ -179,14 +185,23 @@ def _fetch_via_websocket() -> dict:
     except ImportError:
         return _fallback_data("websocket-client package not installed (pip install websocket-client)")
 
-    # Build subscription message
-    bboxes = [[cp["bbox"][1], cp["bbox"][0], cp["bbox"][3], cp["bbox"][2]]
-              for cp in _CHOKEPOINTS]  # aisstream wants [min_lat,min_lon,max_lat,max_lon]
+    # Build subscription message.
+    # aisstream.io expects each bbox as a pair of [lat, lon] corner points:
+    #   [[minLat, minLon], [maxLat, maxLon]]
+    # Sending a flat [minLat, minLon, maxLat, maxLon] causes the server to
+    # close the connection silently.
+    bboxes = [
+        [[cp["bbox"][1], cp["bbox"][0]], [cp["bbox"][3], cp["bbox"][2]]]
+        for cp in _CHOKEPOINTS
+    ]
 
+    # Subscribe to both PositionReport and ShipStaticData.
+    # Position has lat/lon but no ship type; ShipStaticData has type but no
+    # current position. We merge them via the MMSI cache.
     sub_msg = json.dumps({
         "APIKey":        AISSTREAM_KEY,
         "BoundingBoxes": bboxes,
-        "FilterMessageTypes": ["PositionReport"],
+        "FilterMessageTypes": ["PositionReport", "ShipStaticData"],
     })
 
     # Accumulate positions per chokepoint bbox
@@ -214,13 +229,24 @@ def _fetch_via_websocket() -> dict:
                     break
 
                 meta     = msg.get("MetaData", {})
+                mtype    = msg.get("MessageType", "")
+                mmsi     = str(meta.get("MMSI", ""))
+
+                # ShipStaticData → update MMSI→type cache, no position data
+                if mtype == "ShipStaticData":
+                    ssd = msg.get("Message", {}).get("ShipStaticData", {})
+                    stype = ssd.get("Type")
+                    if mmsi and isinstance(stype, int):
+                        _MMSI_TYPE_CACHE[mmsi] = stype
+                    continue
+
                 position = msg.get("Message", {}).get("PositionReport", {})
                 if not position:
                     continue
 
-                mmsi     = str(meta.get("MMSI", ""))
-                ship_name= meta.get("ShipName", "UNKNOWN").strip()
-                ship_type= int(meta.get("ShipType", 0) or 0)
+                ship_name= (meta.get("ShipName") or "UNKNOWN").strip()
+                # ShipType is not in PositionReport — look up in cross-call cache
+                ship_type= _MMSI_TYPE_CACHE.get(mmsi, 0)
                 lat      = float(position.get("Latitude",  0))
                 lon      = float(position.get("Longitude", 0))
                 speed    = float(position.get("Sog",       0))
@@ -228,14 +254,15 @@ def _fetch_via_websocket() -> dict:
                 ts       = time.time()
 
                 vessel = {
-                    "mmsi":    mmsi,
-                    "name":    ship_name or mmsi,
-                    "lat":     round(lat, 4),
-                    "lon":     round(lon, 4),
-                    "speed":   round(speed, 1),
-                    "heading": heading if heading != 511 else None,
+                    "mmsi":      mmsi,
+                    "name":      ship_name or mmsi,
+                    "lat":       round(lat, 4),
+                    "lon":       round(lon, 4),
+                    "speed":     round(speed, 1),
+                    "heading":   heading if heading != 511 else None,
+                    "ship_type": ship_type,
                     "is_tanker": ship_type in _TANKER_TYPES,
-                    "ts":      ts,
+                    "ts":        ts,
                 }
 
                 # Assign to chokepoint by bbox containment
@@ -247,6 +274,9 @@ def _fetch_via_websocket() -> dict:
 
             except websocket.WebSocketTimeoutException:
                 continue   # keep looping until deadline
+            except websocket.WebSocketConnectionClosedException as exc:
+                error_msg = f"connection closed (likely malformed subscription): {exc}"
+                break
             except Exception as exc:
                 log.debug("AIS message error: %s", exc)
                 continue

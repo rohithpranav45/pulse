@@ -25,7 +25,8 @@ from typing import Optional
 log = logging.getLogger("pulse.rag.retrieval")
 
 _BACKEND = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
-_BOOK_PATH = os.path.join(_BACKEND, "data", "curriculum.txt")
+_BOOK_PATH   = os.path.join(_BACKEND, "data", "curriculum.txt")
+_EXPERT_PATH = os.path.join(_BACKEND, "data", "expert_knowledge.md")
 
 # ── BM25 parameters (Okapi defaults) ────────────────────────────────────────
 _K1 = 1.5
@@ -155,6 +156,89 @@ def _load_chunks() -> list[Chunk]:
     return chunks
 
 
+def _load_markdown_chunks(path: str, source_label: str, start_id: int) -> list[Chunk]:
+    """
+    Parse a markdown file into Chunks using H1/H2/H3 headings as section breaks.
+
+    Sections are tagged with chapter_num=None (the expert knowledge file isn't
+    chapter-numbered like the curriculum) and `chapter_title` carries the H1
+    heading so the chat citation reads e.g. "Expert · OPEC+ Deep Mechanics /
+    Compliance theory".
+    """
+    if not os.path.exists(path):
+        log.warning("Markdown source not found at %s", path)
+        return []
+
+    with open(path, "r", encoding="utf-8", errors="replace") as f:
+        lines = f.readlines()
+
+    chunks: list[Chunk] = []
+    cur_h1 = source_label
+    cur_h2 = "Intro"
+    cur_buf: list[str] = []
+    cid = start_id
+
+    def _flush_md():
+        nonlocal cid, cur_buf
+        text = " ".join(s.strip() for s in cur_buf if s.strip())
+        # Strip markdown table pipes, bullet markers, hash signs so BM25 hits
+        # are about content, not formatting.
+        text = re.sub(r"^[#>|*\-+\s]+", " ", text)
+        text = re.sub(r"[`*_]+", " ", text)
+        text = re.sub(r"\s+", " ", text).strip()
+        if len(text) < 200:
+            cur_buf = []
+            return
+        chunks.append(Chunk(
+            id=cid,
+            chapter_num=None,
+            chapter_title=f"{source_label} · {cur_h1}",
+            section=cur_h2,
+            text=text,
+            tokens=_tokenize(text),
+        ))
+        cid += 1
+        cur_buf = []
+
+    for raw in lines:
+        line = raw.rstrip()
+        # H1
+        m = re.match(r"^#\s+(.+)$", line)
+        if m:
+            _flush_md()
+            cur_h1 = m.group(1).strip()
+            cur_h2 = "Intro"
+            continue
+        # H2
+        m = re.match(r"^##\s+(.+)$", line)
+        if m:
+            _flush_md()
+            cur_h2 = m.group(1).strip()
+            continue
+        # H3 — treat as sub-section break so deep topics don't get merged.
+        m = re.match(r"^###\s+(.+)$", line)
+        if m:
+            _flush_md()
+            cur_h2 = m.group(1).strip()
+            continue
+
+        cur_buf.append(line)
+        # Cap buffer size for retrieval quality.
+        if sum(len(s) for s in cur_buf) > 1500:
+            _flush_md()
+
+    _flush_md()
+    log.info("Loaded %d expert knowledge chunks from %s", len(chunks), path)
+    return chunks
+
+
+def _load_all_chunks() -> list[Chunk]:
+    """Combine curriculum (legacy text format) + expert knowledge (markdown)."""
+    base = _load_chunks()
+    expert = _load_markdown_chunks(_EXPERT_PATH, "Expert Knowledge", start_id=len(base))
+    return base + expert
+
+
 # ── BM25 index ──────────────────────────────────────────────────────────────
 
 @dataclass
@@ -197,7 +281,7 @@ def _bm25_score(query_tokens: list[str], chunk: Chunk, idx: _Index) -> float:
 
 # ── Module-load: build the index once ───────────────────────────────────────
 
-_CHUNKS = _load_chunks()
+_CHUNKS = _load_all_chunks()
 _INDEX = _build_index(_CHUNKS)
 
 

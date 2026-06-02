@@ -54,8 +54,9 @@ function CalendarSpreadMatrix({ curve }: { curve: any }) {
 }
 
 function STEOPanel({ steo }: { steo: any }) {
-  if (!steo?.data) return <Panel title="EIA · STEO"><SkeletonRows rows={6} /></Panel>;
-  const rows = (steo.data ?? []).slice(-12);
+  const months = steo?.months;
+  if (!months || months.length === 0) return <Panel title="EIA · STEO"><SkeletonRows rows={6} /></Panel>;
+  const rows = months.slice(-12);
   return (
     <Panel title="Global Oil Balance · EIA STEO" subtitle="12-month outlook · Mb/d">
       <table className="w-full text-[10.5px] font-mono tabular">
@@ -69,10 +70,12 @@ function STEOPanel({ steo }: { steo: any }) {
         </thead>
         <tbody>
           {rows.map((r: any, i: number) => {
-            const bal = (r.supply ?? 0) - (r.demand ?? 0);
+            const bal = r.balance ?? ((r.supply ?? 0) - (r.demand ?? 0));
             return (
               <tr key={i} className="border-b border-border/40">
-                <td className="py-1 text-text-secondary">{r.month}</td>
+                <td className="py-1 text-text-secondary">
+                  {r.period}{r.is_forecast && <span className="ml-1 text-[8px] text-gold/70">F</span>}
+                </td>
                 <td className="text-right text-bull">{r.supply?.toFixed(2) ?? '—'}</td>
                 <td className="text-right text-accent-blue">{r.demand?.toFixed(2) ?? '—'}</td>
                 <td className={clsx('text-right font-semibold', bal > 0 ? 'text-bear' : 'text-bull')}>
@@ -90,11 +93,20 @@ function STEOPanel({ steo }: { steo: any }) {
 function TankerWatchPanel({ tw }: { tw: any }) {
   if (!tw) return <Panel title="Tanker Watch"><SkeletonRows rows={4} /></Panel>;
   const chokepoints = tw.chokepoints ?? [];
-  const setup = tw.setup_required;
+  const setup = tw.available === false;
+  const riskTone = (level: string): 'bull' | 'neut' | 'bear' | 'muted' => {
+    switch ((level ?? '').toUpperCase()) {
+      case 'CRITICAL':
+      case 'HIGH':       return 'bear';
+      case 'MODERATE':   return 'neut';
+      case 'LOW':        return 'bull';
+      default:           return 'muted'; // MONITORING / unknown
+    }
+  };
   return (
     <Panel
       title="Tanker Watch · AIS"
-      subtitle={tw.source ?? 'aisstream.io'}
+      subtitle={tw.note ?? 'aisstream.io'}
       accent="blue"
       right={<Ship className="w-4 h-4 text-text-tertiary" />}
     >
@@ -107,19 +119,26 @@ function TankerWatchPanel({ tw }: { tw: any }) {
       ) : (
         <div className="space-y-3">
           {chokepoints.map((cp: any, i: number) => {
-            const risk = cp.risk_level === 'critical' ? 'bear' : cp.risk_level === 'elevated' ? 'neut' : 'bull';
+            const tone = riskTone(cp.risk_level);
+            const tankers = cp.tankers ?? 0;
+            const vessels = cp.vessels ?? 0;
+            const top = (cp.tanker_list ?? []).slice(0, 2).map((t: any) => t.name).join(' · ');
             return (
               <div key={i} className="flex items-center gap-3 p-2 bg-bg-card/40 rounded">
-                <Anchor className={clsx('w-4 h-4', `text-${risk}`)} />
-                <div className="flex-1">
+                <Anchor className={clsx('w-4 h-4', `text-${tone}`)} />
+                <div className="flex-1 min-w-0">
                   <div className="text-[11px] font-display font-semibold tracking-wider">{cp.name}</div>
-                  <div className="text-[9px] font-mono text-text-muted">{cp.flow}</div>
+                  <div className="text-[9px] font-mono text-text-muted truncate">
+                    {top || cp.context}
+                  </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-lg font-mono font-bold tabular">{cp.tanker_count ?? 0}</div>
-                  <div className="text-[9px] font-mono text-text-muted">tankers</div>
+                  <div className="text-lg font-mono font-bold tabular">{tankers}</div>
+                  <div className="text-[9px] font-mono text-text-muted">
+                    tankers <span className="text-text-tertiary">· {vessels} ships</span>
+                  </div>
                 </div>
-                <Chip tone={risk as any}>{cp.risk_level?.toUpperCase() ?? 'CALM'}</Chip>
+                <Chip tone={tone as any}>{cp.risk_level?.toUpperCase() ?? 'CALM'}</Chip>
               </div>
             );
           })}
