@@ -4,7 +4,7 @@ import { Stat } from '@/components/ui/Stat';
 import { SkeletonRows, Skeleton } from '@/components/ui/Skeleton';
 import { fmt } from '@/lib/fmt';
 import clsx from 'clsx';
-import { Droplets, Wind, Activity, Anchor, AlertOctagon, BarChart3, Cloud } from 'lucide-react';
+import { Droplets, Activity, Anchor, AlertOctagon, BarChart3, Cloud } from 'lucide-react';
 import { EIASurprisePanel } from '@/components/panels/EIASurprisePanel';
 import { ForwardCoverChart } from '@/components/panels/ForwardCoverChart';
 
