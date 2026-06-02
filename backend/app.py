@@ -62,7 +62,7 @@ logging.basicConfig(
 log = logging.getLogger("pulse.api")
 
 _STATIC_DIR = os.path.join(_BACKEND, "static")
-app = Flask(__name__, static_folder=_STATIC_DIR, static_url_path="/assets")
+app = Flask(__name__, static_folder=None)
 CORS(app)   # allow all origins — dashboard may be served from a different port
 
 
@@ -270,6 +270,7 @@ def _alerts():
         fund,
         fund.get("cot", {}) if isinstance(fund, dict) else {},
         iv=_fetch_iv(),
+        news=_fetch_news(),     # squawk geopolitical / supply-shock headlines
     )
 
 def _cracks():
@@ -1174,5 +1175,10 @@ if __name__ == "__main__":
     _scheduler.start()
     log.info("APScheduler started — background refresh active")
 
-    log.info("PULSE API starting on http://127.0.0.1:5000  (warm-up ~60s)")
-    app.run(host="127.0.0.1", port=5000, debug=False, use_reloader=False)
+    # Bind host/port from env so we can run locally (127.0.0.1:5000) or
+    # inside a container (0.0.0.0:$PORT — Hugging Face / Render / Fly all
+    # inject $PORT at runtime, HF Spaces specifically expects 7860).
+    _host = os.environ.get("HOST", "127.0.0.1")
+    _port = int(os.environ.get("PORT", "5000"))
+    log.info(f"PULSE API starting on http://{_host}:{_port}  (warm-up ~60s)")
+    app.run(host=_host, port=_port, debug=False, use_reloader=False)

@@ -10,6 +10,7 @@ Public API:
 """
 
 import os
+import time
 from datetime import datetime, timezone, timedelta
 
 import requests
@@ -35,10 +36,24 @@ def _aggregate(articles: list) -> dict:
         return {"composite": 0.0, "count": 0,
                 "bullish": 0, "bearish": 0, "neutral": 0, "label": "NEUTRAL"}
 
-# ── Module-level cache (10 minutes) ──────────────────────────────────────────
+# ── Module-level cache ──────────────────────────────────────────────────────
+# Short TTL: we serve from cache to avoid hammering RSS endpoints / Apify,
+# but keep the window tight enough that "latest news" actually means latest.
 _news_cache      = None
 _news_cache_time = None
-_NEWS_CACHE_TTL  = 600  # 10 minutes
+_NEWS_CACHE_TTL  = 180  # 3 minutes
+
+# Per-source timeouts (seconds). Fail-fast so a slow source can't block the
+# whole news endpoint — the others fill in.
+# Apify FJ is intentionally tight (10s): Financial Juice moved their squawk
+# behind authentication so the scrape now returns zero, but we keep the slot
+# in case they restore the public feed. Real freshness comes from the direct
+# energy RSS sources (OilPrice / Rigzone / Hellenic), which return minutes-old
+# headlines and complete in ~2 s.
+_TIMEOUT_FJ      = 8
+_TIMEOUT_NEWSAPI = 8
+_TIMEOUT_RSS     = 10
+_TIMEOUT_DIRECT  = 12   # OilPrice + Rigzone + Hellenic, fetched in parallel
 
 NEWS_KEY  = os.getenv("NEWSAPI_KEY")
 BASE_URL  = "https://newsapi.org/v2/everything"
@@ -426,20 +441,138 @@ def _cluster_articles(articles: list[dict]) -> dict[str, list[dict]]:
     return buckets
 
 
+def _relative_time(iso_ts: str) -> str:
+    """Convert an ISO-8601 timestamp into a short relative label (e.g. '12m')."""
+    if not iso_ts:
+        return "now"
+    try:
+        dt = datetime.fromisoformat(iso_ts.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        age_s = max(0, (datetime.now(timezone.utc) - dt).total_seconds())
+    except Exception:
+        return "now"
+    if age_s < 60:    return "now"
+    if age_s < 3600:  return f"{int(age_s/60)}m"
+    if age_s < 86400: return f"{int(age_s/3600)}h"
+    return f"{int(age_s/86400)}d"
+
+
+def _norm_fj(arts: list[dict]) -> list[dict]:
+    """Normalize Financial Juice / Apify articles to the unified shape."""
+    out = []
+    now_iso = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    for a in arts or []:
+        headline = (a.get("headline") or "").strip()
+        if not headline:
+            continue
+        out.append({
+            "headline":    headline,
+            "title":       headline,
+            "url":         a.get("url", ""),
+            "source":      a.get("source", "Financial Juice"),
+            "published":   a.get("timestamp", now_iso),
+            "published_at":a.get("timestamp", now_iso),
+            "time":        a.get("time") or _relative_time(a.get("timestamp", now_iso)),
+            "category":    a.get("category") or _tag(headline, ""),
+            "feed":        "financialjuice",
+            "is_negative": is_negative(headline),
+        })
+    return out
+
+
+def _norm_newsapi(arts: list[dict]) -> list[dict]:
+    """Normalize NewsAPI articles to the unified shape."""
+    out = []
+    for a in arts or []:
+        title = (a.get("title") or "").strip()
+        if not title:
+            continue
+        pub = a.get("published") or ""
+        out.append({
+            "headline":    title,
+            "title":       title,
+            "url":         a.get("url", ""),
+            "source":      a.get("source", "NewsAPI"),
+            "published":   pub,
+            "published_at":pub,
+            "time":        a.get("published_ago") or _relative_time(pub),
+            "category":    a.get("category") or _tag(title, ""),
+            "feed":        "newsapi",
+            "is_negative": is_negative(title),
+        })
+    return out
+
+
+def _norm_rss(arts: list[dict]) -> list[dict]:
+    """Normalize Google News RSS articles to the unified shape."""
+    out = []
+    for a in arts or []:
+        title = (a.get("title") or "").strip()
+        if not title:
+            continue
+        pub = a.get("published") or a.get("published_at") or ""
+        out.append({
+            "headline":    title,
+            "title":       title,
+            "url":         a.get("url", ""),
+            "source":      a.get("source", "Google News"),
+            "published":   pub,
+            "published_at":pub,
+            "time":        a.get("time") or _relative_time(pub),
+            "category":    _tag(title, a.get("description", "")),
+            "feed":        "rss",
+            "is_negative": is_negative(title),
+        })
+    return out
+
+
+def _norm_direct(arts: list[dict]) -> list[dict]:
+    """Normalize direct energy RSS feed articles to the unified shape.
+
+    Same shape as RSS but tagged feed='direct' so attribution in the response
+    correctly reflects that these come from energy-industry primary sources.
+    """
+    out = []
+    for a in arts or []:
+        title = (a.get("title") or "").strip()
+        if not title:
+            continue
+        pub = a.get("published") or a.get("published_at") or ""
+        out.append({
+            "headline":    title,
+            "title":       title,
+            "url":         a.get("url", ""),
+            "source":      a.get("source", "Energy RSS"),
+            "published":   pub,
+            "published_at":pub,
+            "time":        a.get("time") or _relative_time(pub),
+            "category":    _tag(title, a.get("description", "")),
+            "feed":        "direct",
+            "is_negative": is_negative(title),
+        })
+    return out
+
+
+def _dedupe_key(article: dict) -> str:
+    """Stable dedupe key: lowercased first 120 chars of the title."""
+    return (article.get("title") or article.get("headline") or "").lower().strip()[:120]
+
+
 def get_energy_news(max_articles: int = 15) -> dict:
     """
-    Fetch energy news with automatic source fallback.
+    Fetch energy news from every available source concurrently, merge,
+    dedupe by title, and return the freshest articles first.
 
-    Primary source:  Financial Juice via Apify.
-    Fallback source: NewsAPI (fetch_news).
+    Sources (all run in parallel; whichever returns within its timeout wins):
+      - Google News RSS      (no auth, ~7 s, headlines are minutes-to-hours old)
+      - NewsAPI              (free tier — 24h lag, but rich coverage)
+      - Financial Juice      (Apify scrape, 25s timeout — included whenever it
+                              returns anything, even a single article)
 
-    Falls back to NewsAPI when Financial Juice returns fewer than 3 articles.
-
-    For each article, is_negative() is evaluated on the headline/title and
-    the result is stored under the "is_negative" key.
-
-    Result is cached in memory for _NEWS_CACHE_TTL seconds (10 min) so
-    repeated calls within a cycle never trigger a second Apify run.
+    Each source's output is normalised to a common shape with `published_at`
+    in ISO-8601 UTC. Articles are deduplicated by lowercased title, sorted by
+    publication time descending, and truncated to `max_articles`.
 
     Parameters
     ----------
@@ -448,21 +581,18 @@ def get_energy_news(max_articles: int = 15) -> dict:
     Returns
     -------
     {
-      "articles": [
-        {
-          "headline":    str,   # or "title" when sourced from NewsAPI
-          "source":      str,
-          "time":        str,   # or "published_ago" from NewsAPI
-          "category":    str,
-          "is_negative": bool,
-        },
-        ...
-      ],
-      "negative_count": int,
-      "source_used":    str,   # "financialjuice" or "newsapi"
-      "timestamp":      str,   # ISO-8601 UTC
+      "articles":            [{...}],   # normalised, freshest first
+      "clusters":            {...},     # by Phase-4 themes
+      "negative_count":      int,
+      "composite_sentiment": {...},
+      "source_used":         str,       # legacy: feed of the freshest article
+      "sources_used":        {feed: count, ...},
+      "latency_seconds":     int|None,  # age of the freshest article in seconds
+      "timestamp":           str,       # ISO-8601 UTC of this fetch
     }
     """
+    from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
+
     global _news_cache, _news_cache_time
 
     # Honor ?nocache=1 from the Flask request context (debug bypass).
@@ -481,89 +611,154 @@ def get_energy_news(max_articles: int = 15) -> dict:
 
     timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
-    # ── Primary: Financial Juice ──────────────────────────────────────────────
-    raw_articles = fetch_from_financialjuice()
+    # ── Run every available source concurrently ───────────────────────────────
+    # Each task isolates failures: if one times out, the others still land.
+    try:
+        from fetchers.rss_news import fetch_rss_news, fetch_direct_energy_rss
+    except Exception:
+        fetch_rss_news = None             # type: ignore
+        fetch_direct_energy_rss = None    # type: ignore
 
-    if len(raw_articles) >= 3:
-        source_used = "financialjuice"
-        articles = [
-            {
-                "headline":    a["headline"],
-                "source":      a["source"],
-                "time":        a["time"],
-                "category":    a["category"],
-                "is_negative": is_negative(a["headline"]),
-            }
-            for a in raw_articles[:max_articles]
-        ]
-        # Batch-score all headlines in one FinBERT round-trip
-        _scores = _batch_score([a["headline"] for a in articles])
-        for _art, _sc in zip(articles, _scores):
-            _art["sentiment"] = _sc
-
-    # ── Fallback: NewsAPI ─────────────────────────────────────────────────────
-    else:
-        source_used  = "newsapi"
+    def _safe_fj() -> list[dict]:
         try:
-            newsapi_arts = fetch_news(top_n=max_articles)
+            return fetch_from_financialjuice()
         except Exception as exc:
-            print(f"  [warn] newsapi failed ({type(exc).__name__}); falling back to RSS")
-            newsapi_arts = []
-        articles = [
-            {
-                "headline":    a.get("title", ""),
-                "title":       a.get("title", ""),
-                "url":         a.get("url", ""),
-                "source":      a.get("source", "Unknown"),
-                "time":        a.get("published_ago", "N/A"),
-                "published":   a.get("published", ""),
-                "published_at":a.get("published", ""),
-                "category":    a.get("category", "ENERGY"),
-                "is_negative": is_negative(a.get("title", "")),
-            }
-            for a in newsapi_arts
-        ]
+            print(f"  [warn] financialjuice fetch failed: {exc}")
+            return []
 
-        # ── Tertiary: RSS (no-auth, always reachable) ─────────────────────────
-        if len(articles) < 3:
-            print(f"  [info] newsapi returned {len(articles)} articles; falling back to Google News RSS")
+    def _safe_newsapi() -> list[dict]:
+        try:
+            return fetch_news(top_n=max_articles * 2)
+        except Exception as exc:
+            print(f"  [warn] newsapi fetch failed: {exc}")
+            return []
+
+    def _safe_rss() -> list[dict]:
+        if fetch_rss_news is None:
+            return []
+        try:
+            return fetch_rss_news(max_articles * 2)
+        except Exception as exc:
+            print(f"  [warn] rss fetch failed: {exc}")
+            return []
+
+    def _safe_direct() -> list[dict]:
+        if fetch_direct_energy_rss is None:
+            return []
+        try:
+            return fetch_direct_energy_rss(max_articles * 2)
+        except Exception as exc:
+            print(f"  [warn] direct rss fetch failed: {exc}")
+            return []
+
+    fj_raw:     list[dict] = []
+    na_raw:     list[dict] = []
+    rss_raw:    list[dict] = []
+    direct_raw: list[dict] = []
+
+    # Shared time budget. Direct + Google RSS finish in ~2-7s; NewsAPI in ~3s;
+    # Apify is unlikely to land before its 8s budget given the FJ site went
+    # behind auth. Total wall time is bounded by max(timeouts).
+    t_start = time.time()
+
+    with ThreadPoolExecutor(max_workers=4) as ex:
+        f_direct = ex.submit(_safe_direct)
+        f_rss    = ex.submit(_safe_rss)
+        f_na     = ex.submit(_safe_newsapi)
+        f_fj     = ex.submit(_safe_fj)
+        # Order matters for dedup priority later (we drain in this order):
+        # direct (fastest+freshest) → rss → newsapi → fj.
+        futures = {f_direct: ("direct",         _TIMEOUT_DIRECT),
+                   f_rss:    ("rss",            _TIMEOUT_RSS),
+                   f_na:     ("newsapi",        _TIMEOUT_NEWSAPI),
+                   f_fj:     ("financialjuice", _TIMEOUT_FJ)}
+
+        for fut, (label, budget) in futures.items():
+            remaining = max(0.0, budget - (time.time() - t_start))
             try:
-                from fetchers.rss_news import fetch_rss_news
-                rss_arts = fetch_rss_news(max_articles)
-                source_used = "rss"
-                articles = [
-                    {
-                        "headline":    a["title"],
-                        "title":       a["title"],
-                        "url":         a.get("url", ""),
-                        "source":      a.get("source", "RSS"),
-                        "time":        a.get("time", "now"),
-                        "published":   a.get("published", ""),
-                        "published_at":a.get("published_at", ""),
-                        "category":    _tag(a["title"], a.get("description", "")),
-                        "is_negative": is_negative(a["title"]),
-                    }
-                    for a in rss_arts
-                ]
+                data = fut.result(timeout=remaining)
+                if   label == "direct":  direct_raw = data
+                elif label == "rss":     rss_raw    = data
+                elif label == "newsapi": na_raw     = data
+                else:                    fj_raw     = data
+            except FuturesTimeout:
+                print(f"  [info] {label} exceeded its budget ({budget}s) — skipping")
+                fut.cancel()
             except Exception as exc:
-                print(f"  [warn] rss fallback failed: {exc}")
+                print(f"  [warn] {label} fetch error: {exc}")
 
-        # Batch-score all headlines in one FinBERT round-trip
-        _scores = _batch_score([a["headline"] for a in articles])
-        for _art, _sc in zip(articles, _scores):
-            _art["sentiment"] = _sc
+    # ── Normalise + apply relevance gate to RSS / NewsAPI ─────────────────────
+    fj_arts     = _norm_fj(fj_raw)
+    na_arts     = _norm_newsapi(na_raw)
+    rss_arts    = _norm_rss(rss_raw)
+    direct_arts = _norm_direct(direct_raw)
+
+    # RSS / NewsAPI come from broad searches — filter for energy relevance the
+    # same way fetch_from_financialjuice already does internally. Direct feeds
+    # (OilPrice / Rigzone / Hellenic) are already energy-only by source so we
+    # skip the keyword gate to avoid culling shipping or LNG headlines that
+    # don't trip the narrow RELEVANCE_TERMS list.
+    def _is_energy_relevant(art: dict) -> bool:
+        blob = (art.get("title", "") + " " + art.get("source", "")).lower()
+        return any(term in blob for term in RELEVANCE_TERMS)
+
+    na_arts  = [a for a in na_arts  if _is_energy_relevant(a)]
+    rss_arts = [a for a in rss_arts if _is_energy_relevant(a)]
+
+    # ── Merge + dedupe ────────────────────────────────────────────────────────
+    # Priority: direct energy feeds (freshest + curated) > Google News RSS >
+    # Apify FJ > NewsAPI (24h-delayed). Dict insertion order is preserved so
+    # earlier writes (higher priority) keep their attribution and timestamp.
+    merged: dict[str, dict] = {}
+    for art in direct_arts + rss_arts + fj_arts + na_arts:
+        k = _dedupe_key(art)
+        if k and k not in merged:
+            merged[k] = art
+
+    # Sort by publication time descending — newest first.
+    all_articles = sorted(
+        merged.values(),
+        key=lambda a: a.get("published_at") or "",
+        reverse=True,
+    )
+
+    articles = all_articles[:max_articles]
+
+    # ── Per-source counts (over what we actually return) ──────────────────────
+    sources_used: dict[str, int] = {}
+    for a in articles:
+        sources_used[a.get("feed", "unknown")] = sources_used.get(a.get("feed", "unknown"), 0) + 1
+
+    # ── FinBERT sentiment (one batched round-trip) ────────────────────────────
+    _scores = _batch_score([a["headline"] for a in articles])
+    for _art, _sc in zip(articles, _scores):
+        _art["sentiment"] = _sc
+
+    # ── Freshness metric: age of the freshest returned article ────────────────
+    latency_seconds: int | None = None
+    if articles:
+        try:
+            top = articles[0].get("published_at") or ""
+            if top:
+                dt = datetime.fromisoformat(top.replace("Z", "+00:00"))
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                latency_seconds = int(max(0, (datetime.now(timezone.utc) - dt).total_seconds()))
+        except Exception:
+            pass
 
     negative_count = sum(1 for a in articles if a["is_negative"])
-
-    # ── Aggregate sentiment ───────────────────────────────────────────────────
     composite_sentiment = _aggregate(articles)
+    legacy_source_used = articles[0].get("feed") if articles else "none"
 
     result = {
         "articles":            articles,
         "clusters":            _cluster_articles(articles),
         "negative_count":      negative_count,
         "composite_sentiment": composite_sentiment,
-        "source_used":         source_used,
+        "source_used":         legacy_source_used,
+        "sources_used":        sources_used,
+        "latency_seconds":     latency_seconds,
         "timestamp":           timestamp,
     }
     _news_cache      = result
