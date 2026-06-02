@@ -90,11 +90,12 @@ function STEOPanel({ steo }: { steo: any }) {
 function TankerWatchPanel({ tw }: { tw: any }) {
   if (!tw) return <Panel title="Tanker Watch"><SkeletonRows rows={4} /></Panel>;
   const chokepoints = tw.chokepoints ?? [];
-  const setup = tw.setup_required;
+  // Tanker setup required when neither `available` is true nor any chokepoints
+  const setup = tw.setup_required || tw.available === false;
   return (
     <Panel
       title="Tanker Watch · AIS"
-      subtitle={tw.source ?? 'aisstream.io'}
+      subtitle={tw.source ?? 'aisstream.io / marinetraffic'}
       accent="blue"
       right={<Ship className="w-4 h-4 text-text-tertiary" />}
     >
@@ -107,22 +108,45 @@ function TankerWatchPanel({ tw }: { tw: any }) {
       ) : (
         <div className="space-y-3">
           {chokepoints.map((cp: any, i: number) => {
-            const risk = cp.risk_level === 'critical' ? 'bear' : cp.risk_level === 'elevated' ? 'neut' : 'bull';
+            // Backend ships risk_level as MONITORING / ELEVATED / CRITICAL / CALM (uppercase strings).
+            const rl = (cp.risk_level || '').toUpperCase();
+            const risk: 'bull' | 'bear' | 'neut' =
+              rl === 'CRITICAL' ? 'bear' :
+              rl === 'ELEVATED' ? 'neut' :
+              'bull';
+            const count = cp.tankers ?? cp.vessels ?? cp.tanker_count ?? 0;
             return (
               <div key={i} className="flex items-center gap-3 p-2 bg-bg-card/40 rounded">
-                <Anchor className={clsx('w-4 h-4', `text-${risk}`)} />
-                <div className="flex-1">
-                  <div className="text-[11px] font-display font-semibold tracking-wider">{cp.name}</div>
-                  <div className="text-[9px] font-mono text-text-muted">{cp.flow}</div>
+                <Anchor className={clsx(
+                  'w-4 h-4',
+                  risk === 'bear' && 'text-bear',
+                  risk === 'neut' && 'text-neut',
+                  risk === 'bull' && 'text-bull',
+                )} />
+                <div className="flex-1 min-w-0">
+                  <a
+                    href={cp.marine_traffic_url ?? '#'}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] font-display font-semibold tracking-wider hover:text-gold transition-colors"
+                  >
+                    {cp.name}
+                  </a>
+                  <div className="text-[9px] font-mono text-text-muted truncate">
+                    {cp.context ?? cp.flow ?? ''}
+                  </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-lg font-mono font-bold tabular">{cp.tanker_count ?? 0}</div>
+                  <div className="text-lg font-mono font-bold tabular">{count}</div>
                   <div className="text-[9px] font-mono text-text-muted">tankers</div>
                 </div>
-                <Chip tone={risk as any}>{cp.risk_level?.toUpperCase() ?? 'CALM'}</Chip>
+                <Chip tone={risk}>{rl || 'CALM'}</Chip>
               </div>
             );
           })}
+          {tw.note && (
+            <div className="mt-2 text-[9px] font-mono text-text-muted leading-snug">{tw.note}</div>
+          )}
         </div>
       )}
     </Panel>
@@ -148,12 +172,32 @@ function VLCCPanel({ cracks }: { cracks: any }) {
 function OSPPanel({ cracks }: { cracks: any }) {
   const osp = cracks?.saudi_osp;
   if (!osp) return <Panel title="Saudi OSP"><SkeletonRows rows={5} /></Panel>;
-  const grades = osp.grades ?? osp.differentials ?? [];
+  const grades = osp.grades ?? osp.differentials ?? {};
   const list = Array.isArray(grades)
     ? grades
     : Object.entries(grades).map(([name, vals]: any) => ({ name, ...vals }));
+
+  /**
+   * Backend shape:  grades.Arab Light = { Asia: {vs_benchmark, benchmark}, NWE: {...}, USGC: {...} }
+   * Older shapes:   { asia: number, nwe: number, usgc: number }
+   * Read both: deep object → vs_benchmark; flat number → direct.
+   */
+  const valueFor = (row: any, ...keys: string[]): number | null => {
+    for (const k of keys) {
+      const v = row?.[k];
+      if (v === null || v === undefined) continue;
+      if (typeof v === 'number') return v;
+      if (typeof v === 'object' && typeof v.vs_benchmark === 'number') return v.vs_benchmark;
+    }
+    return null;
+  };
+
   return (
-    <Panel title="Saudi OSP · Aramco" subtitle={osp.month ?? osp.effective ?? '—'} right={<Chip tone="muted">HARDCODED</Chip>}>
+    <Panel
+      title="Saudi OSP · Aramco"
+      subtitle={osp.as_of ?? osp.month ?? osp.effective ?? '—'}
+      right={<Chip tone="muted">{osp.data_source ?? 'HARDCODED'}</Chip>}
+    >
       <table className="w-full text-[11px] font-mono tabular">
         <thead>
           <tr className="text-text-muted text-[9px] uppercase tracking-widest border-b border-border">
@@ -165,22 +209,25 @@ function OSPPanel({ cracks }: { cracks: any }) {
         </thead>
         <tbody>
           {list.slice(0, 6).map((g: any, i: number) => {
-            const cell = (v: any) => {
-              if (v === undefined || v === null) return <span className="text-text-muted">—</span>;
+            const cell = (v: number | null) => {
+              if (v === null) return <span className="text-text-muted">—</span>;
               const tone = v >= 0 ? 'text-bull' : 'text-bear';
-              return <span className={tone}>{v >= 0 ? '+' : ''}{Number(v).toFixed(2)}</span>;
+              return <span className={tone}>{v >= 0 ? '+' : ''}{v.toFixed(2)}</span>;
             };
             return (
               <tr key={i} className="border-b border-border/40">
                 <td className="py-1.5 text-text-secondary">{g.name}</td>
-                <td className="text-right">{cell(g.asia)}</td>
-                <td className="text-right">{cell(g.nwe ?? g.europe)}</td>
-                <td className="text-right">{cell(g.usgc ?? g.us)}</td>
+                <td className="text-right">{cell(valueFor(g, 'Asia', 'asia'))}</td>
+                <td className="text-right">{cell(valueFor(g, 'NWE', 'nwe', 'europe', 'Europe'))}</td>
+                <td className="text-right">{cell(valueFor(g, 'USGC', 'usgc', 'us', 'US'))}</td>
               </tr>
             );
           })}
         </tbody>
       </table>
+      {osp.note && (
+        <div className="mt-2 text-[9px] font-mono text-text-muted leading-snug">{osp.note}</div>
+      )}
     </Panel>
   );
 }
