@@ -1172,6 +1172,17 @@ if __name__ == "__main__":
     warm_cache_thread.daemon = True
     warm_cache_thread.start()
 
+    # Warm Ollama (if running locally) in the background so the first
+    # /api/ask doesn't pay the model-load cost. Fails silently when Ollama
+    # is offline — chat will just use the extractive fallback in that case.
+    def _warm_ollama_bg():
+        try:
+            from rag.chat import warm_ollama
+            warm_ollama()
+        except Exception as exc:
+            log.info("Ollama warm-up skipped: %s", exc)
+    threading.Thread(target=_warm_ollama_bg, name="ollama-warmup", daemon=True).start()
+
     _scheduler.start()
     log.info("APScheduler started — background refresh active")
 
