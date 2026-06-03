@@ -87,52 +87,71 @@ def _format_snapshot(snap: Optional[dict]) -> str:
 
 
 def _build_prompt(question: str, chunks: list[dict], snapshot_str: str) -> str:
-    """Compose the LLM prompt with system instructions + retrieved + live data."""
+    """
+    Compose the LLM prompt with system instructions + retrieved + live data.
+
+    Tight by design: total prompt aims for ≤1,200 tokens so llama3-8B
+    on CPU answers in under 60s. Each retrieved chunk is truncated to
+    600 chars, system instructions kept to 5 lines.
+    """
     sources_str = ""
     for i, c in enumerate(chunks, 1):
         ch = f"Ch{c['chapter']}" if c.get("chapter") else "EXP"
-        sources_str += f"[{i}] {ch} — {c.get('chapter_title','')} / {c.get('section','')}\n{c['text']}\n\n"
+        section = (c.get("section") or "")[:40]
+        excerpt = c.get("text", "")[:600]                # hard cap per chunk
+        sources_str += f"[{i}] {ch} {section}\n{excerpt}\n\n"
 
     return (
-        "You are PULSE — a senior oil & energy trading desk strategist with 20+ years on the "
-        "physical, paper, and derivatives sides. You think like a working trader, not an academic. "
-        "You speak the language of the desk: spare capacity, contango / backwardation, calendar "
-        "spreads, OSPs, K-factor, dated Brent, 3-2-1 cracks, COT positioning percentile, OVX skew, "
-        "tank-tops at Cushing, EFP, TAS orders, Worldscale, Suezmax / VLCC freight, IMO 2020 sulfur "
-        "spec, Houthi diversions, Hormuz transit math, SPR drawdown limits, G7 price cap, and the "
-        "Brent-WTI logistics tell.\n\n"
-        "ANSWERING RULES:\n"
-        "1. Anchor every claim in either (a) the live PULSE snapshot, (b) the curriculum excerpts "
-        "   (cited inline like [Ch8] for chapter-numbered hits or [EXP] for expert-knowledge hits), "
-        "   or (c) a historical analogue you know cold (2008, 2014, 2016 Vienna, 2020 negative WTI, "
-        "   2022 Russia + SPR, 2024 Houthi).\n"
-        "2. Always quote real numbers from the snapshot when relevant — prices, percentiles, "
-        "   percentages, deviations. No vague 'oil is high' answers.\n"
-        "3. When the trader asks 'why is X moving', walk the supply / demand / positioning / "
-        "   macro / geopolitical hierarchy and tell them which lever is dominant right now.\n"
-        "4. When asked about a spread or strategy, give the trade structure (long M1 / short M2, "
-        "   sizing rule of thumb, where the stop sits, when to exit) — not just the definition.\n"
-        "5. Reading habits: term structure (M1-M2) tells you tightness, crack spreads tell you "
-        "   downstream pull, COT percentile tells you positioning crowding, OVX tells you fear, "
-        "   geo-risk index tells you tail premium. Reference these structurally.\n"
-        "6. If the question is conceptual (what is contango, what's a crack spread), still ground "
-        "   the answer with the CURRENT snapshot example. Theory + today's print.\n"
-        "7. 150–220 words. Tight, professional, no fluff. Use bold for key terms.\n\n"
-        f"=== LIVE PULSE SNAPSHOT ===\n{snapshot_str}\n\n"
-        f"=== KNOWLEDGE BASE EXCERPTS (top {len(chunks)} BM25 hits — curriculum + expert) ===\n"
-        f"{sources_str}\n"
-        f"=== TRADER QUESTION ===\n{question}\n\n"
+        "You are PULSE, a senior oil trading desk strategist. Answer in 100-150 words. "
+        "Be specific: quote prices, percentiles, %s from the live snapshot. Cite the "
+        "knowledge base inline like [Ch8] or [EXP]. Use **bold** for key terms. "
+        "No filler.\n\n"
+        f"LIVE SNAPSHOT:\n{snapshot_str}\n\n"
+        f"KNOWLEDGE ({len(chunks)} hits):\n{sources_str}"
+        f"QUESTION: {question}\n\n"
         "=== ANSWER ===\n"
     )
 
 
-def _ollama_generate(prompt: str, model: str = "llama3", timeout: int = 30) -> Optional[str]:
-    """Call local Ollama. Returns None on failure."""
+import os as _os
+_OLLAMA_URL = _os.environ.get("OLLAMA_URL", "http://localhost:11434")
+# Switch to a faster model by setting OLLAMA_MODEL in .env or shell.
+# Recommended models for CPU-only:
+#   llama3.2:1b   (~1.3 GB, ~5s response)   ← fastest
+#   llama3.2:3b   (~2.0 GB, ~10s response)  ← good balance
+#   llama3        (~4.7 GB, ~3min on CPU)   ← only good with GPU
+_OLLAMA_MODEL = _os.environ.get("OLLAMA_MODEL", "llama3")
+# Hard cap on the wait. With llama3.2:3b expect ~10-20s. Keep it tight so
+# a slow model fails fast and the extractive fallback kicks in.
+_OLLAMA_TIMEOUT = int(_os.environ.get("OLLAMA_TIMEOUT", "60"))
+
+
+def _ollama_generate(prompt: str, model: str = _OLLAMA_MODEL, timeout: int = _OLLAMA_TIMEOUT) -> Optional[str]:
+    """
+    Call local Ollama. Returns None on failure.
+
+    Tuned for CPU-only inference of llama3-8B (Q4_0):
+      • num_ctx = 2048 (matches our trimmed prompt; smaller = faster init)
+      • num_predict = 240 tokens cap → bounded generation latency
+      • num_thread = 0 → ollama auto-detects all physical cores
+    """
     try:
         import requests
         resp = requests.post(
-            "http://localhost:11434/api/generate",
-            json={"model": model, "prompt": prompt, "stream": False},
+            f"{_OLLAMA_URL}/api/generate",
+            json={
+                "model": model,
+                "prompt": prompt,
+                "stream": False,
+                "options": {
+                    "num_ctx":     2048,    # tight context = fast prompt eval
+                    "num_predict": 240,     # cap output ~150 words → 25-40s on CPU
+                    "num_thread":  0,       # 0 = use all physical cores
+                    "temperature": 0.4,
+                    "top_p":       0.9,
+                    "repeat_penalty": 1.15,
+                },
+            },
             timeout=timeout,
         )
         resp.raise_for_status()
@@ -141,6 +160,38 @@ def _ollama_generate(prompt: str, model: str = "llama3", timeout: int = 30) -> O
     except Exception as exc:
         log.info("Ollama unavailable (%s) — falling back to extractive answer", type(exc).__name__)
         return None
+
+
+def warm_ollama() -> bool:
+    """
+    Fire a 1-token throwaway generation so the model is loaded into
+    memory before the first real /api/ask request. Returns True if Ollama
+    is reachable + a generation succeeded.
+    """
+    try:
+        import requests
+        # tags is cheap — confirms Ollama is up
+        r = requests.get(f"{_OLLAMA_URL}/api/tags", timeout=3)
+        if not r.ok:
+            return False
+        installed = {m.get("name", "").split(":")[0] for m in r.json().get("models", [])}
+        # If the configured model isn't installed but llama3.2 is, hint the user.
+        if _OLLAMA_MODEL.split(":")[0] not in installed:
+            log.info("Configured model %s not installed. Available: %s",
+                     _OLLAMA_MODEL, sorted(installed) or "(none)")
+            return False
+        log.info("Warming Ollama (%s) …", _OLLAMA_MODEL)
+        requests.post(
+            f"{_OLLAMA_URL}/api/generate",
+            json={"model": _OLLAMA_MODEL, "prompt": "ok", "stream": False,
+                  "options": {"num_predict": 1, "num_ctx": 2048}},
+            timeout=120,
+        )
+        log.info("Ollama warm ✓ (model=%s, timeout=%ds)", _OLLAMA_MODEL, _OLLAMA_TIMEOUT)
+        return True
+    except Exception as exc:
+        log.info("Ollama warm-up failed (%s) — chat will fall back to extractive", type(exc).__name__)
+        return False
 
 
 def _extractive_fallback(question: str, chunks: list[dict], snapshot_str: str) -> str:
@@ -178,7 +229,7 @@ def _extractive_fallback(question: str, chunks: list[dict], snapshot_str: str) -
     return out
 
 
-def answer(question: str, snapshot: Optional[dict] = None, k: int = 8) -> dict:
+def answer(question: str, snapshot: Optional[dict] = None, k: int = 4) -> dict:
     """
     Answer a free-form trader question using curriculum RAG + live snapshot
     + optional Ollama LLM.
