@@ -90,14 +90,27 @@ _YF_PREFIXES = {
 
 def load_lco_history() -> Optional[pd.DataFrame]:
     """
-    Parse the ICE LCO settlement xlsx.
+    Parse the ICE LCO settlement source.
 
-    Returns a DataFrame:
-      - Index: datetime (trading dates, newest first → sorted ascending)
-      - Columns: c1 … c12 (float settle prices for M1-M12)
+    Preference order:
+      1. /Data/LCO_Brent_daily_settlement_c1_to_c31_2016_2026.csv (institutional, c1-c31)
+      2. backend/data/LCOSettle.xlsx (legacy xlsx, c1-c31)
 
-    Returns None if the file cannot be opened or parsed.
+    Returns a DataFrame indexed by date with columns c1…c12 (float).
+    Returns None if neither source can be opened.
     """
+    # 1) Preferred: institutional Data lake CSV — fresher and faster
+    try:
+        from data_lake import get_brent_settlements
+        df = get_brent_settlements()
+        if df is not None and not df.empty:
+            # data_lake returns c1…c31; surface only c1…c12 for this consumer
+            cols = [c for c in df.columns if c.startswith("c") and int(c[1:]) <= 12]
+            return df[cols].copy()
+    except Exception as exc:
+        log.warning("data_lake settlements load failed (%s) — falling back to xlsx", exc)
+
+    # 2) Fallback: legacy xlsx
     if not _LCO_FILE.exists():
         log.error("LCO xlsx not found at %s", _LCO_FILE)
         return None

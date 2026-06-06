@@ -36,7 +36,7 @@ type Product = {
 export function SeasonalityChart({ data }: { data: any }) {
   if (!data?.products || data.products.length === 0) {
     return (
-      <Panel title="Seasonality · 5 Products" subtitle="Monthly average % return">
+      <Panel title="Seasonality · 5 Products" subtitle="Monthly average % return" source="yfinance_5y">
         <SkeletonRows rows={6} />
       </Panel>
     );
@@ -59,6 +59,8 @@ export function SeasonalityChart({ data }: { data: any }) {
     <Panel
       title="Seasonality · 5 Products"
       subtitle={`${years}-year average monthly returns · ${MONTHS[currentMonth]} highlighted`}
+      source="yfinance_5y"
+      sourceNote={`Average monthly returns computed from ${years} years of yfinance daily closes.`}
       right={
         <div className="flex items-center gap-2">
           <Chip tone="muted">{years}Y</Chip>

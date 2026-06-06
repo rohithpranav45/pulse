@@ -23,6 +23,7 @@ ENV/
 
 # ── Cache & data files ────────────────────────────────────────────────────────
 backend/cache/*.pkl
+backend/data/cache/
 data/cache/*.pkl
 *.pkl
 *.parquet
@@ -31,6 +32,9 @@ backend/db/*.db
 backend/db/*.db-journal
 backend/db/*.db-wal
 backend/db/*.db-shm
+
+# ── Institutional desk-feed data lake (3.5 GB, supplied separately) ───────────
+Data/
 
 # ── Claude Code local settings ────────────────────────────────────────────────
 .claude/settings.local.json

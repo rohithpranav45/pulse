@@ -76,6 +76,8 @@ export function GeoRiskCalculator({
       title="Geo Risk Premium Calculator"
       subtitle="Chapter 10 framework · Supply×40 + Spare×40 + Duration×20"
       accent="bear"
+      source="geo_risk_calc"
+      sourceNote="Interactive what-if calculator running entirely client-side. Inputs (supply at risk, spare capacity, duration) are user-tunable; no live feed."
       right={<Calculator className="w-4 h-4 text-text-tertiary" />}
     >
       {/* RESULT BANNER */}

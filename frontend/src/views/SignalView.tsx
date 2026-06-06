@@ -28,16 +28,16 @@ function ScoreToVerdict({ score }: { score: number | null }) {
       <Icon className={clsx('w-7 h-7', tone === 'bull' && 'text-bull', tone === 'bear' && 'text-bear', tone === 'neut' && 'text-neut')} strokeWidth={2.5} />
       <div>
         <div className={clsx(
-          'font-display font-extrabold text-[34px] leading-none tracking-wide',
+          // De-emphasised: smaller, no glow, lowercase letter-spacing.
+          // The dashboard reports context — not a buy/sell call.
+          'font-display font-semibold text-[24px] leading-none tracking-wide',
           tone === 'bull' && 'text-bull',
           tone === 'bear' && 'text-bear',
           tone === 'neut' && 'text-neut',
-        )}
-          style={{ textShadow: `0 0 24px ${tone === 'bull' ? 'rgba(16,217,151,0.45)' : tone === 'bear' ? 'rgba(255,77,109,0.45)' : 'rgba(245,166,35,0.4)'}` }}
-        >
+        )}>
           {label}
         </div>
-        <div className="text-[11px] font-mono text-text-tertiary mt-1 tabular">SCORE {score.toFixed(2)} / 2.00</div>
+        <div className="text-[11px] font-mono text-text-tertiary mt-1 tabular">BIAS SCORE {score >= 0 ? '+' : ''}{score.toFixed(2)} / 2.00</div>
       </div>
     </div>
   );
@@ -60,6 +60,8 @@ function SignalCard({ asset, signal, price, onIndicatorClick }: {
       accent={tone as any}
       title={asset.label}
       subtitle={asset.sub}
+      source="signal_engine"
+      dataTimestamp={signal?.timestamp}
       right={
         score !== null && (
           <Chip tone={conv === 'HIGH' ? 'bull' : conv === 'MODERATE' ? 'neut' : 'muted'}>
@@ -68,7 +70,7 @@ function SignalCard({ asset, signal, price, onIndicatorClick }: {
         )
       }
       className={clsx(
-        'relative overflow-hidden transition-all hover:scale-[1.005]',
+        'relative overflow-hidden transition-colors',
       )}
     >
       <div className="flex items-start justify-between gap-4 mb-4">
@@ -139,11 +141,11 @@ function SignalCard({ asset, signal, price, onIndicatorClick }: {
 
 function FairValueCard({ fv }: { fv: any }) {
   const brent = fv?.brent;
-  if (!brent) return <Panel title="Fair Value · Brent"><SkeletonRows rows={6} /></Panel>;
+  if (!brent) return <Panel title="Fair Value · Brent" source="fair_value_model" sourceNote="Backend currently returning empty {}. Model needs upstream fundamentals to compute components."><SkeletonRows rows={6} /></Panel>;
   const components = brent.components ?? {};
   const dev = brent.deviation_pct ?? 0;
   return (
-    <Panel title="Fair Value · Brent" subtitle="Multi-factor model" accent="blue">
+    <Panel title="Fair Value · Brent" subtitle="Multi-factor model" accent="blue" source="fair_value_model" dataTimestamp={fv?.timestamp}>
       <div className="flex items-end justify-between mb-4">
         <div>
           <div className="text-[10px] font-mono text-text-tertiary uppercase tracking-widest">Spot</div>
@@ -204,6 +206,9 @@ function TradeIdeaCard({ idea }: { idea: any }) {
       title="Trade Idea · Brent"
       subtitle={`${idea.time_horizon ?? '1–2W'} · ${idea.conviction ?? '—'}`}
       accent={tone as any}
+      source="groq_brief"
+      dataTimestamp={idea.timestamp}
+      sourceNote={`Morning brief auto-selects: Groq llama-3.3-70b → local Ollama → deterministic template. Word count ${(idea.morning_brief || '').split(/\s+/).filter(Boolean).length}.`}
       right={<Chip tone={tone as any}>{dir}</Chip>}
     >
       <div className="grid grid-cols-4 gap-3 mb-4">
@@ -224,16 +229,28 @@ function TradeIdeaCard({ idea }: { idea: any }) {
         </div>
       )}
       {idea.morning_brief && (
-        <details className="mt-3 group">
-          <summary className="cursor-pointer text-[10px] font-mono text-text-tertiary uppercase tracking-widest hover:text-gold flex items-center gap-1.5">
-            <BookOpen className="w-3 h-3" />
+        <div className="mt-3">
+          <div className="text-[10px] font-mono text-text-tertiary uppercase tracking-widest mb-2 flex items-center gap-1.5">
+            <BookOpen className="w-3 h-3 text-gold" />
             <span>Morning Brief</span>
-            <span className="ml-auto text-text-muted group-open:rotate-180 transition-transform">▾</span>
-          </summary>
-          <div className="mt-2 text-[11.5px] leading-relaxed text-text-secondary p-3 bg-bg-card/40 rounded">
-            {idea.morning_brief}
           </div>
-        </details>
+          <ul className="text-[12px] leading-relaxed text-text-secondary p-3 bg-bg-card/40 rounded space-y-1.5 list-none">
+            {(() => {
+              const raw = (idea.morning_brief ?? '').trim();
+              // Parse "- " bullets — fall back to a single paragraph if the model didn't comply
+              const lines = raw.split(/\n+/).map((l: string) => l.replace(/^[\s•\-*]+/, '').trim()).filter(Boolean);
+              if (lines.length >= 2) {
+                return lines.map((line: string, i: number) => (
+                  <li key={i} className="flex items-start gap-2">
+                    <span className="text-gold mt-0.5 flex-shrink-0">•</span>
+                    <span>{line}</span>
+                  </li>
+                ));
+              }
+              return <li>{raw}</li>;
+            })()}
+          </ul>
+        </div>
       )}
     </Panel>
   );
@@ -252,7 +269,7 @@ function MacroPanel({ macro }: { macro: any }) {
     { label: '30Y Mortgage', series: get('mortgage', 'MORTGAGE30US'), field: 'value', unit: '%' },
   ];
   return (
-    <Panel title="Macro Signals" subtitle="FRED">
+    <Panel title="Macro Signals" subtitle="FRED" source="fred" dataTimestamp={macro?.timestamp ?? macro?.dgs10?.date}>
       <div className="grid grid-cols-2 gap-x-4 gap-y-3">
         {items.map((it, i) => {
           const v = it.series?.[it.field];
@@ -358,7 +375,7 @@ export function SignalView({ all, tradeIdea, alerts }: { all: any; tradeIdea: an
       {/* Row 3: macro */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <MacroPanel macro={macro} />
-        <Panel title="Composite Read" subtitle="Cross-asset bias" accent="gold">
+        <Panel title="Composite Read" subtitle="Cross-asset bias" accent="gold" source="signal_engine" dataTimestamp={signal?.timestamp}>
           <div className="grid grid-cols-3 gap-4">
             {ASSETS.map(a => {
               const s = signal?.[a.key]?.score ?? null;
