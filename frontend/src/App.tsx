@@ -13,6 +13,7 @@ import { TermStructureView } from '@/views/TermStructureView';
 import { SpreadsView } from '@/views/SpreadsView';
 import { ContractsView } from '@/views/ContractsView';
 import { PlaybookView } from '@/views/PlaybookView';
+import { PaperView } from '@/views/PaperView';
 import { ChatDock } from '@/components/chat/ChatDock';
 import { OnboardingTour } from '@/components/onboarding/OnboardingTour';
 import { DailySheet } from '@/components/panels/DailySheet';
@@ -34,7 +35,7 @@ export default function App() {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
       const k = e.key;
-      const map: Record<string, ViewKey> = { '1':'signal','2':'charts','3':'fundamentals','4':'intelligence','5':'term','6':'spreads','7':'contracts','8':'playbook' };
+      const map: Record<string, ViewKey> = { '1':'signal','2':'charts','3':'fundamentals','4':'intelligence','5':'term','6':'spreads','7':'contracts','8':'playbook','9':'paper' };
       if (map[k]) setView(map[k]);
       if (k === 'r' || k === 'R') { setRefreshing(true); refetch().finally(() => setTimeout(() => setRefreshing(false), 600)); }
       if (k === 'f' || k === 'F') document.documentElement.requestFullscreen?.();
@@ -84,6 +85,7 @@ export default function App() {
               {view === 'spreads'       && <SpreadsView all={merged} />}
               {view === 'contracts'     && <ContractsView all={merged} />}
               {view === 'playbook'      && <PlaybookView />}
+              {view === 'paper'         && <PaperView tradeIdea={tradeIdea} />}
             </ErrorBoundary>
           </div>
         </main>
@@ -102,7 +104,10 @@ export default function App() {
       <OnboardingTour onNavigate={setView} />
 
       {/* Pop-up alert toast stack — slides in when /api/alerts produces a new id */}
-      <ToastStack alerts={Array.isArray(alerts) ? alerts : (alerts as any)?.alerts ?? []} />
+      <ToastStack
+        alerts={Array.isArray(alerts) ? alerts : (alerts as any)?.alerts ?? []}
+        news={merged?.news}
+      />
     </div>
   );
 }

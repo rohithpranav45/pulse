@@ -140,6 +140,13 @@ TTL_ANALYST_WATCH  = 900   # Nitter/Truth Social RSS — 15-min refresh
 TTL_TANKER_WATCH   = 300   # AIS snapshot — 5-min refresh
 TTL_SPREADS_HIST   = 3600  # daily spread history — once per hour
 TTL_EIA_SURPRISE   = 3600  # EIA surprise tracker — once per hour
+TTL_OVX            = 3600  # CBOE OVX from FRED — daily-cadence series
+TTL_CURVE_REGIME   = 3600  # 15-yr spread percentile — file-backed, recompute hourly
+TTL_ORDER_FLOW     = 3600  # buy/sell volume from desk feed
+TTL_JODI           = 86400 # JODI monthly — only changes monthly
+TTL_GDELT_TONE     = 1800  # GDELT GKG tone — 30-min cadence
+TTL_MARKETAUX      = 900   # MarketAux news — 15-min refresh
+TTL_ANALOGS        = 21600 # matrix-profile analogs — 6h (expensive compute)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -213,6 +220,57 @@ def _opec_eia():
     from fetchers.eia import get_opec_eia_production
     return get_opec_eia_production()
 
+def _jodi():
+    from fetchers.jodi import get_jodi_opec_production
+    return get_jodi_opec_production()
+
+def _rig_count_v2():
+    from fetchers.rig_count import get_rig_count
+    return get_rig_count()
+
+def _ovx():
+    from fetchers.ovx import get_ovx
+    return get_ovx()
+
+def _curve_regime():
+    from fetchers.curve_regime import get_curve_regime
+    return get_curve_regime()
+
+def _order_flow():
+    from fetchers.order_flow import get_order_flow_imbalance
+    return get_order_flow_imbalance()
+
+def _stooq():
+    from fetchers.stooq import get_stooq_quotes
+    return get_stooq_quotes()
+
+def _ecb_fx():
+    from fetchers.ecb_fx import get_ecb_fx
+    return get_ecb_fx()
+
+def _gdelt_news():
+    from fetchers.gdelt import get_gdelt_news
+    return get_gdelt_news(max_articles=40, hours=12)
+
+def _gdelt_tone():
+    from fetchers.gdelt import get_gdelt_tone
+    # ECON_OILPRICE alone returns a clean signal; MILITARY makes the OR query so
+    # broad that GDELT throttles us. Keep it tight.
+    return get_gdelt_tone(themes=("ECON_OILPRICE",), hours=24)
+
+def _gdelt_bylines():
+    from fetchers.gdelt import get_byline_articles
+    return get_byline_articles(handles=("Javier Blas", "Amena Bakr", "Helima Croft"), hours=72)
+
+# Phase B fetchers
+def _marketaux():
+    from fetchers.marketaux import get_marketaux_news
+    return get_marketaux_news(limit=40, hours=36)
+
+def _analogs():
+    from fetchers.analogs import get_pattern_analogs
+    return get_pattern_analogs()
+
 def _spark_dark(hh_price=None):
     from fetchers.eia import get_spark_dark_spread
     return get_spark_dark_spread(hh_price)
@@ -230,6 +288,82 @@ def _geo_risk():
     return calculate_geo_risk()
 
 def _news():
+    """News pipeline — GDELT primary (free, reliable), legacy aggregator fallback."""
+    try:
+        gdelt = _gdelt_news()
+        if gdelt and gdelt.get("articles"):
+            # Reuse the existing FinBERT scoring + clustering on GDELT results
+            try:
+                from fetchers.sentiment import score_articles_finbert
+                from fetchers.news     import _cluster_articles
+                scored   = score_articles_finbert(gdelt["articles"])
+                clusters = _cluster_articles(scored)
+                gdelt["articles"] = scored
+                gdelt["clusters"] = clusters
+                # Composite sentiment
+                if scored:
+                    avg = sum(a.get("sentiment_score", 0) for a in scored) / len(scored)
+                    bull = sum(1 for a in scored if a.get("sentiment_score", 0) >  0.1)
+                    bear = sum(1 for a in scored if a.get("sentiment_score", 0) < -0.1)
+                    gdelt["composite_sentiment"] = {
+                        "composite": round(avg, 4),
+                        "bullish":   bull,
+                        "bearish":   bear,
+                        "neutral":   len(scored) - bull - bear,
+                        "count":     len(scored),
+                        "label":     "BULLISH" if avg > 0.1 else "BEARISH" if avg < -0.1 else "NEUTRAL",
+                        "stale":     False,
+                    }
+            except Exception as exc:
+                log.warning("FinBERT/cluster on GDELT failed: %s", exc)
+            return gdelt
+    except Exception as exc:
+        log.warning("GDELT primary news failed: %s — trying MarketAux", exc)
+    # Fallback 1 — MarketAux (free key)
+    try:
+        ma = _marketaux()
+        if ma and ma.get("articles"):
+            try:
+                from fetchers.news import _cluster_articles
+                ma["clusters"] = _cluster_articles(ma["articles"])
+            except Exception:
+                pass
+            # MarketAux's entity sentiment is missing on most general-news
+            # articles (entities = []), so per-article sentiment_score arrives
+            # as None. Fall back to FinBERT scoring on the headline so the
+            # composite chip renders.
+            try:
+                from fetchers.sentiment import score_articles_finbert
+                arts = ma["articles"]
+                unscored = [a for a in arts if not isinstance(a.get("sentiment_score"), (int, float))]
+                if unscored:
+                    score_articles_finbert(unscored)  # mutates in place
+            except Exception as exc:
+                log.warning("FinBERT scoring on MarketAux failed: %s", exc)
+
+            # Compute composite sentiment from per-article scores so the chip renders
+            try:
+                arts = ma["articles"]
+                scored = [a for a in arts if isinstance(a.get("sentiment_score"), (int, float))]
+                if scored:
+                    avg = sum(a["sentiment_score"] for a in scored) / len(scored)
+                    bull = sum(1 for a in scored if a["sentiment_score"] >  0.1)
+                    bear = sum(1 for a in scored if a["sentiment_score"] < -0.1)
+                    ma["composite_sentiment"] = {
+                        "composite": round(avg, 4),
+                        "bullish":   bull,
+                        "bearish":   bear,
+                        "neutral":   len(scored) - bull - bear,
+                        "count":     len(scored),
+                        "label":     "BULLISH" if avg > 0.1 else "BEARISH" if avg < -0.1 else "NEUTRAL",
+                        "stale":     False,
+                    }
+            except Exception as exc:
+                log.warning("MarketAux composite sentiment failed: %s", exc)
+            return ma
+    except Exception as exc:
+        log.warning("MarketAux fallback failed: %s", exc)
+    # Fallback 2 — legacy aggregator (Apify → NewsAPI → direct RSS)
     from fetchers.news import get_energy_news
     return get_energy_news()
 
@@ -251,7 +385,21 @@ def _seasonality():
 
 def _macro():
     from fetchers.macro import get_macro_data
-    return get_macro_data()
+    data = get_macro_data() or {}
+    # Layer on ECB FX as a no-key second source for EUR/USD
+    try:
+        ecb = _ecb_fx()
+        if ecb and ecb.get("eur_usd"):
+            data["ecb_eurusd"] = {
+                "value":  round(float(ecb["eur_usd"]), 4),
+                "date":   ecb.get("as_of"),
+                "label":  "EUR/USD (ECB)",
+                "unit":   "rate",
+                "source": "ECB reference rate",
+            }
+    except Exception as exc:
+        log.warning("ECB FX overlay failed: %s", exc)
+    return data
 
 def _patterns():
     from models.patterns import get_patterns
@@ -420,24 +568,42 @@ def _fetch_correlations():
     set_cache("correlations", data)
     return data
 
+def _build_fundamentals(hh_price=None) -> dict:
+    """Single source of truth for the fundamentals payload. Used by every
+    code path that needs to populate the cache (fetch / refresh / warm)."""
+    return {
+        "inventory":    safe_fetch(_inventory,              {}),
+        "snapshot":     safe_fetch(_snapshot,               {}),
+        "cot":          safe_fetch(_cot,                    {}),
+        "opec":         safe_fetch(_opec,                   {}),
+        "opec_jodi":    safe_fetch(_jodi,                   {}),
+        "geo_risk":     safe_fetch(_geo_risk,               {}),
+        # Prefer the new multi-source rig_count fetcher; legacy EIA path stays as backup
+        "rig_count":    safe_fetch(_rig_count_v2, safe_fetch(_rig_count, {})),
+        "seasonality":  safe_fetch(_seasonality,            {}),
+        "opec_eia":     safe_fetch(_opec_eia,               {}),
+        "spark_dark":   safe_fetch(lambda: _spark_dark(hh_price), {}),
+        "curve_regime": safe_fetch(_curve_regime,           {}),
+        "order_flow":   safe_fetch(_order_flow,             {}),
+    }
+
+
+def _is_fundamentals_complete(data: dict) -> bool:
+    """Cached fundamentals dict missing any of the Phase-A/B fields → recompute."""
+    if not isinstance(data, dict):
+        return False
+    required = {"opec_jodi", "curve_regime", "order_flow"}
+    return required.issubset(data.keys())
+
+
 def _fetch_fundamentals():
     cached = get_cached("fundamentals", TTL_FUNDAMENTALS)
-    if cached is not None:
+    if cached is not None and _is_fundamentals_complete(cached):
         return cached
-    # Grab cached HH price for spark/dark calculation (avoids a redundant yfinance call)
-    prices  = _fetch_prices()
+    # Stale or missing-fields → rebuild fresh
+    prices   = _fetch_prices()
     hh_price = prices.get("henry_hub", {}).get("price") if prices else None
-    data = {
-        "inventory":   safe_fetch(_inventory,              {}),
-        "snapshot":    safe_fetch(_snapshot,               {}),
-        "cot":         safe_fetch(_cot,                    {}),
-        "opec":        safe_fetch(_opec,                   {}),
-        "geo_risk":    safe_fetch(_geo_risk,               {}),
-        "rig_count":   safe_fetch(_rig_count,              {}),
-        "seasonality": safe_fetch(_seasonality,            {}),
-        "opec_eia":    safe_fetch(_opec_eia,               {}),
-        "spark_dark":  safe_fetch(lambda: _spark_dark(hh_price), {}),
-    }
+    data = _build_fundamentals(hh_price)
     set_cache("fundamentals", data)
     return data
 
@@ -548,6 +714,17 @@ def _fetch_steo():
 
 
 def _analyst_watch():
+    """
+    GDELT byline tracking — replaces Nitter (X-com mirrors are dead in 2026).
+    Falls back to the legacy Nitter scraper if GDELT returns nothing.
+    """
+    try:
+        out = _gdelt_bylines()
+        # Treat as valid if at least one author has any results
+        if out and any(a.get("ok") for a in out.get("analysts", [])):
+            return out
+    except Exception as exc:
+        log.warning("GDELT bylines failed: %s — falling back", exc)
     from fetchers.analyst_watch import get_analyst_watch
     return get_analyst_watch()
 
@@ -620,6 +797,60 @@ def _fetch_eia_surprise():
     return data
 
 
+def _fetch_ovx():
+    cached = get_cached("ovx", TTL_OVX)
+    if cached is not None: return cached
+    data = safe_fetch(_ovx, {"stale": True, "current": None,
+                              "source": "FRED OVXCLS"})
+    set_cache("ovx", data)
+    return data
+
+def _fetch_curve_regime():
+    cached = get_cached("curve_regime", TTL_CURVE_REGIME)
+    if cached is not None: return cached
+    data = safe_fetch(_curve_regime, {"available": False})
+    set_cache("curve_regime", data)
+    return data
+
+def _fetch_order_flow():
+    cached = get_cached("order_flow", TTL_ORDER_FLOW)
+    if cached is not None: return cached
+    data = safe_fetch(_order_flow, {"available": False, "contracts": []})
+    set_cache("order_flow", data)
+    return data
+
+def _fetch_jodi():
+    cached = get_cached("jodi", TTL_JODI)
+    if cached is not None: return cached
+    data = safe_fetch(_jodi, {"available": False, "members": []})
+    set_cache("jodi", data)
+    return data
+
+def _fetch_gdelt_tone():
+    cached = get_cached("gdelt_tone", TTL_GDELT_TONE)
+    # Treat a cached stale entry as a miss so the next request retries
+    if cached is not None and not cached.get("stale"):
+        return cached
+    data = safe_fetch(_gdelt_tone, {"mean_tone": None, "stale": True})
+    if data and not data.get("stale"):   # only cache real results
+        set_cache("gdelt_tone", data)
+    return data
+
+def _fetch_marketaux():
+    cached = get_cached("marketaux", TTL_MARKETAUX)
+    if cached is not None: return cached
+    data = safe_fetch(_marketaux, {"articles": [], "stale": True})
+    set_cache("marketaux", data)
+    return data
+
+def _fetch_analogs():
+    cached = get_cached("analogs", TTL_ANALOGS)
+    if cached is not None: return cached
+    data = safe_fetch(_analogs, {"available": False, "analogs": []})
+    set_cache("analogs", data)
+    return data
+
+
 def _forward_cover():
     from fetchers.forward_cover import get_forward_cover_history
     return get_forward_cover_history(years=5)
@@ -669,26 +900,9 @@ def _refresh_correlations():
     })
 
 def _refresh_fundamentals():
-    from fetchers.eia        import (get_inventory_vs_seasonal, get_inventory_snapshot,
-                                     get_rig_count, get_opec_eia_production,
-                                     get_spark_dark_spread)
-    from fetchers.cot        import get_positioning_percentile
-    from fetchers.opec       import get_opec_summary
-    from fetchers.geo_risk   import calculate_geo_risk
-    from fetchers.seasonality import get_seasonality
     prices   = get_cached("prices", TTL_PRICES) or {}
     hh_price = prices.get("henry_hub", {}).get("price") if prices else None
-    set_cache("fundamentals", {
-        "inventory":   safe_fetch(get_inventory_vs_seasonal, {}),
-        "snapshot":    safe_fetch(get_inventory_snapshot, {}),
-        "cot":         safe_fetch(get_positioning_percentile, {}),
-        "opec":        safe_fetch(get_opec_summary, {}),
-        "geo_risk":    safe_fetch(calculate_geo_risk, {}),
-        "rig_count":   safe_fetch(get_rig_count, {}),
-        "seasonality": safe_fetch(get_seasonality, {}),
-        "opec_eia":    safe_fetch(get_opec_eia_production, {}),
-        "spark_dark":  safe_fetch(lambda: get_spark_dark_spread(hh_price), {}),
-    })
+    set_cache("fundamentals", _build_fundamentals(hh_price))
 
 def _refresh_news():
     set_cache("news",         safe_fetch(_news, {"articles": [], "negative_count": 0}))
@@ -790,6 +1004,36 @@ _scheduler.add_job(_refresh_seasonality,     "interval", seconds=TTL_SPREADS_HIS
 _scheduler.add_job(_refresh_eia_surprise,    "interval", seconds=TTL_EIA_SURPRISE, next_run_time=_NOW, id="_refresh_eia_surprise")
 _scheduler.add_job(_refresh_forward_cover,   "interval", seconds=TTL_EIA_SURPRISE, next_run_time=_NOW, id="_refresh_forward_cover")
 
+# New Phase A streams
+_scheduler.add_job(lambda: set_cache("ovx",          safe_fetch(_ovx,          {"stale": True})),
+                   "interval", seconds=TTL_OVX, next_run_time=_NOW, id="_refresh_ovx")
+_scheduler.add_job(lambda: set_cache("curve_regime", safe_fetch(_curve_regime, {"available": False})),
+                   "interval", seconds=TTL_CURVE_REGIME, next_run_time=_NOW, id="_refresh_curve_regime")
+_scheduler.add_job(lambda: set_cache("order_flow",   safe_fetch(_order_flow,   {"available": False, "contracts": []})),
+                   "interval", seconds=TTL_ORDER_FLOW, next_run_time=_NOW, id="_refresh_order_flow")
+_scheduler.add_job(lambda: set_cache("jodi",         safe_fetch(_jodi,         {"available": False, "members": []})),
+                   "interval", seconds=TTL_JODI, next_run_time=_NOW, id="_refresh_jodi")
+_scheduler.add_job(lambda: set_cache("gdelt_tone",   safe_fetch(_gdelt_tone,   {"mean_tone": None, "stale": True})),
+                   "interval", seconds=TTL_GDELT_TONE, next_run_time=_NOW, id="_refresh_gdelt_tone")
+
+# Phase B streams
+_scheduler.add_job(lambda: set_cache("marketaux",    safe_fetch(_marketaux,    {"articles": [], "stale": True})),
+                   "interval", seconds=TTL_MARKETAUX, next_run_time=_NOW, id="_refresh_marketaux")
+_scheduler.add_job(lambda: set_cache("analogs",      safe_fetch(_analogs,      {"available": False, "analogs": []})),
+                   "interval", seconds=TTL_ANALOGS, next_run_time=_NOW, id="_refresh_analogs")
+
+# Paper-trading mark-to-market — every minute, auto-close on TP/SL hits.
+def _paper_mtm():
+    try:
+        from paper_trading import mark_to_market
+        s = mark_to_market()
+        if s.get("auto_closed"):
+            log.info("paper MTM: auto-closed %d, %d still open", s["auto_closed"], s["still_open"])
+    except Exception as exc:
+        log.warning("paper MTM failed: %s", exc)
+
+_scheduler.add_job(_paper_mtm, "interval", seconds=60, id="_paper_mtm")
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Flask routes
@@ -798,6 +1042,201 @@ _scheduler.add_job(_refresh_forward_cover,   "interval", seconds=TTL_EIA_SURPRIS
 @app.route("/api/health")
 def health():
     return jsonify({"status": "ok", "timestamp": _now()})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Paper-trading sandbox
+# ─────────────────────────────────────────────────────────────────────────────
+@app.route("/api/paper/push", methods=["POST"])
+def paper_push():
+    """
+    Open a new paper trade. Body can be:
+      • the full trade-idea payload, OR
+      • {} — we pull the latest from /api/trade-idea cache and use that.
+    Optional override: size (default 1.0), asset (default brent).
+    """
+    body = request.get_json(silent=True) or {}
+    idea = body.get("idea") or body
+    # Empty body → use cached trade idea
+    if not idea or not idea.get("direction"):
+        idea = _fetch_trade_idea() or {}
+    if not idea.get("asset"):
+        idea["asset"] = body.get("asset", "brent")
+    size = float(body.get("size", 1.0))
+    from paper_trading import push_trade
+    out = push_trade(idea, size=size, source=body.get("source", "trade_idea"))
+    return jsonify({"data": out, "timestamp": _now()}), (200 if out.get("ok") else 400)
+
+
+@app.route("/api/paper/close/<int:trade_id>", methods=["POST"])
+def paper_close(trade_id: int):
+    body = request.get_json(silent=True) or {}
+    from paper_trading import close_trade
+    out = close_trade(trade_id, reason=body.get("reason", "manual"))
+    return jsonify({"data": out, "timestamp": _now()}), (200 if out.get("ok") else 404)
+
+
+@app.route("/api/paper/positions")
+def paper_positions():
+    status = request.args.get("status", "all")
+    from paper_trading import list_positions
+    return jsonify({"data": list_positions(status=status), "timestamp": _now()})
+
+
+@app.route("/api/paper/performance")
+def paper_performance():
+    from paper_trading import get_performance
+    return jsonify({"data": get_performance(), "timestamp": _now()})
+
+
+@app.route("/api/paper/clear", methods=["POST"])
+def paper_clear():
+    body = request.get_json(silent=True) or {}
+    from paper_trading import clear_trades
+    n = clear_trades(scope=body.get("scope", "closed"))
+    return jsonify({"data": {"removed": n}, "timestamp": _now()})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Health detail — per-stream up/stale/down with last-known age + error.
+# Reads ONLY from the SQLite cache so it's instant and doesn't trigger
+# upstream fetches itself.
+# ─────────────────────────────────────────────────────────────────────────────
+
+from db.cache import _conn as _cache_conn  # type: ignore
+
+# (cache_key, display_label, ttl_seconds, optional probe fn that returns
+#  (status, detail) given the cached value. Probe should be cheap.)
+_HEALTH_STREAMS: list[tuple[str, str, int, "callable"]] = []   # populated below
+
+def _probe_default(d):
+    """Generic non-empty check."""
+    if not d:                            return ("down", "no cached value")
+    if isinstance(d, dict) and d.get("stale"):
+        return ("stale", d.get("error") or "marked stale by source")
+    return ("up", None)
+
+def _probe_prices(d):
+    if not d or not d.get("brent", {}).get("price"):
+        return ("down", "no brent price")
+    return ("up", None)
+
+def _probe_articles(d):
+    if not d:                                                  return ("down", "no payload")
+    arts = d.get("articles") or []
+    if d.get("stale"):                                         return ("stale", d.get("error"))
+    if not arts:                                               return ("stale", "no articles")
+    return ("up", f"{len(arts)} articles")
+
+def _probe_available(d):
+    if not d:                                                  return ("down", "no payload")
+    if d.get("available") is False:                            return ("stale", d.get("error") or "available=false")
+    return ("up", None)
+
+def _probe_rig(d):
+    if not d or d.get("current") is None:                      return ("down", "no value")
+    if d.get("stale"):                                         return ("stale", d.get("note") or "stale")
+    return ("up", f"current={d.get('current')}")
+
+def _probe_fv(d):
+    if not d or not d.get("brent"):                            return ("down", "no payload")
+    b = d["brent"]
+    if not b.get("fair_value"):                                return ("down", "no fair_value")
+    if b.get("degraded"):                                      return ("stale", f"degraded: {','.join(b.get('degraded_components', []))}")
+    return ("up", f"dev {b.get('deviation_pct')}%")
+
+# (cache_key, display_label, TTL seconds, probe function)
+_HEALTH_STREAMS = [
+    ("prices",          "Live prices",            TTL_PRICES,        _probe_prices),
+    ("ohlcv",           "OHLCV intraday",         TTL_OHLCV,         _probe_default),
+    ("history",         "Daily history",          TTL_HISTORY,       _probe_default),
+    ("curve",           "Forward curve",          TTL_CURVE,         _probe_default),
+    ("fair_value",      "Fair value model",       TTL_FAIR_VALUE,    _probe_fv),
+    ("signal",          "Signal engine",          TTL_SIGNAL,        _probe_default),
+    ("correlations",    "Correlations",           TTL_CORRELATIONS,  _probe_default),
+    ("fundamentals",    "Fundamentals",           TTL_FUNDAMENTALS,  _probe_default),
+    ("news",            "News",                   TTL_NEWS,          _probe_articles),
+    ("weather",         "Weather (Open-Meteo)",   TTL_WEATHER,       _probe_default),
+    ("technicals",      "Technicals",             TTL_TECHNICALS,    _probe_default),
+    ("term_structure",  "Term structure",         TTL_TERM_STRUCTURE,_probe_default),
+    ("macro",           "Macro (FRED)",           TTL_MACRO,         _probe_default),
+    ("patterns",        "Pattern recognition",    TTL_PATTERNS,      _probe_default),
+    ("iv",              "Implied vol (OVX)",      TTL_IV,            _probe_default),
+    ("trade_idea",      "Trade idea + brief",     TTL_TRADE,         _probe_default),
+    ("alerts",          "Alerts",                 TTL_ALERTS,        _probe_default),
+    ("cracks",          "Crack spreads",          TTL_CRACKS,        _probe_default),
+    ("steo",            "EIA STEO",               TTL_STEO,          _probe_available),
+    ("analyst_watch",   "Analyst watch (GDELT)",  TTL_ANALYST_WATCH, _probe_default),
+    ("tanker_watch",    "Tanker watch (AIS)",     TTL_TANKER_WATCH,  _probe_available),
+    ("spreads_history", "Spreads history",        TTL_SPREADS_HIST,  _probe_default),
+    ("seasonality",     "Seasonality",            TTL_SPREADS_HIST,  _probe_default),
+    ("eia_surprise",    "EIA Surprise tracker",   TTL_EIA_SURPRISE,  _probe_default),
+    ("forward_cover",   "Forward cover",          TTL_EIA_SURPRISE,  _probe_default),
+    ("ovx",             "CBOE OVX (FRED)",        TTL_OVX,           _probe_default),
+    ("curve_regime",    "Curve regime 15y",       TTL_CURVE_REGIME,  _probe_available),
+    ("order_flow",      "Order flow (desk)",      TTL_ORDER_FLOW,    _probe_available),
+    ("jodi",            "JODI-Oil",               TTL_JODI,          _probe_available),
+    ("gdelt_tone",      "GDELT tone",             TTL_GDELT_TONE,    _probe_default),
+    ("marketaux",       "MarketAux news",         TTL_MARKETAUX,     _probe_articles),
+    ("analogs",         "Pattern analogs",        TTL_ANALOGS,       _probe_available),
+]
+
+
+def _read_cache_row(key: str):
+    """Return (value_dict_or_None, updated_at_epoch_or_None) without touching TTL."""
+    try:
+        c = _cache_conn()
+        row = c.execute("SELECT value_json, updated_at FROM cache WHERE key=?", (key,)).fetchone()
+        if not row:
+            return (None, None)
+        import json as _json
+        return (_json.loads(row[0]), float(row[1]))
+    except Exception:
+        return (None, None)
+
+
+@app.route("/api/health-detail")
+def health_detail():
+    """
+    Per-stream health snapshot. Status codes:
+      up    — fresh cache, payload looks healthy
+      stale — cache present but flagged stale OR older than 3x its TTL
+      down  — no cache row at all OR probe says "down"
+    """
+    now_ts = time.time()
+    streams = []
+    counts  = {"up": 0, "stale": 0, "down": 0}
+    for key, label, ttl, probe in _HEALTH_STREAMS:
+        value, updated = _read_cache_row(key)
+        age = int(now_ts - updated) if updated else None
+        # Run the per-stream probe
+        if value is None:
+            status, detail = ("down", "no cached value yet")
+        else:
+            status, detail = probe(value)
+        # Promote to "stale" if cache exists but is way past its TTL
+        if status == "up" and age is not None and age > ttl * 3:
+            status, detail = ("stale", f"age {age}s > 3x ttl {ttl}s")
+        counts[status] += 1
+        streams.append({
+            "key":     key,
+            "label":   label,
+            "status":  status,
+            "detail":  detail,
+            "age_s":   age,
+            "ttl_s":   ttl,
+        })
+    overall = "ok" if counts["down"] == 0 and counts["stale"] == 0 \
+              else "degraded" if counts["down"] == 0 else "down"
+    return jsonify({
+        "data": {
+            "overall":   overall,
+            "counts":    counts,
+            "total":     len(streams),
+            "streams":   streams,
+        },
+        "timestamp": _now(),
+    })
 
 
 
@@ -962,6 +1401,55 @@ def forward_cover_route():
     return jsonify({"data": data, "timestamp": _now()})
 
 
+@app.route("/api/ovx")
+def ovx_route():
+    """CBOE OVX (real implied vol for crude) via FRED."""
+    data = _fetch_ovx()
+    return jsonify({"data": data, "timestamp": _now()})
+
+
+@app.route("/api/curve-regime")
+def curve_regime_route():
+    """15-year Brent M1-M12 spread percentile & regime classification."""
+    data = _fetch_curve_regime()
+    return jsonify({"data": data, "timestamp": _now()})
+
+
+@app.route("/api/order-flow")
+def order_flow_route():
+    """Daily buy/sell volume imbalance per Brent contract."""
+    data = _fetch_order_flow()
+    return jsonify({"data": data, "timestamp": _now()})
+
+
+@app.route("/api/jodi")
+def jodi_route():
+    """JODI-Oil OPEC+ monthly crude production."""
+    data = _fetch_jodi()
+    return jsonify({"data": data, "timestamp": _now()})
+
+
+@app.route("/api/gdelt-tone")
+def gdelt_tone_route():
+    """GDELT GKG aggregate tone for energy themes (geo-risk input)."""
+    data = _fetch_gdelt_tone()
+    return jsonify({"data": data, "timestamp": _now()})
+
+
+@app.route("/api/marketaux")
+def marketaux_route():
+    """MarketAux energy-industry news (secondary news source)."""
+    data = _fetch_marketaux()
+    return jsonify({"data": data, "timestamp": _now()})
+
+
+@app.route("/api/analogs")
+def analogs_route():
+    """stumpy matrix-profile analogs vs the current 60-day price window."""
+    data = _fetch_analogs()
+    return jsonify({"data": data, "timestamp": _now()})
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # RAG chat — Q&A grounded in the OilMacroTrading curriculum + live snapshot
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1040,6 +1528,13 @@ def all_data():
         "seasonality":    {"data": _fetch_seasonality()},
         "eia_surprise":   {"data": _fetch_eia_surprise()},
         "forward_cover":  {"data": _fetch_forward_cover()},
+        "ovx":            {"data": _fetch_ovx()},
+        "curve_regime":   {"data": _fetch_curve_regime()},
+        "order_flow":     {"data": _fetch_order_flow()},
+        "jodi":           {"data": _fetch_jodi()},
+        "gdelt_tone":     {"data": _fetch_gdelt_tone()},
+        "marketaux":      {"data": _fetch_marketaux()},
+        "analogs":        {"data": _fetch_analogs()},
         "timestamp":      _now(),
     })
 
@@ -1108,23 +1603,13 @@ def warm_cache():
     except Exception as e:
         log.error(f"✗ term_structure: {e}")
 
-    # Step 3 — Fundamentals (one Apify call for geo_risk)
+    # Step 3 — Fundamentals (uses the single source-of-truth builder so the
+    # cache always matches the shape that /api/fundamentals expects, including
+    # opec_jodi, curve_regime, order_flow.)
     try:
-        from fetchers.eia import get_opec_eia_production, get_spark_dark_spread
-        _wc_prices  = get_cached("prices", TTL_PRICES) or {}
-        _wc_hh      = _wc_prices.get("henry_hub", {}).get("price") if _wc_prices else None
-        set_cache("fundamentals", {
-            "inventory":   get_inventory_vs_seasonal(),
-            "snapshot":    get_inventory_snapshot(),
-            "cot":         get_positioning_percentile(),
-            "opec":        get_opec_summary(),
-            "rig_count":   get_rig_count(),
-            "geo_risk":    calculate_geo_risk(),
-            "seasonality": get_seasonality(),
-            "opec_eia":    get_opec_eia_production(),
-            "spark_dark":  get_spark_dark_spread(_wc_hh),
-            "timestamp":   datetime.now().isoformat(),
-        })
+        _wc_prices = get_cached("prices", TTL_PRICES) or {}
+        _wc_hh     = _wc_prices.get("henry_hub", {}).get("price") if _wc_prices else None
+        set_cache("fundamentals", _build_fundamentals(_wc_hh))
         log.info("✓ fundamentals")
     except Exception as e:
         log.error(f"✗ fundamentals: {e}")

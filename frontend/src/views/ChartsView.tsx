@@ -167,6 +167,8 @@ export function ChartsView({ all, history, ohlcv }: { all: any; history: any; oh
       <Panel
         title={asset === 'brent' ? 'Brent Crude · ICE' : 'WTI Crude · NYMEX'}
         subtitle="Intraday OHLCV · 5m"
+        source="yfinance_ohlcv"
+        dataTimestamp={q?.timestamp}
         right={
           <div className="flex items-center gap-2">
             {q && (
@@ -199,7 +201,7 @@ export function ChartsView({ all, history, ohlcv }: { all: any; history: any; oh
 
       {/* Forward curve + evolution */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <Panel title="Forward Curve" subtitle="M1 → M12 · Brent vs WTI">
+        <Panel title="Forward Curve" subtitle="M1 → M12 · Brent vs WTI" source="curve_blend" dataTimestamp={curve?.timestamp}>
           <CurveChart curve={curve} />
         </Panel>
         <CurveEvolutionChart
