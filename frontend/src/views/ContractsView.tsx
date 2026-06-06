@@ -38,6 +38,7 @@ function ContractCard({
       title={`${spec.name}`}
       subtitle={`${spec.bloomberg} · ${spec.exchangeShort}`}
       accent={rollSoon ? 'bear' : 'gold'}
+      source="static_reference"
       right={
         <div className="flex items-center gap-1.5">
           {sessionOpen ? (
@@ -186,7 +187,7 @@ function UnitConverter() {
   useMemo(() => fromBbl(parseFloat(bbl || '0')), []);  // eslint-disable-line
 
   return (
-    <Panel title="Unit Converter" subtitle="$/bbl ↔ $/gallon ↔ $/MT" accent="blue" right={<ArrowRightLeft className="w-4 h-4 text-text-tertiary" />}>
+    <Panel title="Unit Converter" subtitle="$/bbl ↔ $/gallon ↔ $/MT" accent="blue" source="static_reference" right={<ArrowRightLeft className="w-4 h-4 text-text-tertiary" />}>
       <div className="space-y-3">
         <div>
           <label className="text-[10px] font-mono uppercase tracking-widest text-text-tertiary">Dollars per barrel</label>
@@ -246,6 +247,7 @@ function CrackRatioCalculator() {
     <Panel
       title="3-2-1 Crack Sizing"
       subtitle="balanced lot ratio for refinery margin trade"
+      source="static_reference"
       accent="gold"
       right={<Layers className="w-4 h-4 text-text-tertiary" />}
     >
@@ -282,7 +284,7 @@ export function ContractsView({ all }: { all: any }) {
   return (
     <div className="space-y-4">
       {/* Summary strip */}
-      <Panel title="Contract Reference · 5 Core Energy Futures" subtitle="curriculum chapter 11 — desk reference" accent="gold">
+      <Panel title="Contract Reference · 5 Core Energy Futures" subtitle="curriculum chapter 11 — desk reference" accent="gold" source="static_reference">
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-[10.5px] font-mono">
           {CONTRACTS.map(c => {
             const pkey = priceMap[c.key];
@@ -328,7 +330,7 @@ export function ContractsView({ all }: { all: any }) {
       </div>
 
       {/* Cheat-sheet link */}
-      <Panel title="Cross-Contract Spread Quick Reference" subtitle="the 3 spreads every desk watches" accent="blue">
+      <Panel title="Cross-Contract Spread Quick Reference" subtitle="the 3 spreads every desk watches" accent="blue" source="static_reference">
         <div className="space-y-2 text-[11px] font-mono">
           <div className="p-2 bg-bg-card/50 rounded flex items-start gap-3">
             <ExternalLink className="w-3 h-3 mt-1 text-gold flex-shrink-0" />

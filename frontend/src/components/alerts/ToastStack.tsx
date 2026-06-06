@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import clsx from 'clsx';
-import { AlertTriangle, AlertOctagon, Info, X, Volume2, VolumeX, BellOff, Bell } from 'lucide-react';
+import { AlertTriangle, AlertOctagon, Info, X, Volume2, VolumeX, BellOff, Bell, Play } from 'lucide-react';
 
 /**
  * Pop-up alert toast system.
@@ -243,7 +243,10 @@ function ToastCard({ t, onDismiss }: { t: Toast; onDismiss: () => void }) {
   );
 }
 
-export function ToastStack({ alerts }: { alerts: Alert[] | null | undefined }) {
+export function ToastStack({ alerts, news }: {
+  alerts: Alert[] | null | undefined;
+  news?: { articles?: any[]; composite_sentiment?: any } | null;
+}) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [soundOn, setSoundOn] = useState<boolean>(() => loadJSON<boolean>(STORAGE_SOUND, true));
   const [browserOn, setBrowserOn] = useState<boolean>(() => loadJSON<boolean>(STORAGE_BROWSER, false));
@@ -341,7 +344,73 @@ export function ToastStack({ alerts }: { alerts: Alert[] | null | undefined }) {
   return createPortal(
     <>
       {/* Floating settings widget — small, top-right of viewport */}
-      <div className="fixed top-20 right-5 z-[90] flex gap-1.5 bg-bg-surface/80 backdrop-blur-md border border-border rounded-full px-2 py-1 shadow-lg">
+      <div className="fixed top-20 right-5 z-[90] flex items-center gap-1.5 bg-bg-surface/80 backdrop-blur-md border border-border rounded-full px-2 py-1 shadow-lg">
+        {(() => {
+          // ── Pick the best headline to read aloud, in priority order ───────
+          //   1. Latest NEWS_BREAKING alert (critical / warning) — from /api/alerts
+          //   2. Most-negative FinBERT-scored article from /api/news.articles
+          //   3. Most-recent article from /api/news.articles
+          // If none exists, hide the button.
+          const breakingAlert = (alerts ?? []).slice().reverse().find(
+            (a) => a?.type === 'NEWS_BREAKING' && (a?.severity === 'critical' || a?.severity === 'warning'),
+          );
+
+          let speakSource: Toast | null = null;
+          let label = 'Replay';
+          let tip   = '';
+
+          if (breakingAlert) {
+            speakSource = {
+              ...breakingAlert,
+              _key:     breakingAlert.id,
+              _firedAt: Date.now(),
+              _duration: durationFor(breakingAlert.severity),
+            };
+            tip = `Replay breaking alert: ${(breakingAlert.message ?? '').slice(0, 100)}${(breakingAlert.message ?? '').length > 100 ? '…' : ''}`;
+            label = 'Replay alert';
+          } else {
+            const articles = news?.articles ?? [];
+            if (articles.length > 0) {
+              // Most-negative first; tiebreak by recency
+              const ranked = articles.slice().sort((a, b) => {
+                const sa = typeof a.sentiment_score === 'number' ? a.sentiment_score : 0;
+                const sb = typeof b.sentiment_score === 'number' ? b.sentiment_score : 0;
+                if (sa !== sb) return sa - sb;
+                const ta = Date.parse(a.published_at || a.published || 0) || 0;
+                const tb = Date.parse(b.published_at || b.published || 0) || 0;
+                return tb - ta;
+              });
+              const top = ranked[0];
+              const title = top.title || top.headline || 'Latest oil headline';
+              speakSource = {
+                id:        `news-${title.slice(0, 40)}`,
+                type:      'NEWS_BREAKING',
+                severity:  (typeof top.sentiment_score === 'number' && top.sentiment_score < -0.15) ? 'warning' : 'info',
+                message:   `${title}${top.source ? ` — ${top.source}` : ''}`,
+                timestamp: top.published_at || top.published || new Date().toISOString(),
+                _key:      'manual-news-replay',
+                _firedAt:  Date.now(),
+                _duration: 8000,
+              };
+              tip = `Replay latest headline: ${title.slice(0, 100)}${title.length > 100 ? '…' : ''}`;
+              label = 'Replay news';
+            }
+          }
+
+          if (!speakSource) return null;
+          const onReplay = () => speakAlert(speakSource);
+
+          return (
+            <button
+              onClick={onReplay}
+              title={tip}
+              className="flex items-center gap-1.5 pl-1.5 pr-2 py-1 rounded-full bg-gold/15 hover:bg-gold/25 transition-colors text-gold"
+            >
+              <Play className="w-3 h-3" />
+              <span className="text-[10px] font-mono uppercase tracking-widest">{label}</span>
+            </button>
+          );
+        })()}
         <button
           onClick={toggleSound}
           title={soundOn ? 'Mute squawk (chime + spoken headlines)' : 'Enable squawk (chime + spoken headlines)'}

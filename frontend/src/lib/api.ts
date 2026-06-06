@@ -12,6 +12,27 @@ async function getJSON<T = any>(path: string, timeoutMs = 90000): Promise<T> {
   }
 }
 
+async function postJSON<T = any>(path: string, body: any = {}, timeoutMs = 30000): Promise<T> {
+  const ctrl = new AbortController();
+  const id = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body ?? {}),
+      signal: ctrl.signal,
+    });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const err = (j && (j.error || (j.data && j.data.error))) || `HTTP ${res.status}`;
+      throw new Error(String(err));
+    }
+    return (j && typeof j === 'object' && 'data' in j ? j.data : j) as T;
+  } finally {
+    clearTimeout(id);
+  }
+}
+
 /**
  * Normalize the `/api/all` response so every view sees a flat structure.
  * Server wraps each section as `{data: ...}` (and fair_value as `{brent, wti}`),
@@ -42,12 +63,22 @@ function normalizeAll(raw: any): any {
     seasonality:     unwrap(raw.seasonality),
     eia_surprise:    unwrap(raw.eia_surprise),
     forward_cover:   unwrap(raw.forward_cover),
+    // Phase A additions
+    ovx:             unwrap(raw.ovx),
+    curve_regime:    unwrap(raw.curve_regime),
+    order_flow:      unwrap(raw.order_flow),
+    jodi:            unwrap(raw.jodi),
+    gdelt_tone:      unwrap(raw.gdelt_tone),
+    // Phase B additions
+    marketaux:       unwrap(raw.marketaux),
+    analogs:         unwrap(raw.analogs),
     timestamp:       raw.timestamp,
   };
 }
 
 export const api = {
   health:        () => getJSON('/api/health'),
+  healthDetail:  () => getJSON('/api/health-detail'),
   prices:        () => getJSON('/api/prices'),
   ohlcv:         () => getJSON('/api/ohlcv'),
   history:       () => getJSON('/api/history'),
@@ -72,6 +103,19 @@ export const api = {
   seasonality:   () => getJSON('/api/seasonality'),
   eiaSurprise:   () => getJSON('/api/eia-surprise'),
   forwardCover:  () => getJSON('/api/forward-cover'),
+  ovx:           () => getJSON('/api/ovx'),
+  curveRegime:   () => getJSON('/api/curve-regime'),
+  orderFlow:     () => getJSON('/api/order-flow'),
+  jodi:          () => getJSON('/api/jodi'),
+  gdeltTone:     () => getJSON('/api/gdelt-tone'),
+  marketaux:     () => getJSON('/api/marketaux'),
+  analogs:       () => getJSON('/api/analogs'),
+  // Paper trading
+  paperPositions:  () => getJSON('/api/paper/positions'),
+  paperPerformance:() => getJSON('/api/paper/performance'),
+  paperPush:       (body: any = {}) => postJSON('/api/paper/push', body),
+  paperClose:      (id: number, body: any = {}) => postJSON(`/api/paper/close/${id}`, body),
+  paperClear:      (scope: 'all' | 'closed' = 'closed') => postJSON('/api/paper/clear', { scope }),
   all:           async () => normalizeAll(await getJSON('/api/all', 120000)),
 };
 

@@ -28,7 +28,7 @@ function HeatmapPanel({ ts }: { ts: any }) {
     return <Panel title="Term Heatmap"><SkeletonRows rows={5} /></Panel>;
   }
   return (
-    <Panel title="5-Product Correlation" subtitle={`M1 returns · ${raw.data_days ?? 90}d`}>
+    <Panel title="5-Product Correlation" subtitle={`M1 returns · ${raw.data_days ?? 90}d`} source="term_structure_calc" dataTimestamp={ts?.timestamp}>
       <div className="grid gap-1.5" style={{ gridTemplateColumns: `80px repeat(${labels.length}, 1fr)` }}>
         <div />
         {labels.map(l => <div key={l} className="text-[9px] font-mono uppercase tracking-widest text-text-tertiary text-center pb-1">{l}</div>)}
@@ -71,7 +71,7 @@ function StripTable({ ts }: { ts: any }) {
   const products = Object.keys(strips);
   const months = ['M1','M2','M3','M4','M5','M6','M7','M8','M9','M10','M11','M12'];
   return (
-    <Panel title="Forward Strip Matrix" subtitle="M1 → M12 settlements">
+    <Panel title="Forward Strip Matrix" subtitle="M1 → M12 settlements" source="multi_curve" dataTimestamp={ts?.timestamp}>
       <div className="overflow-x-auto">
         <table className="w-full text-[10.5px] font-mono tabular">
           <thead>
@@ -124,7 +124,7 @@ function NormalizedCurve({ ts }: { ts: any }) {
   });
 
   return (
-    <Panel title="Normalized Forward Curves" subtitle="% deviation from M1">
+    <Panel title="Normalized Forward Curves" subtitle="% deviation from M1" source="multi_curve" dataTimestamp={ts?.timestamp}>
       <ResponsiveContainer width="100%" height={340}>
         <LineChart data={data} margin={{ top: 10, right: 20, bottom: 5, left: -10 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#1c2745" />

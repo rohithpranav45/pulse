@@ -147,7 +147,28 @@ def get_live_prices() -> dict:
             result[code] = entry
 
         except Exception as exc:
-            print(f"  [WARN] {code} ({symbol}): {exc} — returning stale value")
+            print(f"  [WARN] {code} ({symbol}): {exc} — trying Stooq fallback")
+            # Try Stooq as a second-source feed before giving up
+            try:
+                from fetchers.stooq import get_stooq_quote, _STOOQ_MAP
+                stooq_sym = _STOOQ_MAP.get(code)
+                q = get_stooq_quote(stooq_sym) if stooq_sym else None
+                if q and q.get("price"):
+                    entry = {
+                        "price":      q["price"],
+                        "change_abs": q["change_abs"],
+                        "change_pct": q["change_pct"],
+                        "high":       q.get("high",  q["price"]),
+                        "low":        q.get("low",   q["price"]),
+                        "timestamp":  timestamp,
+                        "stale":      False,
+                        "source":     "stooq.com (fallback)",
+                    }
+                    _last_known[code] = entry
+                    result[code] = entry
+                    continue
+            except Exception:
+                pass
             if code in _last_known:
                 stale_entry = dict(_last_known[code])
                 stale_entry["stale"] = True

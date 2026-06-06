@@ -187,26 +187,71 @@ def calculate_fair_value(asset: str = "brent") -> dict:
     from fetchers.opec      import get_compliance_table
     from fetchers.geo_risk  import calculate_geo_risk
 
-    # ── Step 1 — gather inputs ────────────────────────────────────────────────
-    prices   = get_live_prices()
-    spot     = float(prices[asset]["price"])
+    # ── Step 1 — gather inputs (each guarded so one failure doesn't kill all) ─
+    degraded = []   # collect names of components that fell back to neutral
 
-    r        = get_fed_rate()
-    c        = 0.006                    # storage cost per month, annualised
+    # Spot price — REQUIRED. Without spot we can't compute anything.
+    try:
+        prices = get_live_prices() or {}
+        spot   = float(prices.get(asset, {}).get("price") or 0)
+    except Exception:
+        spot = 0.0
+    if not spot or spot <= 0:
+        return {
+            "asset":           asset.upper(),
+            "live_price":      None,
+            "fair_value":      None,
+            "deviation_pct":   None,
+            "deviation_label": "UNAVAILABLE",
+            "components":      {},
+            "inputs":          {},
+            "degraded":        True,
+            "error":           "spot price unavailable",
+            "timestamp":       datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        }
 
-    inv      = get_inventory_vs_seasonal()
-    inv_dev_pct = inv["crude_stocks"].get("deviation_pct") or 0.0
+    # Fed rate
+    try:
+        r = get_fed_rate()
+    except Exception:
+        r = 0.053
+        degraded.append("fed_rate")
+    c = 0.006                    # storage cost per month, annualised
 
-    y        = calculate_convenience_yield(inv_dev_pct)
-    T        = 30.0 / 365.0            # front-month approximation
+    # Inventory deviation
+    try:
+        inv = get_inventory_vs_seasonal() or {}
+        inv_dev_pct = float((inv.get("crude_stocks", {}) or {}).get("deviation_pct") or 0.0)
+    except Exception:
+        inv_dev_pct = 0.0
+        degraded.append("inventory")
 
-    opec     = get_compliance_table()
-    compliance = opec["overall_compliance_rate"]
+    y = calculate_convenience_yield(inv_dev_pct)
+    T = 30.0 / 365.0
 
-    dxy_dev  = get_dxy_deviation()
+    # OPEC compliance — legacy static table is most calibrated for this model.
+    # JODI is added separately in the fundamentals payload for transparency.
+    try:
+        opec = get_compliance_table() or {}
+        compliance = float(opec.get("overall_compliance_rate") or 1.0)
+    except Exception:
+        compliance = 1.0
+        degraded.append("opec")
 
-    geo      = calculate_geo_risk()
-    geo_index = int(geo["index"])
+    # DXY deviation from 30d avg
+    try:
+        dxy_dev = get_dxy_deviation()
+    except Exception:
+        dxy_dev = 0.0
+        degraded.append("dxy")
+
+    # Geo risk
+    try:
+        geo = calculate_geo_risk() or {}
+        geo_index = int(geo.get("index") or 0)
+    except Exception:
+        geo_index = 30
+        degraded.append("geo_risk")
 
     # ── Step 2 — cost-of-carry base ───────────────────────────────────────────
     base_fv  = spot * math.exp((r + c - y) * T)
@@ -274,6 +319,8 @@ def calculate_fair_value(asset: str = "brent") -> dict:
             "dxy_deviation_30d":  round(dxy_dev,     4),
             "geo_index":          geo_index,
         },
+        "degraded":  bool(degraded),
+        "degraded_components": degraded,
         "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
 

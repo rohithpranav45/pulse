@@ -40,7 +40,7 @@ export function SpreadChart({
 }: Props) {
   if (!series || series.length < 5) {
     return (
-      <Panel title={title} subtitle={subtitle}>
+      <Panel title={title} subtitle={subtitle} source="yfinance_daily">
         <div className="skeleton w-full" style={{ height }} />
       </Panel>
     );
@@ -74,6 +74,8 @@ export function SpreadChart({
     <Panel
       title={title}
       subtitle={subtitle ?? `${series.length} sessions · ${unit}`}
+      source="yfinance_daily"
+      dataTimestamp={series[series.length - 1]?.date ?? series[series.length - 1]?.t}
       right={
         z !== null && (
           <Chip tone={tone}>

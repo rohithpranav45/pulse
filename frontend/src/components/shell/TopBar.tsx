@@ -4,6 +4,8 @@ import { Chip } from '@/components/ui/Chip';
 import { TICKER_KEYS } from '@/lib/api';
 import { Activity, RefreshCw, Maximize2, Printer, HelpCircle } from 'lucide-react';
 import { resetOnboarding } from '@/components/onboarding/OnboardingTour';
+import { ProvenanceLegend } from '@/components/shell/ProvenanceLegend';
+import { HealthPill } from '@/components/shell/HealthPill';
 import clsx from 'clsx';
 
 type Quote = { price: number; change_abs?: number; change_pct?: number };
@@ -69,7 +71,8 @@ export function TopBar({ ticker, onRefresh, refreshing }: { ticker: TickerData |
       </div>
 
       {/* Right cluster */}
-      <div className="flex items-center gap-4 flex-shrink-0">
+      <div className="flex items-center gap-3 flex-shrink-0">
+        <HealthPill />
         <MarketStatus />
         <div className="flex border-l border-border pl-4">
           <TimeChip tz="America/New_York" label="NYC" />
@@ -97,6 +100,7 @@ export function TopBar({ ticker, onRefresh, refreshing }: { ticker: TickerData |
         >
           <Maximize2 className="w-4 h-4" />
         </button>
+        <ProvenanceLegend />
         <button
           onClick={() => resetOnboarding()}
           title="Restart onboarding tour"

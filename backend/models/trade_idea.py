@@ -73,14 +73,8 @@ def _key_risk(indicators: list, dir_int: int) -> str:
 
 def _rule_based_brief(ctx: dict) -> str:
     """
-    Produce a professional analyst-style brief from structured context.
-
-    Target narrative:
-      "Brent prints backwardation at +$0.43 M1-M2 with inventory 3.2% below 5Y
-       average. COT net long at 78th percentile. 3-2-1 crack at $28.4 below
-       seasonal norm ($31.2) — refinery margin headwind. Conflicting signals:
-       structural support from draw momentum offset by crowded positioning.
-       Bias: long bias with reduced conviction pending crack recovery."
+    Produce a 5-bullet context brief from structured data.
+    Used as the deterministic fallback when Groq + Ollama are both unavailable.
     """
     px         = ctx.get("brent_price", 0)
     m1m2       = ctx.get("m1m2_spread")        # float | None
@@ -94,96 +88,82 @@ def _rule_based_brief(ctx: dict) -> str:
     key_risk   = ctx.get("key_risk", "")
     y10        = ctx.get("yield_10y")
 
-    sentences = []
+    bullets: list[str] = []
 
-    # ── Sentence 1: Curve structure + inventory ───────────────────────────────
+    # 1 — Curve
     if m1m2 is not None and abs(m1m2) > 0.05:
         sign      = "+" if m1m2 > 0 else "-"
-        struct_w  = struct.lower() if struct else ("backwardation" if m1m2 > 0 else "contango")
-        s1 = f"Brent prints {struct_w} at {sign}${abs(m1m2):.2f} M1-M2"
+        struct_w  = (struct.lower() if struct else
+                     ("backwardation" if m1m2 > 0 else "contango"))
+        bullets.append(f"Curve: {struct_w} at {sign}${abs(m1m2):.2f} M1-M2 (Brent ${px:.2f}).")
     else:
-        s1 = f"Brent at ${px:.2f}"
+        bullets.append(f"Curve: flat / undefined (Brent ${px:.2f}).")
+
+    # 2 — Inventory
     if inv_pct is not None:
         ab = "below" if inv_pct < 0 else "above"
-        s1 += f" with inventory {abs(inv_pct):.1f}% {ab} 5Y average"
-    sentences.append(s1 + ".")
+        tag = "tight" if inv_pct < -3 else "ample" if inv_pct > 3 else "balanced"
+        bullets.append(f"Inventory: {abs(inv_pct):.1f}% {ab} 5Y average — {tag}.")
+    else:
+        bullets.append("Inventory: data unavailable.")
 
-    # ── Sentence 2: COT ───────────────────────────────────────────────────────
+    # 3 — Positioning + crack
     if cot is not None:
-        if cot > 75:
-            sentences.append(
-                f"COT net long at {cot:.0f}th percentile — speculator positioning crowded; unwind risk elevated.")
-        elif cot < 25:
-            sentences.append(
-                f"COT net short at {cot:.0f}th percentile — washed-out positioning creates mean-reversion upside.")
-        else:
-            sentences.append(f"COT speculator net long at {cot:.0f}th percentile — positioning neutral.")
-
-    # ── Sentence 3: Crack spread ──────────────────────────────────────────────
+        cot_tag = ("crowded long" if cot > 75 else
+                   "washed-out" if cot < 25 else "neutral")
+        positioning = f"COT speculator at {cot:.0f}th percentile — {cot_tag}"
+    else:
+        positioning = "COT positioning unavailable"
     if crack is not None and crack_avg is not None:
         diff = crack - crack_avg
-        ab2  = "above" if diff >= 0 else "below"
-        impl = (
-            "strong refinery demand supports crude pull" if diff > 2
-            else "refinery margin headwind may dampen crude demand pull" if diff < -2
-            else "refinery margins near seasonal norm"
-        )
-        sentences.append(
-            f"3-2-1 crack at ${crack:.1f} {ab2} seasonal norm (${crack_avg:.1f}) — {impl}.")
+        crack_tag = ("wide" if diff > 2 else "compressed" if diff < -2 else "near norm")
+        positioning += f"; 3-2-1 crack ${crack:.1f} ({crack_tag} vs ${crack_avg:.1f} 1Y avg)"
+    bullets.append(f"Positioning: {positioning}.")
 
-    # ── Sentence 4: Conflicting signals ──────────────────────────────────────
-    bull, bear = [], []
-    if inv_pct is not None and inv_pct < -3:
-        bull.append("inventory draw momentum")
-    elif inv_pct is not None and inv_pct > 3:
-        bear.append("inventory surplus")
-    if m1m2 is not None and m1m2 > 0.3:
-        bull.append("backwardation support")
-    elif m1m2 is not None and m1m2 < -0.5:
-        bear.append("contango drag")
-    if cot is not None and cot > 75:
-        bear.append("speculator crowding")
-    elif cot is not None and cot < 25:
-        bull.append("short-covering potential")
-    if crack is not None and crack_avg is not None:
-        if crack - crack_avg > 2:
-            bull.append("wide refinery margins")
-        elif crack - crack_avg < -2:
-            bear.append("compressed refinery margins")
-    if isinstance(y10, (int, float)) and y10 > 4.5:
-        bear.append("rate headwind")
-
-    if bull and bear:
-        sentences.append(
-            f"Conflicting signals: structural support from {', '.join(bull[:2])} "
-            f"offset by {', '.join(bear[:2])}.")
-    elif bear and not bull:
-        sentences.append(f"Headwinds: {', '.join(bear[:3])}.")
-    elif bull and not bear:
-        sentences.append(f"Supporting signals: {', '.join(bull[:3])}.")
-
-    # ── Sentence 5: Bias ──────────────────────────────────────────────────────
-    conv_map = {"HIGH": "high conviction", "MODERATE": "moderate conviction", "LOW": "reduced conviction"}
-    conv_str = conv_map.get(conviction, "reduced conviction")
-    if key_risk:
-        qualifier = key_risk[:55].lower().rstrip(".")
-        sentences.append(f"Bias: {direction.lower()} bias with {conv_str} pending {qualifier}.")
+    # 4 — Macro
+    macro_bits = []
+    if isinstance(y10, (int, float)):
+        macro_bits.append(f"10Y yield {y10:.2f}%")
+    cpi = ctx.get("cpi")
+    if isinstance(cpi, (int, float)):
+        macro_bits.append(f"CPI YoY {cpi:.1f}%")
+    if macro_bits:
+        bullets.append(f"Macro: {', '.join(macro_bits)}.")
     else:
-        sentences.append(f"Bias: {direction.lower()} bias with {conv_str}.")
+        bullets.append("Macro: feed warming.")
 
-    return " ".join(sentences)
+    # 5 — Bias (read as label, not action)
+    bias_map = {
+        "LONG":    "bullish",
+        "SHORT":   "bearish",
+        "NEUTRAL": "neutral",
+    }
+    bias_word = bias_map.get(direction.upper(), "neutral")
+    conv_map  = {"HIGH": "high", "MODERATE": "moderate", "LOW": "low"}
+    conv_str  = conv_map.get(conviction, "low")
+    if key_risk:
+        bullets.append(f"Bias: {bias_word} read, {conv_str} conviction — key risk: {key_risk[:80]}.")
+    else:
+        bullets.append(f"Bias: {bias_word} read, {conv_str} conviction.")
+
+    return "\n".join(f"- {b}" for b in bullets)
 
 
-def _ollama_brief(ctx: dict) -> str:
-    """
-    POST to local Ollama llama3 with an enriched structured prompt.
-    Falls back to _rule_based_brief() on any error (connection refused, timeout, etc.).
-    """
-    prompt = (
-        "You are a concise senior energy market analyst at a commodity trading firm. "
-        "Write a 120-140 word morning brief in plain prose — no bullet points, no headers. "
-        "Lead with the curve structure and key data, identify conflicting signals, then give "
-        "a directional bias. Be specific: quote prices, percentiles, percentages.\n\n"
+# (legacy prose template removed — superseded by the bullet-point format above)
+
+
+def _build_brief_prompt(ctx: dict) -> str:
+    """Shared prompt used by both Ollama and Groq paths."""
+    return (
+        "You are a senior energy market analyst writing context for a trader. "
+        "Output EXACTLY 5 short bullet points, each one line, each starting with '- '. "
+        "Be informational — describe conditions, do NOT recommend buy/sell actions. "
+        "Use specific numbers. Order bullets by importance:\n"
+        "  1. CURVE — structure + M1-M2 spread\n"
+        "  2. INVENTORY — vs 5Y average\n"
+        "  3. POSITIONING — COT percentile + crack spread context\n"
+        "  4. MACRO — yield/CPI/dollar/IV context\n"
+        "  5. BIAS — model bias label (bullish/bearish/neutral), conviction level, and the single biggest risk.\n\n"
         "Data context:\n"
         f"  Brent spot:          ${ctx.get('brent_price', 0):.2f}/bbl\n"
         f"  Curve structure:     M1-M2 {ctx.get('m1m2_spread', '—')} "
@@ -193,14 +173,71 @@ def _ollama_brief(ctx: dict) -> str:
         f"  3-2-1 crack:         ${ctx.get('crack_321', '—')} "
         f"| 1Y avg ${ctx.get('crack_avg', '—')} | {ctx.get('crack_signal', 'NORMAL')}\n"
         f"  EIA crude change:    {ctx.get('eia_change', '—')} Mb wk/wk\n"
-        f"  Signal / conviction: {ctx.get('signal', '—')} / {ctx.get('conviction', '—')}\n"
+        f"  Bias label:          {ctx.get('signal', '—')} / conviction {ctx.get('conviction', '—')}\n"
         f"  Pattern:             {ctx.get('pattern', '—')}\n"
         f"  10Y yield:           {ctx.get('yield_10y', '—')}%  "
         f"| CPI YoY: {ctx.get('cpi', '—')}%\n"
-        f"  Direction:           {ctx.get('direction', 'NEUTRAL')}\n"
         f"  Key risk:            {ctx.get('key_risk', '—')}\n\n"
-        "End the brief with: 'Bias: [direction] bias with [conviction] — [key qualifier].'"
+        "Output ONLY the 5 bullets, nothing else. No preamble, no closing sentence."
     )
+
+
+def _groq_brief(ctx: dict) -> tuple[str | None, str]:
+    """
+    Call Groq's free-tier llama3-70b for a higher-quality brief.
+    Returns (text or None, source_label).
+    Free key: https://console.groq.com/keys — env var GROQ_API_KEY.
+    """
+    key = os.getenv("GROQ_API_KEY", "").strip()
+    if not key:
+        return None, "groq-no-key"
+    try:
+        import requests
+        resp = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {key}",
+                "Content-Type":  "application/json",
+            },
+            json={
+                "model": os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
+                "messages": [
+                    {"role": "system", "content": "You are a concise senior energy market analyst. Output plain prose, 120-140 words, no bullets."},
+                    {"role": "user",   "content": _build_brief_prompt(ctx)},
+                ],
+                "temperature": 0.4,
+                "max_tokens":  450,
+            },
+            timeout=15,
+        )
+        resp.raise_for_status()
+        text = (resp.json().get("choices") or [{}])[0].get("message", {}).get("content", "").strip()
+        if len(text.split()) >= 80:
+            return text, "groq"
+        return None, "groq-too-short"
+    except Exception as exc:
+        log.info("Groq brief failed (%s) — trying Ollama", type(exc).__name__)
+        return None, f"groq-error: {type(exc).__name__}"
+
+
+def _ollama_brief(ctx: dict) -> str:
+    """
+    Source priority for the morning brief:
+      1. Groq cloud (free tier, llama-3.3-70b)  — needs GROQ_API_KEY
+      2. Local Ollama llama3                     — needs ollama daemon running
+      3. Rule-based deterministic template       — always works
+
+    The function signature stays `_ollama_brief` for backwards compatibility
+    with the existing call site; the chosen source is logged.
+    """
+    # 1) Groq first — generally higher quality + faster than local llama3
+    text, src = _groq_brief(ctx)
+    if text:
+        log.info("morning brief source: %s", src)
+        return text
+
+    # 2) Local Ollama
+    prompt = _build_brief_prompt(ctx)
     try:
         import requests
         resp = requests.post(
@@ -210,11 +247,14 @@ def _ollama_brief(ctx: dict) -> str:
         )
         resp.raise_for_status()
         text = resp.json().get("response", "").strip()
-        if len(text.split()) >= 80:   # sanity check — at least 80 words
+        if len(text.split()) >= 80:
+            log.info("morning brief source: ollama")
             return text
     except Exception as exc:
-        log.info("Ollama unavailable (%s) — using rule-based brief", type(exc).__name__)
+        log.info("Ollama unavailable (%s)", type(exc).__name__)
 
+    # 3) Rule-based fallback
+    log.info("morning brief source: rule-based")
     return _rule_based_brief(ctx)
 
 

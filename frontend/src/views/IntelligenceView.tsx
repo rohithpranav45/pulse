@@ -20,7 +20,7 @@ function CorrelationsPanel({ corr }: { corr: any }) {
   const m = corr?.matrix?.matrix ?? corr?.matrix;
   if (!m || typeof m !== 'object') return <Panel title="Correlations"><SkeletonRows rows={5} /></Panel>;
   return (
-    <Panel title="Cross-Asset Correlations" subtitle="30d rolling · Pearson">
+    <Panel title="Cross-Asset Correlations" subtitle="30d rolling · Pearson" source="correlations_calc" dataTimestamp={corr?.timestamp}>
       <div className="grid grid-cols-[60px_repeat(5,1fr)] gap-1.5">
         <div />
         {ASSETS.map(a => <div key={a} className="text-[9px] font-mono uppercase tracking-widest text-text-tertiary text-center pb-1">{LABELS[a]}</div>)}
@@ -67,6 +67,9 @@ function NewsPanel({ news }: { news: any }) {
       title="Energy News · FinBERT"
       subtitle={`${articles.length} articles`}
       accent={tone as any}
+      source={news.source_used === 'gdelt' ? 'gdelt_doc' : news.source_used === 'marketaux' ? 'marketaux' : 'news_apify'}
+      sourceNote={`Active source: ${news.source_used ?? 'unknown'}. Pipeline: GDELT → MarketAux → Apify → NewsAPI → RSS. ${news.composite_sentiment?.count ? `Sentiment via FinBERT (${news.composite_sentiment.count} articles, ${news.composite_sentiment.label}).` : ''}`}
+      dataTimestamp={news.timestamp ?? articles[0]?.published_at ?? articles[0]?.published}
       right={
         <div className="flex items-center gap-2">
           <Chip tone={tone as any}>SENTIMENT {composite >= 0 ? '+' : ''}{composite.toFixed(2)}</Chip>
@@ -149,6 +152,8 @@ function PatternsPanel({ patterns }: { patterns: any }) {
     <Panel
       title="Pattern Recognition"
       subtitle={`Brent · scipy ${confidence != null ? `· conf ${(confidence * 100).toFixed(0)}%` : ''}`}
+      source="pattern_scipy"
+      dataTimestamp={det.timestamp ?? patterns?.timestamp}
       right={patName && <Chip tone="gold">{patName}</Chip>}
     >
       {patName ? (
@@ -217,13 +222,13 @@ function AnalystWatchPanel({ watch }: { watch: any }) {
   const sources: any[] = watch.analysts ?? watch.sources ?? [];
   if (sources.length === 0) {
     return (
-      <Panel title="Analyst Watch" subtitle="warming up" right={<Activity className="w-4 h-4 text-text-tertiary" />}>
+      <Panel title="Analyst Watch" subtitle="warming up" source="nitter_rss" right={<Activity className="w-4 h-4 text-text-tertiary" />}>
         <SkeletonRows rows={4} />
       </Panel>
     );
   }
   return (
-    <Panel title="Analyst Watch" subtitle="Nitter · Truth Social" right={<Activity className="w-4 h-4 text-text-tertiary" />}>
+    <Panel title="Analyst Watch" subtitle="Nitter · Truth Social" source="nitter_rss" dataTimestamp={watch?.timestamp ?? sources[0]?.posts?.[0]?.published} right={<Activity className="w-4 h-4 text-text-tertiary" />}>
       <div className="space-y-3">
         {sources.slice(0, 3).map((src: any, i: number) => {
           const posts: any[] = src.posts ?? [];
@@ -271,6 +276,77 @@ function AnalystWatchPanel({ watch }: { watch: any }) {
   );
 }
 
+function AnalogsPanel({ analogs }: { analogs: any }) {
+  if (!analogs) return <Panel title="Pattern Analogs · matrix profile" source="analogs_stumpy"><SkeletonRows rows={4} /></Panel>;
+  if (!analogs.available) {
+    return (
+      <Panel title="Pattern Analogs · matrix profile" source="analogs_stumpy" sourceNote={analogs.error}>
+        <div className="text-[11px] font-mono text-text-tertiary leading-relaxed p-3 bg-bg-card/60 rounded">
+          <div className="text-neut font-semibold mb-1">⚠ stumpy unavailable</div>
+          <div className="text-text-muted">{analogs.error || 'Analog matching engine is not currently producing results.'}</div>
+        </div>
+      </Panel>
+    );
+  }
+  const list = analogs.analogs ?? [];
+  const avg  = analogs.avg_forward_return_pct ?? 0;
+  const bias = analogs.bias ?? 'NEUTRAL';
+  const tone: 'bull' | 'bear' | 'neut' =
+    bias === 'BULLISH' ? 'bull' : bias === 'BEARISH' ? 'bear' : 'neut';
+
+  return (
+    <Panel
+      title="Pattern Analogs · matrix profile"
+      subtitle={`stumpy · ${analogs.window_days}d window · top-${analogs.top_k}`}
+      accent={tone as any}
+      source="analogs_stumpy"
+      dataTimestamp={analogs.timestamp}
+      sourceNote={`Top ${list.length} historical windows ranked by z-normalised Euclidean distance to the current ${analogs.window_days}-day fingerprint.`}
+      right={<Chip tone={tone as any}>{bias}</Chip>}
+    >
+      <div className="mb-3 pb-3 border-b border-border/40 grid grid-cols-3 gap-3 text-center">
+        <div>
+          <div className="text-[9px] font-mono uppercase tracking-widest text-text-muted">Avg Fwd</div>
+          <div className={clsx('text-2xl font-display font-bold tabular',
+            tone === 'bull' && 'text-bull', tone === 'bear' && 'text-bear', tone === 'neut' && 'text-neut'
+          )}>{avg >= 0 ? '+' : ''}{avg.toFixed(2)}%</div>
+        </div>
+        <div>
+          <div className="text-[9px] font-mono uppercase tracking-widest text-text-muted">Horizon</div>
+          <div className="text-2xl font-display font-bold tabular text-text-secondary">{analogs.horizon_days}d</div>
+        </div>
+        <div>
+          <div className="text-[9px] font-mono uppercase tracking-widest text-text-muted">Current Window</div>
+          <div className="text-[11px] font-mono tabular text-gold leading-tight mt-1">
+            {analogs.current_window?.start_date}
+            <br/>→ {analogs.current_window?.end_date}
+          </div>
+        </div>
+      </div>
+      <div className="space-y-2">
+        {list.map((a: any, i: number) => {
+          const t: 'bull' | 'bear' | 'neut' =
+            a.forward_return_pct >  1 ? 'bull'
+            : a.forward_return_pct < -1 ? 'bear'
+            : 'neut';
+          return (
+            <div key={i} className="grid grid-cols-[18px_1fr_70px_70px] gap-2 items-baseline text-[10.5px] font-mono tabular py-1 border-b border-border/30 last:border-b-0">
+              <span className="text-text-muted">#{i + 1}</span>
+              <span className="text-text-secondary truncate">{a.start_date} → {a.end_date}</span>
+              <span className="text-text-tertiary text-right">d={a.distance?.toFixed(2)}</span>
+              <span className={clsx('text-right font-semibold',
+                t === 'bull' && 'text-bull', t === 'bear' && 'text-bear', t === 'neut' && 'text-neut'
+              )}>
+                {a.forward_return_pct >= 0 ? '+' : ''}{a.forward_return_pct?.toFixed(2)}%
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </Panel>
+  );
+}
+
 export function IntelligenceView({ all }: { all: any }) {
   return (
     <div className="space-y-4">
@@ -280,6 +356,9 @@ export function IntelligenceView({ all }: { all: any }) {
       </div>
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <PatternsPanel patterns={all?.patterns} />
+        <AnalogsPanel analogs={all?.analogs} />
+      </div>
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <AnalystWatchPanel watch={all?.analyst_watch} />
       </div>
     </div>
