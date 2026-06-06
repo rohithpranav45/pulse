@@ -51,7 +51,7 @@ export function CurveEvolutionChart({
 
   if (!current || current.length === 0) {
     return (
-      <Panel title="Forward Curve Evolution" subtitle={`${asset.toUpperCase()} · M1→M12`}>
+      <Panel title="Forward Curve Evolution" subtitle={`${asset.toUpperCase()} · M1→M12`} source="curve_blend">
         <SkeletonRows rows={6} />
       </Panel>
     );
@@ -100,6 +100,8 @@ export function CurveEvolutionChart({
     <Panel
       title="Forward Curve Evolution"
       subtitle={`${asset.toUpperCase()} · current vs prior snapshots`}
+      source="curve_blend"
+      sourceNote="Prior snapshots are stored in localStorage from past loads — they are session-local, not from a server-side history."
       right={
         structure && <Chip tone={tone}>{structure}</Chip>
       }

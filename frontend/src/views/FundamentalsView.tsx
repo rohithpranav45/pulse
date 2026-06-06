@@ -18,6 +18,8 @@ function EIAInventory({ f }: { f: any }) {
       title="EIA Inventory"
       subtitle={`Crude · ${crude.date ?? 'weekly'}`}
       accent={dev > 0 ? 'bear' : 'bull'}
+      source="eia_inv"
+      dataTimestamp={crude.date}
       right={<Chip tone={dev > 0 ? 'bear' : 'bull'}>{crude.label?.replace('_', ' ') ?? (dev > 0 ? 'BUILD' : 'DRAW')}</Chip>}
     >
       <div className="flex items-center gap-3 mb-4">
@@ -55,7 +57,7 @@ function COTPanel({ f }: { f: any }) {
     { l: 'Heating Oil', v: cot.heating_oil?.percentile, net: cot.heating_oil?.net, label: cot.heating_oil?.label },
   ];
   return (
-    <Panel title="CFTC · COT" subtitle="3-yr percentile" accent="blue">
+    <Panel title="CFTC · COT" subtitle="3-yr percentile" accent="blue" source="cftc_cot" dataTimestamp={cot.crude_oil?.date}>
       <div className="space-y-3">
         {rows.map((r, i) => (
           <div key={i}>
@@ -84,16 +86,24 @@ function COTPanel({ f }: { f: any }) {
 
 function OPECPanel({ f }: { f: any }) {
   const opec = f?.opec;
-  const compliance = opec?.compliance;
-  if (!compliance) return <Panel title="OPEC+"><SkeletonRows rows={4} /></Panel>;
-  const members = compliance.members ?? [];
-  const totalQuota = members.reduce((s: number, m: any) => s + (m.quota ?? 0), 0);
-  const totalActual = members.reduce((s: number, m: any) => s + (m.actual ?? 0), 0);
-  const rate = totalQuota > 0 ? (totalActual / totalQuota) : null;
+  const jodi = f?.opec_jodi;
+  // Backend returns `opec.members` directly at the top level (no `compliance` wrapper).
+  // Support both shapes for resilience.
+  const members: any[] = opec?.members ?? opec?.compliance?.members ?? [];
+  if (!members.length) return <Panel title="OPEC+ Compliance" source="opec_static"><SkeletonRows rows={4} /></Panel>;
+  const totalQuota  = opec?.total_quota  ?? members.reduce((s: number, m: any) => s + (m.quota ?? 0),  0);
+  const totalActual = opec?.total_actual ?? members.reduce((s: number, m: any) => s + (m.actual ?? 0), 0);
+  const rate = opec?.overall_compliance_rate ?? (totalQuota > 0 ? totalActual / totalQuota : null);
+  const month = opec?.month ?? opec?.as_of ?? opec?.compliance?.month ?? 'monthly';
+  const jodiOk = jodi?.available && jodi?.opec_total_kbd;
   return (
     <Panel
       title="OPEC+ Compliance"
-      subtitle={compliance.month ?? 'monthly'}
+      subtitle={`${month}${jodiOk ? ` · JODI ${jodi.as_of}` : ''}`}
+      source={jodiOk ? 'jodi_oil' : 'opec_static'}
+      sourceNote={jodiOk
+        ? `JODI-Oil reports ${jodi.opec_total_kbd.toFixed(0)} kbd OPEC total for ${jodi.as_of}. Compliance ratio still uses calibrated static quotas — JODI gives the realised production cross-check.`
+        : 'Production figures are static estimates (IEA / Platts) baked into backend/fetchers/opec.py. JODI not yet loaded.'}
       right={rate != null && <Chip tone={rate > 1.0 ? 'bear' : 'bull'}>{(rate * 100).toFixed(0)}%</Chip>}
     >
       <div className="grid grid-cols-2 gap-3 mb-3">
@@ -123,7 +133,7 @@ function GeoRiskPanel({ f }: { f: any }) {
   const tone = score > 60 ? 'bear' : score > 30 ? 'neut' : 'bull';
   const components = g.components ?? {};
   return (
-    <Panel title="Geopolitical Risk" subtitle={g.primary_driver ?? 'composite'} accent={tone as any}>
+    <Panel title="Geopolitical Risk" subtitle={g.primary_driver ?? 'composite'} accent={tone as any} source="geo_risk_calc" dataTimestamp={g.timestamp}>
       <div className="flex items-center gap-4 mb-3">
         <AlertOctagon className={clsx('w-8 h-8', tone === 'bear' && 'text-bear', tone === 'neut' && 'text-neut', tone === 'bull' && 'text-bull')} />
         <div>
@@ -159,6 +169,8 @@ function WeatherPanel({ w }: { w: any }) {
       title="Weather · HDD/CDD"
       subtitle={`${w.season ?? '7d'} · ${w.summary ?? 'demand outlook'}`}
       accent={(w.net_demand_signal ?? 0) > 0 ? 'bull' : (w.net_demand_signal ?? 0) < 0 ? 'bear' : 'neut'}
+      source="open_meteo"
+      dataTimestamp={w.timestamp}
       right={<Cloud className="w-4 h-4 text-text-tertiary" />}
     >
       <div className="grid grid-cols-3 gap-3 mb-3">
@@ -195,7 +207,7 @@ function CracksPanel({ c }: { c: any }) {
     { l: 'Brent Crack',     v: cs.brent_crack?.value,     avg: cs.brent_crack?.avg_1y,     sig: cs.brent_crack?.signal },
   ];
   return (
-    <Panel title="Crack Spreads" subtitle="USD/bbl · refinery margins" right={<BarChart3 className="w-4 h-4 text-text-tertiary" />}>
+    <Panel title="Crack Spreads" subtitle="USD/bbl · refinery margins" source="yfinance" dataTimestamp={c.timestamp} right={<BarChart3 className="w-4 h-4 text-text-tertiary" />}>
       <table className="w-full">
         <thead>
           <tr className="text-[9px] font-mono uppercase tracking-widest text-text-muted border-b border-border">
@@ -238,7 +250,7 @@ function ChokepointsPanel({ news }: { news: any }) {
     'Malacca':      Math.min(100, scan(['malacca','singapore','indonesia']) * 25),
   };
   return (
-    <Panel title="Chokepoint Risk" subtitle="News-driven monitor" accent="neut" right={<Anchor className="w-4 h-4 text-text-tertiary" />}>
+    <Panel title="Chokepoint Risk" subtitle="News-driven monitor" accent="neut" source="news_apify" sourceNote="Risk levels are derived by keyword-scanning recent news headlines. Not a live AIS/intel feed." right={<Anchor className="w-4 h-4 text-text-tertiary" />}>
       <div className="space-y-3">
         {chokepoints.map(cp => {
           const risk = risks[cp.name] ?? 0;
@@ -274,7 +286,7 @@ function ForwardCoverPanel({ f }: { f: any }) {
   const v = days ?? 28;
   const tone = v < 25 ? 'bear' : v < 32 ? 'neut' : 'bull';
   return (
-    <Panel title="Days of Forward Cover" subtitle="EIA crude / refinery demand" accent={tone as any}>
+    <Panel title="Days of Forward Cover" subtitle="EIA crude / refinery demand" accent={tone as any} source="eia_inv" dataTimestamp={crude.date} sourceNote="Days = EIA crude stocks / 17 Mbbl-day assumed refinery throughput. Throughput is a constant, not live.">
       <div className="flex items-end gap-3 mb-2">
         <span className={clsx('text-4xl font-display font-extrabold tabular', tone === 'bull' && 'text-bull', tone === 'bear' && 'text-bear', tone === 'neut' && 'text-neut')}>
           {v.toFixed(1)}
@@ -292,6 +304,118 @@ function ForwardCoverPanel({ f }: { f: any }) {
   );
 }
 
+function CurveRegimePanel({ f }: { f: any }) {
+  const cr = f?.curve_regime;
+  if (!cr || !cr.available) {
+    return (
+      <Panel title="Curve Regime · 15y" source="curve_regime_15y">
+        <SkeletonRows rows={3} />
+      </Panel>
+    );
+  }
+  const pct = (cr.percentile ?? 0) * 100;
+  const z   = cr.z_score ?? 0;
+  const regime = cr.regime ?? 'UNKNOWN';
+  const tone: 'bull' | 'bear' | 'neut' =
+    regime.includes('BACKWARDATION') ? 'bull'
+    : regime.includes('CONTANGO')   ? 'bear'
+    : 'neut';
+  return (
+    <Panel
+      title="Curve Regime · 15y context"
+      subtitle={`M1-M12 spread · ${cr.history_years}y history · n=${cr.n_obs}`}
+      accent={tone as any}
+      source="curve_regime_15y"
+      dataTimestamp={cr.as_of}
+      sourceNote={`Today's M1-M12 sits at the ${pct.toFixed(1)}th percentile of ${cr.history_years} years. ${(cr.regime_pct * 100).toFixed(0)}% of history was in the same regime.`}
+      right={<Chip tone={tone as any}>{regime.replace(/_/g, ' ')}</Chip>}
+    >
+      <div className="flex items-baseline gap-3 mb-3">
+        <span className={clsx('text-3xl font-display font-extrabold tabular',
+          tone === 'bull' && 'text-bull', tone === 'bear' && 'text-bear', tone === 'neut' && 'text-neut'
+        )}>
+          {cr.current_m1_m12 >= 0 ? '+' : ''}{cr.current_m1_m12?.toFixed(2)}
+        </span>
+        <span className="text-[11px] font-mono text-text-tertiary tabular">M1−M12 · $</span>
+      </div>
+      <div className="grid grid-cols-3 gap-3 text-[10.5px] font-mono tabular">
+        <Stat label="15y Pctile" value={`${pct.toFixed(0)}%`} tone={tone as any} />
+        <Stat label="Z-score"    value={`${z >= 0 ? '+' : ''}${z.toFixed(2)}σ`} />
+        <Stat label="15y Mean"   value={`${(cr.mean ?? 0).toFixed(2)}`} tone="gold" />
+      </div>
+      <div className="mt-3 text-[10px] font-mono text-text-muted">
+        15y range: <span className="text-text-secondary tabular">{(cr.p10 ?? 0).toFixed(2)}</span>
+        {' '}…{' '}
+        <span className="text-text-secondary tabular">{(cr.p90 ?? 0).toFixed(2)}</span>
+        {' '}(P10–P90)
+      </div>
+    </Panel>
+  );
+}
+
+function OrderFlowPanel({ f }: { f: any }) {
+  const of_ = f?.order_flow;
+  if (!of_ || !of_.available) {
+    return (
+      <Panel title="Order Flow · Brent" source="order_flow_model">
+        <SkeletonRows rows={3} />
+      </Panel>
+    );
+  }
+  const sm = of_.summary ?? {};
+  const tone: 'bull' | 'bear' | 'neut' =
+    (sm.net_imbalance ?? 0) >  0.05 ? 'bull'
+    : (sm.net_imbalance ?? 0) < -0.05 ? 'bear'
+    : 'neut';
+  const contracts = of_.contracts ?? [];
+  return (
+    <Panel
+      title="Order Flow · buy/sell imbalance"
+      subtitle={`${of_.lookback_days}d rolling · ${of_.as_of}`}
+      accent={tone as any}
+      source="order_flow_model"
+      dataTimestamp={of_.as_of}
+      sourceNote="Imbalance = (buy − sell) / (buy + sell). Above-zero = bid-side aggression. From institutional desk feed."
+      right={<Chip tone={tone as any}>{sm.label ?? 'flow'}</Chip>}
+    >
+      <div className="space-y-2">
+        {contracts.slice(0, 6).map((c: any) => {
+          const t: 'bull' | 'bear' | 'neut' =
+            c.rolling_imbalance_pct >  0.05 ? 'bull'
+            : c.rolling_imbalance_pct < -0.05 ? 'bear'
+            : 'neut';
+          return (
+            <div key={c.instrument} className="grid grid-cols-[60px_1fr_64px] gap-2 items-center text-[10.5px] font-mono tabular">
+              <span className="text-text-secondary">{c.instrument}</span>
+              <div className="h-1.5 bg-bg-elev rounded overflow-hidden relative">
+                <div className="absolute inset-y-0 left-1/2 w-px bg-border-strong" />
+                <div
+                  className="absolute inset-y-0 rounded"
+                  style={{
+                    left:  c.rolling_imbalance_pct >= 0 ? '50%' : `${50 - Math.min(50, Math.abs(c.rolling_imbalance_pct) * 100 * 5)}%`,
+                    width: `${Math.min(50, Math.abs(c.rolling_imbalance_pct) * 100 * 5)}%`,
+                    background: t === 'bull' ? '#10d997' : t === 'bear' ? '#ff4d6d' : '#f5a623',
+                  }}
+                />
+              </div>
+              <span className={clsx('text-right',
+                t === 'bull' && 'text-bull', t === 'bear' && 'text-bear', t === 'neut' && 'text-neut'
+              )}>
+                {c.rolling_imbalance_pct >= 0 ? '+' : ''}{(c.rolling_imbalance_pct * 100).toFixed(1)}%
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-3 pt-2 border-t border-border/40 text-[9.5px] font-mono text-text-muted">
+        Net (front-weighted): <span className={clsx('tabular',
+          tone === 'bull' && 'text-bull', tone === 'bear' && 'text-bear', tone === 'neut' && 'text-neut'
+        )}>{(sm.net_imbalance * 100).toFixed(2)}%</span>
+      </div>
+    </Panel>
+  );
+}
+
 function RigCountPanel({ f }: { f: any }) {
   const rig = f?.rig_count;
   const season = f?.seasonality;
@@ -302,7 +426,7 @@ function RigCountPanel({ f }: { f: any }) {
     const bias = (season.brent_bias ?? '').toUpperCase();
     const tone = bias.includes('BULL') ? 'bull' : bias.includes('BEAR') ? 'bear' : 'neut';
     return (
-      <Panel title="Seasonality · Brent" subtitle={`${season.current_month_name ?? ''} · ${season.data_years ?? 5}y avg`} accent={tone as any}>
+      <Panel title="Seasonality · Brent" subtitle={`${season.current_month_name ?? ''} · ${season.data_years ?? 5}y avg`} accent={tone as any} source="yfinance_5y">
         <div className="grid grid-cols-2 gap-3">
           <Stat label="Current Month" value={fmt.pct(season.brent_current_avg)} tone={tone as any} />
           <Stat label="Bias" value={bias || 'NEUTRAL'} tone={tone as any} />
@@ -317,7 +441,7 @@ function RigCountPanel({ f }: { f: any }) {
     );
   }
   return (
-    <Panel title="US Rig Count" subtitle={`Baker Hughes · ${rig.date ?? 'weekly'}`} right={<Activity className="w-4 h-4 text-text-tertiary" />}>
+    <Panel title="US Rig Count" subtitle={`Baker Hughes · ${rig.date ?? 'weekly'}`} source="eia_rigs" dataTimestamp={rig.date} right={<Activity className="w-4 h-4 text-text-tertiary" />}>
       <div className="grid grid-cols-2 gap-3">
         <Stat label="Total" value={fmt.int(rig.current)} sub={rig.change != null ? `${rig.change >= 0 ? '+' : ''}${rig.change} w/w` : ''} />
         <Stat label="Previous" value={fmt.int(rig.previous)} tone="gold" />
@@ -352,6 +476,12 @@ export function FundamentalsView({ all }: { all: any }) {
         <GeoRiskPanel f={f} />
         <ForwardCoverPanel f={f} />
         <RigCountPanel f={f} />
+      </div>
+
+      {/* Phase A: institutional context — 15y curve regime + per-contract order flow */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <CurveRegimePanel f={f} />
+        <OrderFlowPanel f={f} />
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">

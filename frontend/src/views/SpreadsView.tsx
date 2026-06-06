@@ -21,7 +21,7 @@ function CalendarSpreadMatrix({ curve }: { curve: any }) {
     return <span className={clsx('font-mono tabular font-semibold', tone)}>{v >= 0 ? '+' : ''}{v.toFixed(2)}</span>;
   };
   return (
-    <Panel title="Calendar Spread Ladder" subtitle="Brent · WTI · M1→M12">
+    <Panel title="Calendar Spread Ladder" subtitle="Brent · WTI · M1→M12" source="curve_blend" dataTimestamp={curve?.timestamp}>
       <table className="w-full text-[11px] font-mono">
         <thead>
           <tr className="text-text-muted text-[9px] uppercase tracking-widest border-b border-border">
@@ -58,7 +58,7 @@ function STEOPanel({ steo }: { steo: any }) {
   if (!months || months.length === 0) return <Panel title="EIA · STEO"><SkeletonRows rows={6} /></Panel>;
   const rows = months.slice(-12);
   return (
-    <Panel title="Global Oil Balance · EIA STEO" subtitle="12-month outlook · Mb/d">
+    <Panel title="Global Oil Balance · EIA STEO" subtitle="12-month outlook · Mb/d" source="eia_steo" dataTimestamp={steo?.as_of ?? steo?.timestamp}>
       <table className="w-full text-[10.5px] font-mono tabular">
         <thead>
           <tr className="text-text-muted text-[9px] uppercase tracking-widest border-b border-border">
@@ -112,6 +112,9 @@ function TankerWatchPanel({ tw }: { tw: any }) {
       title="Tanker Watch · AIS"
       subtitle={tw.note ?? tw.source ?? 'aisstream.io / marinetraffic'}
       accent="blue"
+      source="aisstream"
+      dataTimestamp={tw.timestamp ?? tw.chokepoints?.[0]?.last_updated}
+      sourceNote={setup ? 'AISSTREAM_API_KEY not configured — falling back to news-driven risk only.' : undefined}
       right={<Ship className="w-4 h-4 text-text-tertiary" />}
     >
       {setup ? (
@@ -177,7 +180,7 @@ function VLCCPanel({ cracks }: { cracks: any }) {
   if (!v) return <Panel title="VLCC Freight"><SkeletonRows rows={3} /></Panel>;
   const ratePct = v.rate_proxy ?? v.estimated_rate ?? 0;
   return (
-    <Panel title="VLCC Freight Proxy" subtitle="Brent–Dubai derived" right={<Chip tone="muted">ESTIMATED</Chip>}>
+    <Panel title="VLCC Freight Proxy" subtitle="Brent–Dubai derived" source="vlcc_estimate" right={<Chip tone="muted">ESTIMATED</Chip>}>
       <div className="grid grid-cols-2 gap-3">
         <Stat label="Brent" value={`$${(v.brent ?? cracks?.input_prices?.brent)?.toFixed(2) ?? '—'}`} />
         <Stat label="Dubai (est)" value={`$${(v.dubai_estimate ?? v.dubai_est)?.toFixed(2) ?? '—'}`} tone="gold" />
@@ -215,6 +218,8 @@ function OSPPanel({ cracks }: { cracks: any }) {
     <Panel
       title="Saudi OSP · Aramco"
       subtitle={osp.as_of ?? osp.month ?? osp.effective ?? '—'}
+      source="saudi_osp_hc"
+      sourceNote={`Values reflect ${osp.as_of ?? 'last update'}. Aramco does not publish a machine-readable feed — these are hand-copied from the monthly press release.`}
       right={<Chip tone="muted">{osp.data_source ?? 'HARDCODED'}</Chip>}
     >
       <table className="w-full text-[11px] font-mono tabular">

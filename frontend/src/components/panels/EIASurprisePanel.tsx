@@ -53,7 +53,7 @@ export function EIASurprisePanel({ data }: { data: any }) {
 
   if (releases.length === 0 && nextSeconds === null) {
     return (
-      <Panel title="EIA Surprise Tracker" subtitle="Wed 10:30 EST · #1 weekly market mover">
+      <Panel title="EIA Surprise Tracker" subtitle="Wed 10:30 EST · #1 weekly market mover" source="eia_inv">
         <SkeletonRows rows={6} />
       </Panel>
     );
@@ -87,6 +87,9 @@ export function EIASurprisePanel({ data }: { data: any }) {
       title="EIA Surprise Tracker"
       subtitle="Wed 10:30 EST · the #1 weekly market mover"
       accent="gold"
+      source="eia_inv"
+      dataTimestamp={lastRelease?.date}
+      sourceNote="Surprise = actual EIA crude print minus consensus / 4-wk average. 1h-return regression computed from historical releases."
       right={
         lastRelease && (
           <Chip tone={lastRelease.bullish ? 'bull' : 'bear'}>

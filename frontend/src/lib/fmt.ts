@@ -47,10 +47,12 @@ export function biasClass(n: number | null | undefined): 'bull' | 'bear' | 'neut
 }
 
 export function signalLabel(score: number | null | undefined): string {
+  // PULSE shows context, never recommends an action. Labels describe the
+  // model's read of conditions, not what the trader should do.
   if (score === null || score === undefined) return '—';
-  if (score >= 1.2) return 'STRONG BUY';
-  if (score >= 0.4) return 'BUY';
-  if (score <= -1.2) return 'STRONG SELL';
-  if (score <= -0.4) return 'SELL';
+  if (score >= 1.2)  return 'STRONGLY BULLISH';
+  if (score >= 0.4)  return 'BULLISH';
+  if (score <= -1.2) return 'STRONGLY BEARISH';
+  if (score <= -0.4) return 'BEARISH';
   return 'NEUTRAL';
 }

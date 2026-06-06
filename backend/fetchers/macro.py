@@ -100,6 +100,7 @@ def get_macro_data() -> dict:
         "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
 
+    successes = 0
     for key, (series_id, label, unit) in SERIES.items():
         try:
             # Fetch up to 14 observations so CPI YoY (13-period lag) is computable
@@ -130,11 +131,17 @@ def get_macro_data() -> dict:
                     entry["mom"] = round((latest - prior) / prior * 100, 3)
 
             result[key] = entry
+            successes += 1
 
         except Exception as exc:
             log.error("FRED series %s failed: %s", series_id, exc)
             result[key] = None
 
+    # Mark stale only if NO series actually populated (everything failed). With
+    # >=1 real value we have usable data and shouldn't show the stale banner.
+    result["stale"] = successes == 0
+    if successes == 0:
+        result["error"] = "all FRED series failed"
     _last_known = dict(result)
     return result
 

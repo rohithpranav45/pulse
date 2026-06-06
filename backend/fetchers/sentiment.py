@@ -101,6 +101,55 @@ def batch_score(texts: list) -> list:
         return [0.0] * len(texts)
 
 
+# ── Filter + batch score (English-only) ───────────────────────────────────────
+
+# Quick non-Latin script detector — catches Russian, Arabic, Urdu, CJK, etc.
+_NON_LATIN = re.compile(r"[Ѐ-ӿԀ-ԯ؀-ۿ܀-ݏऀ-ॿ一-鿿぀-ヿ가-힯]")
+
+
+def is_english_title(text: str) -> bool:
+    """Heuristic English filter: rejects titles with non-Latin chars or where
+    > 30 % of characters are outside common Latin-1."""
+    if not text:
+        return False
+    if _NON_LATIN.search(text):
+        return False
+    if len(text) < 5:
+        return False
+    latin = sum(1 for ch in text if ch.isascii() or ch in "áéíóúñü¿¡àèìòùç")
+    return (latin / len(text)) > 0.7
+
+
+def score_articles_finbert(articles: list) -> list:
+    """
+    Attach a FinBERT `sentiment_score` to each article in-place and return the
+    filtered list of *scoreable* (English) items. Articles whose title looks
+    non-English are dropped — keeps the news feed coherent.
+    """
+    if not articles:
+        return []
+    eligible = []
+    for a in articles:
+        title = a.get("title") or a.get("headline") or ""
+        if is_english_title(title):
+            eligible.append(a)
+    if not eligible:
+        return []
+    pipe = _get_finbert()
+    titles = [(a.get("title") or a.get("headline") or "") for a in eligible]
+    if pipe is None:
+        # FinBERT unavailable — leave score absent so the UI can flag it
+        for a, t in zip(eligible, titles):
+            a["sentiment_score"] = None
+            a["sentiment"] = None
+        return eligible
+    scores = batch_score(titles)
+    for a, sc in zip(eligible, scores):
+        a["sentiment_score"] = float(sc)
+        a["sentiment"]       = float(sc)
+    return eligible
+
+
 # ── Recency helpers ───────────────────────────────────────────────────────────
 
 def _parse_published(article: dict):

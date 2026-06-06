@@ -10,7 +10,7 @@ type HistoryRow = { date: string; value: number; stocks: number };
 export function ForwardCoverChart({ data }: { data: any }) {
   if (!data?.history || data.history.length < 12) {
     return (
-      <Panel title="Days of Forward Cover · 5y" subtitle="US crude stocks ÷ refinery demand">
+      <Panel title="Days of Forward Cover · 5y" subtitle="US crude stocks ÷ refinery demand" source="eia_inv">
         <SkeletonRows rows={6} />
       </Panel>
     );
@@ -57,6 +57,9 @@ export function ForwardCoverChart({ data }: { data: any }) {
       title="Days of Forward Cover · 5y"
       subtitle={`US crude stocks ÷ ${demand} mbd refinery demand · chapter 6 metric`}
       accent={tone}
+      source="eia_inv"
+      dataTimestamp={history[history.length - 1]?.date}
+      sourceNote={`Refinery demand fixed at ${demand} mbd. Critical/comfort thresholds (${criticalLow}/${comfortableHigh} days) are heuristic, not market-derived.`}
       right={
         <Chip tone={tone}>
           {current < criticalLow ? 'TIGHT' : current > comfortableHigh ? 'AMPLE' : 'NORMAL'}

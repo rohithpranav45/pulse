@@ -70,7 +70,7 @@ function CaseStudyDetail({ study }: { study: CaseStudy }) {
   return (
     <div className="space-y-4">
       {/* Hero */}
-      <Panel accent={verdictTone}>
+      <Panel accent={verdictTone} source="static_reference">
         <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-2">
@@ -121,7 +121,7 @@ function CaseStudyDetail({ study }: { study: CaseStudy }) {
 
       {/* Key metrics grid + Indicator breakdown */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <Panel title="Key Market Conditions" subtitle="snapshot at the inflection">
+        <Panel title="Key Market Conditions" subtitle="snapshot at the inflection" source="static_reference">
           <div className="grid grid-cols-2 gap-3">
             {study.keyMetrics.map((m, i) => {
               const toneClass =
@@ -150,7 +150,7 @@ function CaseStudyDetail({ study }: { study: CaseStudy }) {
           </div>
         </Panel>
 
-        <Panel title="What PULSE Would Have Said" subtitle="indicator-by-indicator breakdown" accent={verdictTone}>
+        <Panel title="What PULSE Would Have Said" subtitle="indicator-by-indicator breakdown" accent={verdictTone} source="static_reference">
           <div className="space-y-2">
             {study.indicators.map((ind, i) => (
               <div key={i} className="grid grid-cols-[88px_36px_46px_1fr] items-center gap-2 text-[10.5px] font-mono tabular border-b border-border/30 pb-2 last:border-b-0">
@@ -184,7 +184,7 @@ function CaseStudyDetail({ study }: { study: CaseStudy }) {
       </div>
 
       {/* Timeline */}
-      <Panel title="Timeline" subtitle="how the trade played out" right={<Calendar className="w-4 h-4 text-text-tertiary" />}>
+      <Panel title="Timeline" subtitle="how the trade played out" source="static_reference" right={<Calendar className="w-4 h-4 text-text-tertiary" />}>
         <div className="relative">
           <div className="absolute left-[80px] top-0 bottom-0 w-px bg-border" />
           <div className="space-y-3">
@@ -203,7 +203,7 @@ function CaseStudyDetail({ study }: { study: CaseStudy }) {
       </Panel>
 
       {/* Lessons */}
-      <Panel title="Lessons" subtitle="what to remember" accent="gold" right={<Lightbulb className="w-4 h-4 text-gold" />}>
+      <Panel title="Lessons" subtitle="what to remember" accent="gold" source="static_reference" right={<Lightbulb className="w-4 h-4 text-gold" />}>
         <ul className="space-y-2">
           {study.lessons.map((lesson, i) => (
             <li key={i} className="flex items-start gap-2 text-[12px] text-text-secondary leading-relaxed">
@@ -241,6 +241,7 @@ export function PlaybookView() {
         title="Historical Playbook"
         subtitle="four case studies from chapter 8 — how PULSE would have read each"
         accent="gold"
+        source="static_reference"
         right={<BookOpen className="w-4 h-4 text-text-tertiary" />}
       >
         <p className="text-[12px] text-text-secondary leading-relaxed">
