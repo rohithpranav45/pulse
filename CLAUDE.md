@@ -1,442 +1,456 @@
 # PULSE — Project State File
-**Last updated:** 2026-05-29 (Phase 3 + Phase 4 + Phase 5 + Chart Enhancement + Friend-Dashboard Features complete)  
-**Project:** Price & Uncertainty Live Signal Engine — Futures First internship dashboard  
-**Stack:** Flask 3 · yfinance · pandas/numpy · vanilla JS · IBM Plex Mono UI  
-**Run:** `python start.py` from `pulse/` — opens browser at http://127.0.0.1:5000
+**Last updated:** 2026-06-05 · Phase 1 shipped (PR #2), Phase 2 starting
+**Project:** PULSE — Energy Intelligence Terminal (Futures First internship)
+**Stack:** Flask 3 · React 18 + Vite + Tailwind · SQLite (cache + paper book) · /Data desk feed · 35 named data sources
+**Run:** `python start.py` from `pulse/` root — opens http://127.0.0.1:5000
 
 ---
 
-## How to Start a New Session
+## How to start a new session
 
-1. Open a fresh conversation
-2. Say: **"Read `CLAUDE.md` in my pulse folder, then implement Command N"**
-3. Read this file + only the specific files that command touches
-4. One command per session = minimum context overhead
+1. Read this file **end-to-end**. It is the single source of truth.
+2. Check **"Current sprint"** below.
+3. Execute that sprint's tasks in order.
+4. Update this file when each sprint ships.
+5. If something is unclear, the relevant code or design doc is referenced inline.
+
+**Rule:** one sprint per session. Don't multi-task across sprints in one chat — the context overhead defeats the purpose.
 
 ---
 
-## Directory Layout
+## Where we are right now
+
+### ✅ Phase 1 — SHIPPED + MERGED to main (PR #2, 5,699 lines)
+
+A working energy-intelligence dashboard with:
+
+- **32 live data streams** (prices, curve, fundamentals, news, weather, technicals, term structure, macro, patterns, IV, OVX, JODI, etc.)
+- **Health monitoring** — `/api/health-detail` + top-bar pill + drill modal
+- **Source provenance** — 35-entry registry surfaced via per-panel SourceTag chips + shield-icon ledger
+- **Trade Idea card** powered by 9-indicator weighted signal engine (hand-set "expert prior" weights)
+- **Groq llama-3.3-70b morning brief** (5-bullet format) with Ollama + rule-based fallbacks
+- **Paper Trading sandbox** (tab 9) — SQLite-backed single-leg book, MTM every minute, auto-close on TP/SL, full performance panel (PnL · Win% · Sharpe · Profit factor · Max DD · equity curve)
+- **News audio replay** — 3-tier source picker (NEWS_BREAKING alert → most-negative FinBERT article → latest), spoken via Web Speech API
+- **Stumpy pattern analogs** over 14.6y Brent C1 history
+- **Curve regime panel** — M1-M12 percentile + z-score vs 15-year history
+- **Order-flow imbalance** per Brent contract from /Data buy/sell volume
+
+Mentor presented this and was satisfied with Phase 1.
+
+### 🔄 Phase 2 — IN PROGRESS
+
+**Mentor's ask** (paraphrasing her message of 2026-06-05): build a **regime-based market analysis engine** that:
+
+1. Classifies markets into regimes using inventory + seasonality + vol + curve + macro
+2. Builds a regime-wise historical dataset of spread/butterfly behaviour
+3. Applies regressions (Linear / Ridge / Lasso / Rolling / Regime-specific / Feature selection)
+4. Generates ranked analytical opportunities when spreads/butterflies deviate from their regime-conditional expectation
+5. Integrates into the dashboard — current regime, drivers, regression output, ranked opportunities
+
+**Status:** Methodology brainstormed. **7 alignment questions sent to mentor 2026-06-05**, awaiting reply (see below).
+
+While waiting, executing the prep sprints below.
+
+---
+
+## Pending decisions (waiting on mentor's reply)
+
+The exact build depends on her answers. While she replies, infrastructure work is mentor-independent and proceeds.
+
+1. **Instrument scope** — 15 spreads + 3 butterflies proposed (Brent + WTI calendars, Brent-WTI tenors, 4 cracks, 3 flies). She picks the universe.
+2. **Regime axes** — default proposed: curve × inventory × volatility (27 grid, ~9-12 with usable n). She may add seasonal axis or change.
+3. **Time horizon** — default 20-day mean reversion. May want 5d swing or 60d position.
+4. **Paper trading integration** — extend to 2-leg spread positions (recommended) or convert spreads to single-asset approximations.
+5. **WTI deferred data gap** — /Data has Brent C1-C31 but not WTI equivalent. Request the file, or restrict scope to Brent-led.
+6. **Auto-push behaviour** — opportunities display only / auto-stage for approval / auto-push above threshold.
+7. **Phase 1 coexistence** — replace existing signal engine, run alongside, or split (Phase 1 = directional, Phase 2 = spreads/butterflies).
+
+---
+
+## Current sprint
+
+### 🔴 SPRINT −1 · DuckDB + Parquet conversion of /Data
+
+**Goal:** convert the 3.5 GB /Data lake from CSV/xlsx to Parquet, with DuckDB as the query engine. Phase 2 will run thousands of historical feature lookups — pandas + CSV is ~50× too slow.
+
+**Acceptance criteria:**
+- One-time converter script `backend/scripts/convert_data_lake.py` produces `/Data/parquet/*.parquet`
+- `backend/data_lake.py` public API unchanged (functions still return pandas) but uses DuckDB under the hood
+- First call to any loader: <1s (was 30s for the 1-min files)
+- RAM footprint: <100MB (was 600MB for one 1-min file)
+- New helper: `data_lake.duckdb_conn()` returns a connection for direct SQL on the lake
+- /Data CSVs are not deleted — Parquet sits alongside, so source-of-truth is preserved
+
+**Files to create / change:**
+- NEW: `backend/scripts/convert_data_lake.py` — idempotent, checks file mtimes, only re-converts when source changed
+- MODIFY: `backend/data_lake.py` — DuckDB-backed loaders, same return shapes
+- MODIFY: `start.py` — run converter at boot if Parquet is older than source CSVs
+- ADD to `requirements.txt`: `duckdb==1.1.x`, `pyarrow==18.x`
+
+**Validation:**
+- `python -m backend.data_lake` still prints same output as today
+- `python -c "from backend.data_lake import load_1min_tail; t = load_1min_tail('brent_1min', days=30, contract='c1'); print(len(t))"` — should complete in <500ms
+
+---
+
+### 🟡 SPRINT 0a · Pydantic response models + auto-generated TS types
+
+**Goal:** kill the recurring bug class where frontend reads the wrong shape. Phase 2 will add ~15 new endpoints — typed contracts make this safe.
+
+**Acceptance criteria:**
+- Every API route returns a typed Pydantic model (`@app.route("/api/foo") def foo() -> FooResponse`)
+- FastAPI is NOT introduced yet (too risky mid-project) — instead, Pydantic models live in `backend/schemas/` and routes manually validate on return
+- `scripts/generate_ts_types.py` reads the Pydantic schema, emits `frontend/src/lib/api-types.ts`
+- TypeScript code imports these types instead of redefining them
+- Start with the 8 most-used endpoints first (prices, fundamentals, news, signal, trade-idea, paper/positions, paper/performance, health-detail)
+
+**Files to create:**
+- NEW: `backend/schemas/__init__.py` — Pydantic models
+- NEW: `scripts/generate_ts_types.py` — codegen script
+- MODIFY: `frontend/src/lib/api.ts` — import from generated types
+
+---
+
+### 🟢 SPRINT 0b · Sentry + Better Stack observability
+
+**Goal:** safety net before adding a lot of new code. 30-minute setup with infinite future value.
+
+**Tasks:**
+- `pip install sentry-sdk[flask]`, init in `backend/app.py`
+- `npm i @sentry/react`, init in `frontend/src/main.tsx`
+- Sign up for Better Stack free tier (you'll need to do this — I'll guide), get a logtail token
+- Add structured logging to all error paths
+
+**Action user must take:**
+- Register at sentry.io (free), create a "PULSE" project, paste DSN into `.env` as `SENTRY_DSN`
+- Register at betterstack.com (free), paste source token as `BETTER_STACK_TOKEN`
+
+---
+
+### 🟢 SPRINT 0c · Historical feature matrix + regime classifier scaffold
+
+**Goal:** Phase 2 foundation. Mentor-independent — works for any regime axes she chooses.
+
+**Acceptance criteria:**
+- `backend/research/features.py` builds a daily feature matrix for 2011-2026 (point-in-time, no future leakage)
+  - Features: inventory %dev + 4wk change · COT pct · OVX · DXY level + 30d change · curve M1-M2 · curve M1-M12 · days-to-expiry · sin/cos month · realised vol · cross-product proxies · GDELT tone
+  - Stored as `backend/data/features_pit.parquet` (3,693 rows × ~15 cols)
+- `backend/research/regimes.py` — pluggable classifier
+  - `classify(features_df, axes=["curve", "inventory", "vol"]) → regime_labels`
+  - Default: 3 axes × 3 buckets each = 27 grid, ~9-12 with usable n
+  - Stored as `backend/data/regime_history.parquet`
+- Diagnostic notebook `notebooks/phase2_sprint0_diagnostics.ipynb`:
+  - Distribution of regimes over 15 years
+  - Sample-size table per regime
+  - Transition matrix
+  - F-test: do regimes produce statistically distinct M1-M12 spread distributions?
+
+**Once mentor replies** with her axis preferences, this is a one-line change in the call site.
+
+---
+
+## Phase 2 sprints (after mentor confirms scope)
+
+| Sprint | Days | Output |
+|---|---|---|
+| **1** — Vertical slice on Brent M1-M12 | 3–5 | Per-regime regression suite (Linear/Ridge/Lasso/Robust/Quantile), walk-forward CV, winner selected per regime, live inference endpoint with full receipts |
+| **2** — Dashboard REGIME tab + paper trading 2-leg | 5 | New tab visible with regime banner, opportunity board (M1-M12 only initially), drill panel. Paper book schema migrated to multi-leg. |
+| **3** — Broaden to full instrument universe | 5–7 | All 15 spreads + 3 butterflies modelled. UI fills in. Mentor's Q1, Q2, Q3, Q5 answers applied. |
+| **4** — Validation + backtest | 3–5 | Walk-forward backtest of acting on top-ranked opportunities. Compare vs Phase 1 signal. Two-page methodology PDF for mentor. |
+
+---
+
+## Directory layout
 
 ```
 pulse/
-├── start.py
-├── requirements.txt
-├── CLAUDE.md                       ← this file
+├── start.py                          # one-command launcher
+├── CLAUDE.md                         # THIS FILE
+├── .env                              # API keys (gitignored)
+├── .env.example                      # template
+├── requirements.txt                  # pinned Python deps
+├── Data/                             # 3.5 GB institutional desk feed (gitignored)
+│   ├── LCO_Brent_daily_settlement_c1_to_c31_2016_2026.csv
+│   ├── LCO_Brent_daily_close_c1_c12_spread_2011_2026.xlsx
+│   ├── LCO_Brent_daily_OHLCV_buysell_volume_multi_contract.xlsx
+│   ├── LCO_Brent_1min_outrights_midprice_*.csv
+│   ├── CL_WTI_1min_outrights_midprice_*.csv
+│   ├── HO_HeatingOil_1min_outrights_midprice_2021_2026.csv
+│   ├── LGO_Gasoil_1min_outrights_midprice_2021_2026.csv
+│   ├── WTCL_LCO_Spread_1min_outrights_2021_2026.csv
+│   └── parquet/                      # SPRINT −1 deliverable
 │
 ├── backend/
-│   ├── app.py                      # Flask API, all routes, TTL cache, warm_cache()
+│   ├── app.py                        # Flask API, ~1400 lines, all routes + scheduler
+│   ├── data_lake.py                  # /Data loaders (becomes DuckDB-backed in Sprint −1)
+│   ├── paper_trading.py              # SQLite trade book + MTM service
+│   ├── db/
+│   │   ├── cache.py                  # SQLite TTL cache
+│   │   └── pulse_cache.db            # SQLite file (gitignored)
 │   ├── data/
-│   │   └── LCOSettle.xlsx          # ICE Brent M1-M31 settlements 2016→2026, 2713 rows
-│   ├── fetchers/
-│   │   ├── prices.py               # BZ=F CL=F NG=F DXY VIX SPX 10Y live quotes
-│   │   ├── curve.py                # Brent + WTI futures strip (yfinance)
-│   │   ├── historical.py           # 90-day daily OHLCV cache
-│   │   ├── eia.py                  # EIA inventory + rig count + OPEC EIA + spark/dark
-│   │   ├── cot.py                  # CFTC COT positioning percentile
-│   │   ├── opec.py                 # OPEC static compliance fallback (IEA/Platts estimates)
-│   │   ├── geo_risk.py             # geo-risk index from spread/VIX/news
-│   │   ├── news.py                 # energy news (Apify primary, NewsAPI fallback)
-│   │   ├── sentiment.py            # FinBERT batch scorer + recency-weighted aggregate
-│   │   ├── weather.py              # Open-Meteo HDD/CDD 7-day, 5 US cities
-│   │   ├── technicals.py           # RSI(14) MACD(12,26,9) BBands(20,2σ) ATR(14)
-│   │   ├── multi_curve.py          # 5-product M1-M12 strips + M1 history (LCO xlsx)
-│   │   ├── seasonality.py          # monthly avg % returns BZ=F+NG=F, 5y yfinance
-│   │   └── macro.py                # FRED: DGS10 CPI EURUSD FEDFUNDS INDPRO MORTGAGE30US
-│   └── models/
-│       ├── fair_value.py           # regression fair value model
-│       ├── correlations.py         # Brent/WTI/DXY/SPX/HH correlation matrix
-│       ├── signal_engine.py        # weighted composite signal [-2,+2] per asset
-│       ├── term_structure.py       # 5x5 corr matrix + strip enrichment
-│       └── patterns.py             # scipy peak/trough: H&S IH&S DblTop/Bot Flag Triangle
+│   │   ├── LCOSettle.xlsx            # legacy fallback (data_lake.py prefers /Data CSV)
+│   │   └── cache/                    # JODI raw zip + sundry caches (gitignored)
+│   ├── fetchers/                     # 22 modules — one per data source
+│   │   ├── prices.py · ohlcv handled in app.py · historical.py
+│   │   ├── curve.py · multi_curve.py · curve_regime.py · order_flow.py
+│   │   ├── eia.py · cot.py · opec.py · jodi.py · rig_count.py
+│   │   ├── weather.py · technicals.py · cracks.py · seasonality.py
+│   │   ├── macro.py · ovx.py · ecb_fx.py
+│   │   ├── news.py · gdelt.py · marketaux.py · sentiment.py · rss_news.py
+│   │   ├── geo_risk.py · analyst_watch.py · tanker_watch.py
+│   │   ├── realised_vol.py · options_iv.py · stooq.py · analogs.py
+│   │   ├── eia_surprise.py · forward_cover.py · spreads_history.py
+│   ├── models/
+│   │   ├── fair_value.py             # cost-of-carry + 4-component adjustments
+│   │   ├── signal_engine.py          # 9-indicator weighted composite [-2,+2]
+│   │   ├── trade_idea.py             # rule-based idea + Groq morning brief
+│   │   ├── correlations.py · term_structure.py · patterns.py · alerts.py
+│   └── research/                     # NEW in Sprint 0c
+│       ├── features.py               # historical feature matrix builder
+│       └── regimes.py                # pluggable regime classifier
 │
 └── frontend/
-    └── index.html                  # single-file dashboard (~138KB)
+    ├── index.html · vite.config.ts · package.json
+    ├── src/
+    │   ├── App.tsx                   # root, 9 tabs
+    │   ├── main.tsx
+    │   ├── views/                    # one file per tab
+    │   │   ├── SignalView · ChartsView · FundamentalsView · IntelligenceView
+    │   │   ├── TermStructureView · SpreadsView · ContractsView · PlaybookView
+    │   │   ├── PaperView             # paper trading sandbox
+    │   │   └── (FUTURE) RegimeView   # Phase 2 sprint 2
+    │   ├── components/
+    │   │   ├── shell/                # TopBar · Sidebar · StatusBar · HealthPill · ProvenanceLegend
+    │   │   ├── ui/                   # Panel · Chip · Stat · ScoreBar · Sparkline · SourceTag · Modal · ErrorBoundary
+    │   │   ├── panels/               # specialised analysis panels
+    │   │   ├── charts/               # chart components
+    │   │   ├── alerts/               # ToastStack (with squawk + news replay)
+    │   │   ├── chat/                 # ChatDock
+    │   │   └── onboarding/           # OnboardingTour
+    │   └── lib/
+    │       ├── api.ts                # HTTP client + endpoint registry
+    │       ├── hooks.ts              # usePolling, useClock, useLocalStorage
+    │       ├── fmt.ts                # number/date/signal formatting
+    │       ├── provenance.ts         # 35-entry source registry
+    │       ├── caseStudies.ts · contracts.ts · geoRisk.ts
 ```
 
 ---
 
-## API Endpoints
+## API endpoints (32 active in Phase 1)
 
-| Route | TTL | Key data |
-|---|---|---|
-| GET /api/health | — | liveness |
-| GET /api/prices | 60s | live quotes |
-| GET /api/ohlcv | 60s | 5-min candles |
-| GET /api/history | 3600s | 90-day daily OHLCV |
-| GET /api/curve | 600s | Brent + WTI strip |
-| GET /api/fair-value | 600s | fair value model |
-| GET /api/signal | 600s | composite signal all assets |
-| GET /api/correlations | 7200s | cross-asset correlation matrix |
-| GET /api/fundamentals | 7200s | inventory + COT + OPEC + geo + rig + spark/dark + seasonality |
-| GET /api/news | 600s | headlines + FinBERT scores + composite_sentiment |
-| GET /api/weather | 3600s | HDD/CDD 7-day outlook vs normals |
-| GET /api/technicals | 300s | RSI/MACD/BBands/ATR Brent/WTI/HH |
-| GET /api/term-structure | 3600s | 5x5 corr matrix + M1-M12 strips |
-| GET /api/macro | 3600s | FRED macro indicators (stale:true if no key) |
-| GET /api/patterns | 3600s | pattern + top-3 historical analogs |
-| GET /api/all | — | all above in one call |
-
----
-
-## Frontend Tabs
-
-| Tab | Label | Key panels |
-|---|---|---|
-| p1 | ▲ SIGNAL | Brent/WTI/HH signal cards, fair value, indicator breakdown, macro panel |
-| p2 | ◎ PRICE & CURVES | LWC candlestick (Brent/WTI toggle, volume, SMA20, FV line), futures curve chart |
-| p3 | ◈ FUNDAMENTALS | EIA inventory, COT, OPEC (EIA live), geo risk, rig count, weather, spark/dark |
-| p4 | ◆ INTELLIGENCE | Correlation matrix, news (FinBERT badges + sentiment bar), patterns + analogs, seasonality |
-| p5 | ⬡ TERM STRUCTURE | 5x5 energy heatmap, M1-M12 strip table, spread chain, 5-product normalized curve chart |
-
----
-
-## Signal Engine Weights
-
-**Crude (Brent/WTI):**
-```
-inventory 30% | curve 25% | cot 20% | fair_value 15% | technicals 5% | dxy 3% | geo 2%
-```
-**Nat Gas (Henry Hub):**
-```
-inventory 30% | weather 25% | curve 15% | cot 15% | fair_value 10% | technicals 5%
-```
-Score: **-2.0 (strong sell) → +2.0 (strong buy)**  
-Conviction: HIGH if agreeing >= max(5, n-1) | MODERATE if >= max(3, n//2)
-
----
-
-## Key Data Sources
-
-| Source | What | Auth |
-|---|---|---|
-| yfinance | Prices, OHLCV, strips | None |
-| ICE LCO xlsx | Brent M1-M31 settlements | `backend/data/LCOSettle.xlsx` |
-| EIA API | Inventory + OPEC INTL + electricity price | `EIA_API_KEY` in `.env` |
-| CFTC | COT positioning | None (public) |
-| Open-Meteo | 7-day weather | None |
-| Apify | Energy news scraping | `APIFY_API_TOKEN` in `.env` |
-| FRED | Macro indicators | `FRED_API_KEY` in `.env` (optional) |
-| HuggingFace | FinBERT sentiment (ProsusAI/finbert) | None (~420MB cached to ~/.cache/huggingface) |
-
-**LCO xlsx:** Row1=contract names (LCOc1…LCOc31), Row2=(Timestamp,SETTLE) headers, Row3+=data newest-first. SETTLE for Mi = `row[1+(i-1)*2]`, Date=`row[0]`.
-
----
-
-## Environment Variables (`backend/.env`)
-
-```
-EIA_API_KEY=...         # EIA v2 API — register free at api.eia.gov
-APIFY_API_TOKEN=...     # news scraping — free tier at apify.com
-FRED_API_KEY=...        # macro data — free at fred.stlouisfed.org
-NEWSAPI_KEY=...         # fallback news — free at newsapi.org
-```
-
----
-
-## Completion Status
-
-### ✅ Commands 1-10 — DONE
-
-| What | Key files |
+| Group | Routes |
 |---|---|
-| Foundation, project structure, start.py | `start.py`, `requirements.txt` |
-| Prices, OHLCV, curve, history, fair value, signal, correlations | `fetchers/prices.py`, `fetchers/curve.py`, `models/` |
-| EIA inventory + seasonal deviation + rig count | `fetchers/eia.py` |
-| COT positioning percentile | `fetchers/cot.py` |
-| OPEC static compliance table + EIA INTL live production | `fetchers/opec.py`, `fetchers/eia.py` |
-| Geo risk index | `fetchers/geo_risk.py` |
-| Weather HDD/CDD 5 cities | `fetchers/weather.py` |
-| Technicals RSI/MACD/BBands/ATR | `fetchers/technicals.py` |
-| Multi-curve LCO xlsx + yfinance dated tickers | `fetchers/multi_curve.py` |
-| Term structure 5x5 corr + strip enrichment | `models/term_structure.py` |
-| Seasonality monthly avg returns + bias label | `fetchers/seasonality.py` |
-| FRED macro fetcher (7 series, MoM for INDPRO, YoY for CPI) | `fetchers/macro.py` |
-| Pattern recognition (scipy): H&S IH&S DblTop/Bot BullBearFlag Triangles + analogs | `models/patterns.py` |
-| LWC candlestick + volume histogram + SMA20 + Brent/WTI toggle | `frontend/index.html` |
-| FinBERT news sentiment (batch, recency-weighted aggregate) | `fetchers/sentiment.py`, `fetchers/news.py` |
-| EIA INTL OPEC production + EIA electricity spark/dark spread | `fetchers/eia.py`, `app.py`, `index.html` |
-| 5-product normalized forward curve chart (Chart.js, p5) | `frontend/index.html` |
-
-### ✅ Commands 1-15 — ALL DONE
-
-| What | Key files |
-|---|---|
-| *(Commands 1-11 as above)* | |
-| Rule-based trade idea (direction, thesis, stop, target, horizon, key risk) | `models/trade_idea.py` |
-| Ollama llama3 morning brief with rule-based fallback (ConnectionError safe) | `models/trade_idea.py` — `_ollama_brief()` |
-| `/api/trade-idea` route + TTL_TRADE=600 + background warm-up | `backend/app.py` |
-| Trade idea card in p1 row 3 (full width, direction badge + levels + thesis) | `frontend/index.html` — `updateTradeIdea()` |
-| `<details>` collapsible morning brief below trade card | `frontend/index.html` |
-| Static Morning Brief panel replaced; Macro Signals promoted to row 2 panel | `frontend/index.html` |
-| `fetchTradeIdea()` polled every 600s independently of `/api/all` | `frontend/index.html` |
-| SQLite-backed TTL cache (drop-in, stale=True on expired reads) | `backend/db/__init__.py`, `backend/db/cache.py` |
-| APScheduler BackgroundScheduler replaces manual warm threads | `backend/app.py` — `_scheduler`, `_refresh_*` jobs |
-| Slow jobs (news/macro/patterns/iv/trade) fire immediately at scheduler start | `backend/app.py` — `next_run_time=_NOW` |
-| Alert system (PRICE_SHOCK, COT_EXTREME, EIA_SURPRISE, IV_SPIKE) | `backend/models/alerts.py` |
-| `/api/alerts` route + TTL_ALERTS=60 + APScheduler job | `backend/app.py` |
-| `get_cached` nocache bypass via Flask request context (`?nocache=1`) | `backend/app.py` — `get_cached()` wrapper |
-| Alert tray (fixed top-right, pills auto-dismiss 8s, critical stays) | `frontend/index.html` — `showAlert()`, `#alert-tray` |
-| Keyboard shortcuts: 1-5 tabs, R=force refresh, F=fullscreen, Esc=exit | `frontend/index.html` — `keydown` listener |
-| EIA crude actual + surprise wired to live data (vs 4wk avg) | `frontend/index.html` — `updateEIA()` |
-| Signal history SQLite table (500-row cap, per-asset score log) | `backend/db/signal_history.py` |
-| `calculate_signal()` appends to history; returns `history: [24 scores]` | `backend/models/signal_engine.py` |
-| SVG sparklines (60×20px, green above 0 / red below 0, dual clipPath) | `frontend/index.html` — `buildSparkline()` |
-| All ⊘/DEMO badges removed from frontend | `frontend/index.html` |
-| All backend modules pass `py_compile` | `backend/**/*.py` |
-| `requirements.txt` pinned to exact pip freeze versions (2026-05-28) | `requirements.txt` |
+| **Health** | GET /api/health · GET /api/health-detail |
+| **Prices/charts** | GET /api/prices · /api/ohlcv · /api/history · /api/curve |
+| **Models** | GET /api/fair-value · /api/signal · /api/correlations · /api/term-structure |
+| **Fundamentals** | GET /api/fundamentals · /api/eia-surprise · /api/forward-cover · /api/jodi |
+| **News/intel** | GET /api/news · /api/marketaux · /api/gdelt-tone · /api/analyst-watch · /api/tanker-watch · /api/patterns · /api/analogs |
+| **Risk/structure** | GET /api/cracks · /api/steo · /api/ovx · /api/curve-regime · /api/order-flow |
+| **Other** | GET /api/weather · /api/technicals · /api/macro · /api/iv · /api/trade-idea · /api/alerts · /api/spreads-history · /api/seasonality |
+| **All-in-one** | GET /api/all |
+| **Paper trading** | POST /api/paper/push · POST /api/paper/close/:id · GET /api/paper/positions · GET /api/paper/performance · POST /api/paper/clear |
+| **RAG** | POST /api/ask · GET /api/ask/stats |
 
 ---
 
-## Chart Enhancement Pass (2026-05-29)
+## Environment keys (`backend/.env`)
 
-### EMA20 / MA50 / VWAP Overlays
-| What | Where | Detail |
-|---|---|---|
-| `_calcEMA(data, period)` | `index.html` | Exponential MA — proper EMA formula with seed from SMA |
-| `_calcVWAP(data)` | `index.html` | Session VWAP = cumSum(TP×Vol)/cumSum(Vol), TP=(H+L+C)/3 |
-| `toggleOverlay(key)` | `index.html` | Toggle EMA20/MA50/VWAP visibility; dims button to 35% opacity when off |
-| `_lwcEma20Series` / `_lwcMa50Series` / `_lwcVwapSeries` | `index.html` | Three new LWC line series: cyan/purple/orange |
-| EMA20/MA50/VWAP toggle buttons | `index.html` candlestick header | `.ov-btn` class; next to WTI/Brent toggle; color-coded |
-| Legend updated | `index.html` | Added EMA20 (cyan), MA50 (purple), VWAP (dashed orange) swatch rows |
-
-### Brent-WTI Historical Spread Chart
-| What | Where | Detail |
-|---|---|---|
-| `fetchHistory()` | `index.html` | Fetches `/api/history` (90-day daily OHLCV); 1h interval; sets `S.history` |
-| `drawSpreadChart()` | `index.html` | Canvas chart: 90-day Brent−WTI spread, ±1σ amber band, mean dashed line, cyan area fill |
-| `<canvas id="chart-spread">` | `index.html` Brent-WTI panel | Added above interpretation box; redraws on P2 tab switch |
-| Startup call | `index.html` | `fetchHistory()` on load; `setInterval(fetchHistory, 3600000)` |
-
-### TradingView Live Charts Panel
-| What | Where | Detail |
-|---|---|---|
-| TradingView panel (grid-column:1/3) | `index.html` P2 bottom | Two side-by-side Advanced Chart widgets: WTI (NYMEX:CL1!) + Brent (NYMEX:BZ1!) |
-| EMA/SMA/VWAP built-in | TradingView | Studies: `["STD;EMA","STD;SMA","STD;VWAP"]` — real-time CFD data |
-| Dark theme, 3M default, symbol changeable | TradingView | `theme:"dark"`, `withdateranges:true`, `allow_symbol_change:true` |
-| embed-widget-advanced-chart.js | CDN | Async-loaded; creates isolated iframes; no JS conflict with LWC/Chart.js |
-
-## All Commands Complete
-
----
-
-## Friend-Dashboard Feature Pass (2026-05-29)
-
-### Features Implemented
-| Feature | Files | Detail |
-|---|---|---|
-| EMA20 / MA50 / VWAP overlays | `index.html` | Toggle buttons on candlestick; EMA (proper k=2/(n+1)), VWAP cumulative; cyan/purple/orange LWC series |
-| Brent-WTI 90-day spread chart | `index.html` | Canvas: ±1σ amber band, cyan area fill, date labels; `fetchHistory()` hourly |
-| TradingView live widgets | `index.html` | P2 bottom: WTI (NYMEX:CL1!) + Brent (NYMEX:BZ1!), dark theme, 3M, EMA/SMA/VWAP studies |
-| EIA STEO Global Oil Balance | `fetchers/eia.py`, `app.py`, `index.html` | `/api/steo` TTL=24h; Chart.js combo bar/line chart; supply/demand/balance; near-term vs forecast bars |
-| Calendar Spread Matrix | `models/term_structure.py`, `index.html` | M1-M2…M11-M12 ladder for Brent+WTI; green=backwardation, red=contango; 11×11 Brent spread correlation heatmap from LCO xlsx 90-day history |
-| Analyst Watch (Nitter RSS) | `fetchers/analyst_watch.py`, `app.py`, `index.html` | `/api/analyst-watch` TTL=15min; Javier Blas + Amena Bakr via Nitter (multiple instance fallback); Trump → Truth Social CTA (API blocked) |
-| Tanker Watch (AIS) | `fetchers/tanker_watch.py`, `app.py`, `index.html` | `/api/tanker-watch` TTL=5min; aisstream.io WebSocket; Hormuz/Bab-el-Mandeb/Suez/Malacca; fallback to news-driven Chokepoint panel + setup instructions when key missing |
-
-### Bug Fixes
-| Bug | File | Fix |
-|---|---|---|
-| `get_brent_m1_history` tz mismatch | `fetchers/multi_curve.py` | `pd.Timestamp.utcnow()` → `pd.Timestamp.now()` (tz-naive to match LCO df.index) |
-| Multiple Flask processes blocking routes | — | Documented: always kill ALL python processes before restart |
-
-### New Env Variable
 ```
-AISSTREAM_API_KEY=...   # live AIS tanker tracking — free at aisstream.io
+EIA_API_KEY=...           # EIA v2 — free at api.eia.gov
+FRED_API_KEY=...          # FRED — free at fred.stlouisfed.org
+NEWSAPI_KEY=...           # legacy news fallback
+BLS_API_KEY=...           # Bureau of Labor Statistics
+APIFY_API_TOKEN=...       # Apify news scrape (paid)
+AISSTREAM_API_KEY=...     # live AIS tankers
+MARKETAUX_KEY=...         # MarketAux news (free 100/day, currently quota-exhausted)
+GROQ_API_KEY=...          # Groq llama-3.3-70b for morning brief
+OLLAMA_MODEL=llama3.2:1b  # local LLM fallback
+OLLAMA_TIMEOUT=120
+# After Sprint 0b:
+SENTRY_DSN=...            # error tracking
+BETTER_STACK_TOKEN=...    # log aggregation
 ```
 
-### New API Endpoints
-| Route | TTL | Key data |
-|---|---|---|
-| GET /api/steo | 86400s | EIA STEO global supply/demand/balance (18 months) |
-| GET /api/analyst-watch | 900s | Javier Blas + Amena Bakr tweets (Nitter RSS) + Trump profile link |
-| GET /api/tanker-watch | 300s | Live AIS: tanker counts near Hormuz/Suez/Bab-el-Mandeb/Malacca |
+---
+
+## Data sources — what powers what
+
+35 named sources in `frontend/src/lib/provenance.ts`. Key tiers:
+
+**LIVE (green dot):** yfinance · EIA v2 · CFTC · FRED OVX · FRED macro · GDELT 2.0 · MarketAux · Open-Meteo · aisstream · ECB FX · Stooq · Nitter
+**CACHED (blue dot):** ICE LCO 15y · multi_curve · /Data Brent settlements · /Data 1-min mids · daily yfinance · 5y yfinance
+**MODEL (gold dot):** PULSE signal engine · fair value · correlations · curve regime 15y · order flow · realised vol · pattern scipy · stumpy MP · geo risk · alerts · trade idea + Groq
+**ESTIMATE (amber dot):** VLCC freight proxy · IV synthetic (legacy, replaced by OVX)
+**HARDCODED (red dot):** Saudi OSP · OPEC static · contract reference · case studies
+
+Every panel header shows its source as a chip. Click the **shield icon** top-right → full ledger with search.
 
 ---
 
-## Phase 3 — Analytical Features (2026-05-28)
+## /Data lake — what's in it and where it's used
 
-### New Backend
-| What | File | Notes |
+The institutional desk feed in `/Data/` (~3.5 GB, gitignored, supplied by mentor). Consumed by:
+
+| File | Used by | What it powers |
 |---|---|---|
-| Crack spread fetcher | `fetchers/cracks.py` | Live yfinance — 3-2-1, 5-3-2, gasoline, HO, Brent crack vs 1Y avg |
-| VLCC freight proxy | `fetchers/cracks.py` | Dubai est. = Brent×0.975; rate proxy heuristic; **ESTIMATED** badge |
-| Saudi OSP | `fetchers/cracks.py` | Hardcoded May 2026 Aramco differentials; **HARDCODED** badge |
-| `/api/cracks` route | `app.py` | TTL_CRACKS=600s; APScheduler job fires immediately on start |
-| `/api/all` updated | `app.py` | `cracks` key now included |
+| `LCO_Brent_daily_settlement_c1_to_c31_2016_2026.csv` (1.2 MB) | `multi_curve.load_lco_history()` via `data_lake.get_brent_settlements()` | Forward curve, calendar spreads, term structure |
+| `LCO_Brent_daily_close_c1_c12_spread_2011_2026.xlsx` (146 KB) | `curve_regime.py` via `data_lake.get_spread_15y()` | M1-M12 percentile + z-score over 14.6y |
+| `LCO_Brent_daily_OHLCV_buysell_volume_multi_contract.xlsx` (140 KB) | `order_flow.py` via `data_lake.get_brent_ohlcv_multi()` | Per-contract daily buy/sell imbalance |
+| `LCO_Brent_1min_outrights_midprice_*.csv` (1.1 GB) | `realised_vol.py` + Phase 2 features | 30-day annualised RV + intraday Phase 2 work |
+| `CL_WTI_1min_outrights_midprice_*.csv` (1.1 GB) | `realised_vol.py` | WTI RV (HH proxy) |
+| `HO_HeatingOil_1min_outrights_midprice_*.csv` (495 MB) | reserved for Phase 2 cracks | Refined product RV |
+| `LGO_Gasoil_1min_outrights_midprice_*.csv` (509 MB) | reserved | European distillate analytics |
+| `WTCL_LCO_Spread_1min_outrights_*.csv` (550 MB) | reserved for Phase 2 | True 1-min WTI-Brent calendar spread |
 
-### New Frontend
-| What | Where | Notes |
-|---|---|---|
-| Key Spreads dashboard | p1 row 3 (full-width) | Brent-WTI, M1-M2, WTI M1-M6, 3-2-1 crack, gas crack, HO crack |
-| Crack Spreads panel | p3 (2-col) | Live table: value/1Y avg/vs avg/signal pill per spread |
-| VLCC Proxy panel | p3 (1-col) | **ESTIMATED** badge, rate proxy gauge, Brent-Dubai components |
-| Saudi OSP panel | p3 (2-col) | **HARDCODED** badge + date, Arab Light/Med/Heavy × Asia/NWE/USGC |
-| CSS additions | `index.html` | `.crack-row`, `.sig-pill`, `.badge-est`, `.badge-hc`, `.spread-dash` etc. |
+**Gap (mentor question Q5):** no WTI equivalent of the daily C1-C31 settlement file. Needed for WTI calendar spread analysis in Phase 2.
 
-### Phase 3C / 3D
-Already complete (Forward Demand Cover gauge + Chokepoint Risk Monitor — both in p3).
-
-### Free Data Research (confirmed)
-- **VLCC / BDTI**: No free API. Baltic Exchange = paid ($500+/mo). Proxy: Brent-Dubai spread (estimated).
-- **Saudi OSP**: Aramco = no machine-readable API. Manually sourced from public monthly press releases. Hardcoded with badge.
-- **Crack spreads**: RBOB (RB=F) + Heating Oil (HO=F) on yfinance — fully live, no key required.
+After Sprint −1: each of these has a `parquet` companion in `Data/parquet/` accessed via DuckDB.
 
 ---
 
-## Post-Command Polish Pass (2026-05-28)
+## Signal engine weights — current (hand-set "expert prior")
 
-### Bug Fixes
-| Bug | File | Fix |
-|---|---|---|
-| `APIFY_API_KEY` → `APIFY_API_TOKEN` | `fetchers/news.py:246` | 1-line fix — Apify now works |
-| Duplicate `const crackEl` (SyntaxError) | `frontend/index.html` | Removed dead first declaration |
-| IV history resets on restart | `fetchers/options_iv.py` | Replaced in-memory deque with SQLite iv_history table |
-| `transformers` not in requirements | `requirements.txt` | Uncommented, FinBERT now installable |
+**Crude (Brent / WTI):**
+```
+inventory 28% · curve 24% · cot 19% · fair_value 14%
+sentiment 5% · technicals 5% · dxy 3% · iv 2% · geo 0%
+```
+**Nat Gas:**
+```
+inventory 30% · weather 25% · curve 15% · cot 15%
+fair_value 10% · technicals 5%
+```
 
-### Frontend Enhancements
-- **Deep panel shadows** — `box-shadow` system on all `.panel` and `.sig-card` with hover lift
-- **Signal card glow** — `text-shadow` on `.sig-verdict` by bull/bear/neut class
-- **Body background** — radial gradient + scan-line texture overlay (terminal feel)
-- **Price flash animation** — `flash-up`/`flash-dn` keyframes triggered on every topbar price update
-- **Tab transitions** — fade + translateY(6px) → 0 on tab switch (220ms ease)
-- **Count-up animation** — `animateNum()` utility (ease-out cubic, 350ms) for animated numbers
-- **Conviction badges** — pulsing green ring for HIGH, static amber dot for MODERATE in signal cards
-- **Status bar** — fixed 26px bottom bar: LIVE dot, M1-M2 spread, crack spread, BRT-WTI, INV %, COT %ile, GEO index, last refresh time
-- **Keyboard shortcut overlay** — `?` key toggles full-screen shortcut guide (glassmorphism panel)
-- **News item hover** — subtle background transition on hover
-- **Stat/spread card hover** — background darkens on hover
-- **Improved score bar** — 8px height, rounded, animated width transition (1.2s ease)
+Score range [−2, +2]. Conviction: HIGH if ≥5/9 indicators agree, MODERATE if ≥3/9, else LOW.
 
-### New Panels
-- **Days of Forward Demand Cover** (p3) — gauge with 54-day critical threshold marker, color-coded
-- **Chokepoint Risk Monitor** (p3) — Hormuz/Bab el-Mandeb/Suez/Malacca with news-driven risk levels
-
-### Architecture
-- `options_iv.py` — `iv_history` SQLite table (30-row rolling window, survives restart)
-- `options_iv.py` — `reliable: bool` flag (True when ≥10 observations accumulated)
-- `updateStatusBar()` — periodic 5s updater for the status bar
-- `updateForwardCover()` — EIA crude stocks → days of cover calculation
-- `updateChokepoints()` — keyword scan of recent headlines → risk level per chokepoint
+**Phase 2 will train data-driven weights** per regime per spread and compare against these. See "Phase 2 sprint 4" — validation report.
 
 ---
 
-## Phase 1 + Phase 2 Pass (2026-05-28)
+## Trade Idea pipeline
 
-### Phase 1 — All 4 bug fixes complete
-| Fix | File | Detail |
-|---|---|---|
-| 1A. Apify env var | `fetchers/news.py:246` | `APIFY_API_KEY` → `APIFY_API_TOKEN` |
-| 1B. transformers | `requirements.txt` | Uncommented; FinBERT 5.9.0 installed |
-| 1C. IV SQLite persistence | `fetchers/options_iv.py` | Rolling 30-row `iv_history` table replaces in-memory deque |
-| 1D. Live OPEC → fair value | `fetchers/opec.py` | `get_opec_production()` tries EIA INTL live data first, falls back to static estimates |
+```
+signal_engine.score
+        ↓
+direction = LONG if score>0.5 AND spot < fair_value
+          | SHORT if score<-0.5 AND spot > fair_value
+          | NEUTRAL otherwise
+        ↓
+target = spot ± 0.5 × (fair_value − spot)
+stop   = spot ∓ 1.5 × ATR
+        ↓
+thesis_bullets = top 3 indicators (by |weight × score|) agreeing with direction
+key_risk      = strongest contradicting indicator
+        ↓
+morning_brief: Groq llama-3.3-70b → local Ollama → rule-based template
+        ↓
+trader sees on Signal tab. "Push to Paper" button stages in paper book (tab 9).
+```
 
-### yfinance tz-fix pass
-| File | Fix |
+---
+
+## Paper trading
+
+- **Table:** `paper_trades` in `pulse_cache.db`. Single-leg currently. **Sprint 2 of Phase 2 migrates to multi-leg** (for spread trades).
+- **MTM job:** APScheduler every 60s. Checks live price vs TP/SL; auto-closes on hit.
+- **Performance:** total PnL · win rate · annualised Sharpe (√252) · profit factor · max drawdown · best/worst trade · equity curve.
+
+---
+
+## Tech debt register (consciously deferred)
+
+Things we *know* are suboptimal, ranked by when we should address them:
+
+| # | Item | Severity | When to fix |
+|---|---|---|---|
+| 1 | DuckDB + Parquet for /Data | HIGH | **Sprint −1 (now)** |
+| 2 | Pydantic + TS codegen | HIGH | **Sprint 0a (now)** |
+| 3 | Sentry + Better Stack | MEDIUM | **Sprint 0b (now)** |
+| 4 | FastAPI migration | MEDIUM | After Phase 2 (Sprint 6) |
+| 5 | Redis cache + TimescaleDB | MEDIUM | After Phase 2 |
+| 6 | WebSocket push for live prices | MEDIUM | After Phase 2 |
+| 7 | TanStack Query on frontend | LOW | Opportunistic |
+| 8 | Zustand for shared state | LOW | When cross-tab state grows |
+| 9 | Unified charting (currently 5 libs) | LOW | Refactor sprint |
+| 10 | pytest + vcrpy tests | MEDIUM | Add as we go, don't backfill |
+| 11 | MLflow for Phase 2 model tracking | MEDIUM | Sprint 1 of Phase 2 |
+| 12 | Docker + Fly.io deploy | LOW | When mentor wants to share with her boss |
+
+The architecture review I did 2026-06-05 is logged here too — see `docs/ARCHITECTURE_REVIEW.md` if it exists, otherwise it's in the chat history.
+
+---
+
+## Gotchas / non-obvious behaviour
+
+These bite a fresh session if not flagged:
+
+1. **`python start.py` serves the React build from `backend/static/`**. Frontend changes won't show until you run `cd frontend && npm run build`. For live HMR: `npm run dev` on port 5173 instead.
+2. **Two python processes on :5000 = stale code running**. Always `taskkill /F /PID` both before restarting.
+3. **SQLite cache poisoning** — when an upstream API fails during a fetch, the fallback dict gets cached. Bust with `DELETE FROM cache WHERE key='...'` to force a fresh fetch.
+4. **GDELT rate limit is 1 req/5s per IP**. Multiple GDELT calls in scheduler stagger themselves via a process-wide lock. If you add a new GDELT caller, respect the lock.
+5. **MarketAux free tier = 3 articles/request, 100 req/day total**. Paginate carefully; we cap at 3 pages. Currently quota-exhausted on the latest key.
+6. **FinBERT model is 420 MB**, downloads on first call to `~/.cache/huggingface/`. First sentiment call is slow.
+7. **`backend/static/index.html` is regenerated on every `npm run build`**. Don't hand-edit it.
+8. **`Data/` is gitignored**. If you `git clone` on a new machine, the dashboard runs but Phase 2 features will be empty until /Data is restored.
+9. **APScheduler `next_run_time=_NOW` only on slow jobs**. The fast ones (prices, ohlcv) wait for their first interval.
+10. **PowerShell encoding** — never use PowerShell to read/write `frontend/src/**/*.tsx`. Use the `Read`/`Edit` tools. PowerShell mangles multi-byte chars.
+
+---
+
+## Mentor communication log
+
+| Date | Event |
 |---|---|
-| `fetchers/prices.py` | Replaced batch `yf.download()` with per-ticker `Ticker.history()` — 10/10 assets now live |
-| `fetchers/curve.py` | Rewrote `fetch_curve()` — Brent from ICE LCO xlsx (M1-M12), WTI M1 live + basis-adjusted M2-M12 |
-| `fetchers/multi_curve.py` | Fixed ticker format (`=F` suffix), M1 uses continuous contract, `Ticker.history()` throughout |
-| `fetchers/historical.py` | Per-ticker `Ticker.history()` replaces batch download in `_download()` |
-| `fetchers/technicals.py` | `Ticker.history()` in fallback path |
-
-### Phase 2 — All frontend items complete
-| Item | Detail |
-|---|---|
-| Loading skeletons | `initSkeletons()` — shimmer placeholders for news list (5 rows) + correlation grid (25 cells) before first data load |
-| Click-to-expand overlays | `#drill-modal` + `openDrill(title, html)` / `closeDrill()` — signal cards clickable; shows full indicator breakdown, IV gauge, key risk |
-| Correlation matrix tooltip | `#corr-tooltip` floating div; mousemove delegation on `.corr-cell[data-a]`; shows asset pair, correlation value, strength label, brief interpretation |
-| News: hover description + click URL | `updateNewsPanel()` — adds `.news-link` class + `onclick=window.open(url)` when URL present; `.news-desc` shown on `:hover` |
-| Alert countdown drain | `.alert-drain` — absolute 2px bar at pill bottom, `drain-bar` keyframe depletes left→0 over 8s; smooth `alert-out` on dismiss |
-| Escape closes drill modal | Keyboard handler updated |
+| 2026-05-29 | Phase 1 mid-review: "trade signals too strong (BUY/SELL), too much glare. Need bullish/bearish labels, replay button, morning brief always visible, fix news bugs." → ALL ADDRESSED in PR #2. |
+| 2026-06-05 (AM) | Phase 1 final demo. Approved. Mentor asks for **regime-based market analysis engine**. |
+| 2026-06-05 (PM) | 7 alignment questions sent (see "Pending decisions"). Awaiting reply. |
 
 ---
 
-## Known Patterns / Gotchas
+## Repo + branch hygiene
 
-**File truncation:** The Write tool silently truncates Python files >~500 lines. Always use `Edit` for targeted changes. Run `python -m py_compile <file>` after every write.
-
-**PowerShell encoding hazard:** PowerShell 5.1 `Get-Content` reads files as Windows-1252 by default. `Set-Content -Encoding utf8` adds a BOM. Both corrupt multi-byte UTF-8 characters in index.html. **Never use PowerShell to read/write index.html.** Use the `Read` and `Edit` tools exclusively.
-
-**sys.path:** Both `backend/` and project root must be on `sys.path`. `app.py` inserts both `_BACKEND` and `_ROOT`. All fetchers do the same.
-
-**yfinance multi-level columns:** After `yf.download()`, flatten: `if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)`.
-
-**LCO xlsx:** Real xlsx saved as .csv. Already copied to `backend/data/LCOSettle.xlsx`. Open with openpyxl directly.
-
-**FinBERT first run:** Downloads ~420MB to `~/.cache/huggingface/` on first call. Subsequent calls use cache. Wrap pipeline init in try/except — falls back to 0.0 scores gracefully.
-
-**EIA INTL unit:** Production values >100 are in thousand barrels/day (Tb/d). Divide by 1000 to get Mb/d. Check `unit` field or value magnitude.
-
-**LWC chart resize:** Call `_lwcChart.resize(container.offsetWidth, height)` inside the `else` branch (chart already exists) to handle tab-switch redraws.
-
-**APScheduler (Command 13):** Use `BackgroundScheduler` not `BlockingScheduler`. Set `daemon=True` on the scheduler thread. Import `from apscheduler.schedulers.background import BackgroundScheduler`.
+- **Main branch:** `main` — always green, always shippable
+- **Working pattern:** branch off `main`, PR back, squash-merge, delete branch
+- **Last shipped PR:** #2 (2026-06-05) — Phase A+B data overhaul + Paper Trading + Health monitoring
+- **Backup branch:** `backup/pre-merge-20260602-175531` — leftover from PR #1, retained out of caution
+- **Commit style:** body explains WHY not WHAT. Use `Co-Authored-By: Claude` trailer when AI-paired.
 
 ---
 
-## Phase 4 — AI Enhancement (2026-05-28)
+## How to resume in a fresh chat — checklist
 
-### 4A — Real-time Narrative Generation
-| What | File | Detail |
-|---|---|---|
-| `_rule_based_brief(ctx)` | `models/trade_idea.py` | 5-sentence analyst brief: curve structure, inventory, COT, cracks, bias |
-| Enhanced `_ollama_brief(ctx)` | `models/trade_idea.py` | Richer prompt with M1-M2, crack spread, inventory %; 80-word sanity check; falls back to rule-based |
-| `generate_trade_idea()` extended | `models/trade_idea.py` | Adds `cracks=None` param; extracts `m1m2_spread`, `curve_struct`, `inv_pct`, `crack_321`, `crack_avg`, `crack_signal` into `brief_ctx` |
-| `_trade_idea()` wired | `app.py` | Passes `cracks=_fetch_cracks()` to `generate_trade_idea()` |
+```
+1. Open new chat
+2. Paste:
+   "Read CLAUDE.md in pulse/, then start [Sprint X].
+    Don't multi-task. When the sprint ships, update CLAUDE.md and stop."
 
-### 4B — News Clustering
-| What | File | Detail |
-|---|---|---|
-| `_CLUSTER_KEYWORDS` | `fetchers/news.py` | 4 themes × ~24 keywords each: OPEC+, Supply/Geo, Demand, Macro/Dollar |
-| `_cluster_articles()` | `fetchers/news.py` | Score articles against each theme; assign to highest; returns `{theme: [articles]}` |
-| `clusters` key | `fetchers/news.py` | Added to `get_energy_news()` return dict |
-| CSS cluster headers | `frontend/index.html` | `.news-cluster-hdr`, `.cluster-dot`, `.cluster-lbl`, colour-coded by theme |
-| `updateNewsPanel()` | `frontend/index.html` | Renders clustered sections (max 3/theme) with section headers; flat fallback |
+3. The agent:
+   a. Reads this file
+   b. Reads only the files the sprint touches
+   c. Implements
+   d. Tests
+   e. Updates the "Current sprint" section to mark complete + advance to next
+   f. Stops
+```
 
-### 4C — Pattern Playbook
-| What | File | Detail |
-|---|---|---|
-| `PATTERN_PLAYBOOK` dict | `models/patterns.py` | 12 patterns × {bias, description, bullish_pct, bearish_pct, median_move_pct, typical_horizon, case_studies[]} |
-| Case studies | `models/patterns.py` | 2-3 per pattern from real crude oil history (2008, 2014, 2016, 2020, 2022, 2023) |
-| `playbook` key | `models/patterns.py` | Added to `get_patterns()` return dict; `None` if pattern not in playbook |
-| CSS playbook | `frontend/index.html` | `.playbook-box`, `.playbook-res-bar`, `.playbook-case`, `.playbook-case-detail`, etc. |
-| `updatePatterns()` | `frontend/index.html` | Renders resolution stats bar (bull%/bear%), median move, horizon, case studies |
-| `#pat-playbook` container | `frontend/index.html` | Inserted between `pat-detail` and `pattern-list` |
+That's the contract. One sprint per session. Maximum focus, minimum context overhead.
 
 ---
 
-## Phase 5 — Professional Polish (2026-05-28)
+## What "top-notch" means for this project — decision principles
 
-### 5A — Data Provenance Labels
-| What | Where | Detail |
-|---|---|---|
-| `.prov-label` CSS | `index.html` | `prov-dot` (colour-coded), `prov-src`, `prov-age` — 7.5px mono footer on each panel |
-| `_PROV_MAP` | `index.html` | 15-entry map: panel CSS selector → {source label, timestamp getter fn} |
-| `_agoStr(isoTs)` | `index.html` | Converts ISO timestamp to "Xm ago" / "Xh ago" / "just now" |
-| `updateProvenance()` | `index.html` | Appends/updates `.prov-label` divs programmatically; no HTML changes to panels needed |
-| Wired into `updateAll` | `index.html` | Patched via `_origUpdateAll` wrapper; fires 100ms after every update |
+Use these as the tie-breaker when multiple paths are viable:
 
-### 5B — Export / Share
-| What | Where | Detail |
-|---|---|---|
-| `#export-btn` | `index.html` topbar | `📊 EXPORT` button; hover: gold tint |
-| `exportReport()` | `index.html` | Generates full-fidelity HTML report in new window: prices grid, signal table, trade idea + morning brief, key fundamentals; includes "⎙ Print / Save as PDF" button |
-| `@media print` CSS | `index.html` | Hides dashboard UI when printing; shows only `#print-report` wrapper |
+1. **Honesty over polish.** Every number on the screen traces to a named source. Stale data is shown as stale. Fallback paths are labelled.
+2. **Interpretability over R².** Mentor's mandate. A 65% R² Ridge with named drivers beats an 80% R² GBM the trader can't explain.
+3. **Type safety on the seams.** Schema drift between backend and frontend is the #1 source of bugs in this project. Sprint 0a addresses this.
+4. **Show your receipts.** Every model output ships with its training-data window, sample size, OOS metrics, and historical analogs. Especially in Phase 2.
+5. **Ship narrow, then broaden.** One spread fully end-to-end before five spreads half-done.
+6. **Mentor-facing always.** Every sprint ends with an artifact she could open and understand.
 
-### 5C — Fullscreen Chart Mode
-| What | Where | Detail |
-|---|---|---|
-| `#chart-modal` overlay | `index.html` | 95vw × 90vh backdrop blur modal; `⤢` expand buttons on 4 chart panel headers |
-| `openChartModal(type)` | `index.html` | 4 modes: `candle` (new LWC chart), `curve` (canvas redraw), `season` (canvas copy/redraw), `multicurve` (new Chart.js instance) |
-| `closeChartModal()` | `index.html` | Destroys LWC instance, clears body, hides modal |
-| `_drawCurveOnCanvas(canvas)` | `index.html` | Shared curve drawing logic at arbitrary canvas size |
-| `_drawSeasonOnCanvas(canvas)` | `index.html` | Copies seasonality canvas or shows placeholder |
-| `drawMultiCurveChartOn(canvas)` | `index.html` | Creates new Chart.js multi-curve at modal size |
-| Esc key updated | `index.html` | Now also calls `closeChartModal()` |
+---
 
-### 5D — Market Hours Awareness
-| What | Where | Detail |
-|---|---|---|
-| `#mkt-status` chip | `index.html` topbar | `● OPEN` (green) / `● CLOSED` (amber) / `● WEEKEND` (red) |
-| `getMarketStatus()` | `index.html` | Returns OPEN/CLOSED/WEEKEND based on UTC day + ICE Brent hours (01:00–23:00 UTC Mon-Fri) |
-| `updateMarketStatus()` | `index.html` | Updates chip class/text; adds `.ticker-stale` to dim topbar prices when closed/weekend; shows `● WEEKEND` stale dot |
-| `.ticker-stale` CSS | `index.html` | `t-price` dims to `var(--white3)`; `t-chg` drops to 45% opacity |
-| Runs on load + 60s interval | `index.html` | `updateMarketStatus()` called immediately + `setInterval(60000)` |
+**End of CLAUDE.md.**
+A fresh session should now have everything needed to resume. Start with "Current sprint."
