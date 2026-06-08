@@ -360,24 +360,55 @@ trader sees on Signal tab. "Push to Paper" button stages in paper book (tab 9).
 
 ## Tech debt register (consciously deferred)
 
-Things we *know* are suboptimal, ranked by when we should address them:
+Things we *know* are suboptimal. Sequencing logic: do what unblocks Phase 2 NOW;
+batch the rest into a dedicated **Phase 3 production-hardening sprint** AFTER
+Phase 2 ships, with empirical measurements to justify each upgrade.
 
-| # | Item | Severity | When to fix |
+### NOW — before / during Phase 2 (mentor-independent prep)
+
+| # | Item | Why now | Sprint |
 |---|---|---|---|
-| 1 | DuckDB + Parquet for /Data | HIGH | **Sprint −1 (now)** |
-| 2 | Pydantic + TS codegen | HIGH | **Sprint 0a (now)** |
-| 3 | Sentry + Better Stack | MEDIUM | **Sprint 0b (now)** |
-| 4 | FastAPI migration | MEDIUM | After Phase 2 (Sprint 6) |
-| 5 | Redis cache + TimescaleDB | MEDIUM | After Phase 2 |
-| 6 | WebSocket push for live prices | MEDIUM | After Phase 2 |
-| 7 | TanStack Query on frontend | LOW | Opportunistic |
-| 8 | Zustand for shared state | LOW | When cross-tab state grows |
-| 9 | Unified charting (currently 5 libs) | LOW | Refactor sprint |
-| 10 | pytest + vcrpy tests | MEDIUM | Add as we go, don't backfill |
-| 11 | MLflow for Phase 2 model tracking | MEDIUM | Sprint 1 of Phase 2 |
-| 12 | Docker + Fly.io deploy | LOW | When mentor wants to share with her boss |
+| 1 | DuckDB + Parquet for /Data | 50× faster historical queries — directly speeds up Phase 2 regressions | **Sprint −1** |
+| 2 | Pydantic + TS codegen | Phase 2 adds ~15 new endpoints; type safety prevents the "wrong shape" bug class on each | **Sprint 0a** |
+| 3 | Sentry observability | Safety net while writing Phase 2 code | **Sprint 0b** |
 
-The architecture review I did 2026-06-05 is logged here too — see `docs/ARCHITECTURE_REVIEW.md` if it exists, otherwise it's in the chat history.
+### PHASE 3 — Production hardening, batched after Phase 2 ships
+
+Sequenced together because they share concerns (deploy needs the whole stack
+upgraded simultaneously). Total: ~1 week. To be done with **real Phase 2 data**
+flowing, so each upgrade can be justified empirically rather than by guess.
+
+| # | Item | Cost | Why deferred |
+|---|---|---|---|
+| 4 | **FastAPI migration** (Flask → FastAPI) | 1 day | Phase 2 doesn't need async; risk of breaking the 32 streams while Phase 2 is mid-flight |
+| 5 | **Async fetchers** (httpx.AsyncClient for slow I/O) | 1 day | Same — nice to have, not blocking |
+| 6 | **Postgres + TimescaleDB** (paper trades, signal/IV history) | 1 day | SQLite handles current scale fine; migration could lose paper-trade history if botched |
+| 7 | **Redis cache + dependency tracking** | 1 day | Replaces SQLite cache; gets us auto-invalidation (prices → fair_value) |
+| 8 | **WebSocket push** (replace polling for prices/alerts/MTM) | 1 day | UX win but not blocking |
+| 9 | **Docker + Fly.io deploy + HTTPS** | 1 day | Only matters once mentor wants to share publicly |
+| 10 | **Better Stack log aggregation + uptime monitoring** | 0.5 day | Pairs with deploy |
+
+Phase 3 sprint sequencing rationale documented above (see *"What 'afterwards'
+actually means"* in the 2026-06-05 design discussion). The key insight:
+**doing #4–#10 BEFORE Phase 2 delays Phase 2 by 3 weeks for invisible benefit;
+doing them AFTER lets us measure latency before/after and justify each upgrade.**
+
+### Opportunistic / nice-to-have (no fixed date)
+
+| # | Item | When |
+|---|---|---|
+| 11 | TanStack Query (replaces homegrown usePolling) | Frontend refactor sprint, eventually |
+| 12 | Zustand for cross-tab state | When state passing through props gets painful |
+| 13 | Unified charting library (5 libs → 1) | Visual polish refactor |
+| 14 | pytest + vcrpy tests | Add coverage as we touch code; don't backfill |
+| 15 | MLflow model tracking | Sprint 1 of Phase 2 (per-regime regression experiments) |
+
+### Design principle for this register
+
+**"Defer until measured."** Every item in Phase 3 is an architectural
+improvement that's clearly correct in the abstract, but the *magnitude*
+of the win depends on real load patterns we don't have data on yet.
+Shipping Phase 2 first gives us that data.
 
 ---
 
