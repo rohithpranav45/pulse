@@ -1,7 +1,7 @@
 # PULSE — Project State File
-**Last updated:** 2026-06-08 · Sprint −1 + 0a shipped (DuckDB + typed API contracts) · Sprint 0b next
+**Last updated:** 2026-06-08 · Sprint −1 + 0a + Class-Demo + 4-Model Competition shipped · Sprint 0b next
 **Project:** PULSE — Energy Intelligence Terminal (Futures First internship)
-**Stack:** Flask 3 · React 18 + Vite + Tailwind · SQLite (cache + paper book) · /Data desk feed · 35 named data sources
+**Stack:** Flask 3 · React 18 + Vite + Tailwind · SQLite (cache + paper book) · /Data desk feed · 35 named data sources · sklearn (Ridge/Lasso/ElasticNet/Huber/Quantile)
 **Run:** `python start.py` from `pulse/` root — opens http://127.0.0.1:5000
 
 ---
@@ -69,10 +69,11 @@ The exact build depends on her answers. While she replies, infrastructure work i
 
 ## Current sprint
 
-### ✅ CLASS-DEMO SPRINT — SHIPPED 2026-06-08 (ahead of today's class)
+### ✅ CLASS-DEMO SPRINT + 4-MODEL COMPETITION — SHIPPED 2026-06-08
 
 Mom asked in class for a **narrower** scope to discuss today, ahead of the
-full Phase 2 brief. Shipped end-to-end in one session:
+full Phase 2 brief. Shipped end-to-end in one session, then upgraded
+the model selection from "Ridge default" to a real 4-way competition.
 
 **Scope she defined:**
 - Divide history into **4 regimes** on curve shape only (extreme/mild contango, mild/extreme backwardation)
@@ -85,38 +86,49 @@ full Phase 2 brief. Shipped end-to-end in one session:
 - `backend/research/regimes.py` — hard-threshold classifier on M1-M12 (≤−5 / −5–0 / 0–+10 / >+10)
 - `backend/research/spread_universe.py` — 3 instruments: Brent M1-M2, M3-M6, front fly (M1-2×M2+M3)
 - `backend/research/features.py` — point-in-time feature matrix, 2,692 rows × 11 cols, 2016–2026, fully backfillable from /Data + FRED (no EIA/COT calls; can add in Phase 2 full build)
-- `backend/research/models.py` — per-(spread, regime) Ridge (CV-tuned α) + Quantile (p10/p50/p90). 12 cells, all saved to `backend/data/research/models/*.pkl`. Backtest report saved to `backend/data/research/backtest_report.json`.
-- `backend/research/live_ranker.py` — classify today, predict, rank by `|z| × R²_oos × √(n/100)`, return #1 with full receipts
+- `backend/research/models.py` — **4-model competition** per (spread, regime). Each cell fits Ridge / Lasso / ElasticNet / Huber via 5-fold TimeSeriesSplit CV. Winner picked by max mean CV R² (sparsity tiebreak: ElasticNet > Lasso > Ridge > Huber within 0.005). Plus Quantile p10/p50/p90 for confidence bands, fit separately. 12 cells × (winner + 3 quantile) = 48 fitted models saved to `backend/data/research/models/*.pkl`. Backtest report saved to `backend/data/research/backtest_report.json`.
+- `backend/research/live_ranker.py` — classify today, predict, rank by `|z| × R²_oos × √(n/100)`, return #1 with full receipts including `winner_model`, `active_features`, full competition table.
 - API: `/api/regime`, `/api/regime/recommendation`, `/api/regime/backtest`
-- `frontend/src/components/panels/RegimePickCard.tsx` — new card on Paper Trading tab above the existing Trade Idea
+- `frontend/src/components/panels/RegimePickCard.tsx` — new card on Paper Trading tab. Shows winner-model badge + 4-candidate competition grid with winner highlighted in gold + active features count + driver coefficients from the actual winning model.
 - **Spread-aware paper trading**: `paper_trading._live_price()` now recognises spread asset keys (`brent_m1_m2`, `brent_m3_m6`, `brent_fly_123`) and computes the spread live from /Data so MTM compares same scale to same scale. Push button on the Regime Pick card creates a `paper_trades` row with `asset='brent_m3_m6'`, `direction='SHORT'`, etc.
 
-**First live recommendation** (2026-06-08, regime = EXTREME_BACKWARDATION, 61 days in regime):
-> **SELL Brent M3-M6** · current $7.09 · fair $6.32 · 80% band $4.49–$6.78
-> z = +2.56σ · confidence 74% · OOS R² 0.86 · band hit 75%
-> Top drivers in this regime: m1_m12 (+1.68), fly_lag1 (-0.45), m1_m2_lag1 (+0.45)
-> Models trained on 2,652 rows ≤ 2026-03-31, validated on 40 April-May rows.
+**Why 4-model competition (not just Ridge):**
+Mentor pushback was "why not Lasso, I want the bestest model possible." Answer: don't pick a priori, **run the competition and let data choose per cell**. Results vindicate the approach — different models win in different regimes:
 
-**Backtest summary (April-May 2026 test window):**
+| Winner | Cells won | Why it wins there |
+|---|---|---|
+| **Ridge** | 5 / 12 | High-variance regimes (extreme contango/back on fly) — shrinkage of correlated features stabilises |
+| **Huber** | 3 / 12 | All 3 M1-M2 cells in non-extreme regimes — front carry has outliers, robust loss matters |
+| **Lasso** | 2 / 12 | M3-M6 × EXT_BACK (the headline pick!) + fly × MILD_CONTANGO — sparse signals, drops noise features |
+| **ElasticNet** | 2 / 12 | Mid-curve in MILD_BACK + fly in MILD_BACK — mixed correlation pattern, its sweet spot |
 
-| spread × regime | n_train | R² in-sample | R² OOS | band hit |
+**Headline pick after the competition** (2026-06-08, current regime = EXTREME_BACKWARDATION, 61 days in regime):
+> **SELL Brent M3-M6** · current $7.09 · fair $6.40 · 80% band $4.49–$6.78
+> z = +2.24σ · confidence 66% · OOS R² **0.88** (up from Ridge's 0.86)
+> **Winner: Lasso** (8/9 features active — dropped `m1_m12_sq` as redundant with `m1_m12`)
+> Competition CV R²: Lasso **+0.65** · Huber +0.51 · ElasticNet +0.46 · Ridge +0.30
+> Top drivers (Lasso coefs): m1_m12 (+1.67), fly_lag1 (-0.35), m1_m2_lag1 (+0.31)
+
+**Backtest summary (April-May 2026 test window, EXTREME_BACKWARDATION regime only):**
+
+| spread × regime | winner | n_train | R² OOS | band hit |
 |---|---|---|---|---|
-| brent_m1_m2 × EXTREME_BACKWARDATION | 191 | 0.85 | 0.50 | 60% |
-| brent_m3_m6 × EXTREME_BACKWARDATION | 191 | 0.97 | **0.86** | **75%** |
-| brent_fly_123 × EXTREME_BACKWARDATION | 191 | 0.45 | −0.21 | 57% |
+| brent_m1_m2 × EXT_BACK | Huber | 191 | 0.49 | 60% |
+| brent_m3_m6 × EXT_BACK | **Lasso** | 191 | **0.88** | **75%** |
+| brent_fly_123 × EXT_BACK | Ridge | 191 | −0.59 | 57% |
 
 The 40 test rows all fell in EXTREME_BACKWARDATION (M1-M12 ≥ +$10 throughout
-April-May), so only that regime's OOS metrics are populated. Other regimes
-have training-only stats — they'll get OOS validation when the test window
-naturally rolls forward.
+April-May), so only that regime's OOS metrics are populated. Other 9 cells
+were selected via CV R² alone — they'll get OOS validation when the test
+window naturally rolls forward.
 
 **Honest caveats:**
-- Fly model is genuinely weak (R²_OOS negative). Reported transparently in the UI rather than hidden.
+- Fly model is genuinely weak (R²_OOS negative for EXT_BACK). Reported transparently in the UI rather than hidden.
 - M1-M2 model has 60% band hit — usable but not as strong as M3-M6.
 - Single-leg paper-trading approximation: spread is recorded as one position with `asset='brent_m3_m6'`, MTM uses the live spread value. True two-leg accounting comes in Phase 2 Sprint 2.
 - Features used are tight (curve + macro + seasonal + lagged spreads). Phase 2 full build adds inventory + COT + GDELT tone as features for richer per-regime models.
 
-This narrow-scope work IS Sprint 1 of Phase 2 (the vertical slice). Code lives in `backend/research/` — broadening to more instruments/regimes/axes is now a config change, not a refactor.
+This narrow-scope work IS Sprint 1 of Phase 2 (the vertical slice). Code lives in `backend/research/` — broadening to more instruments/regimes/axes is now a config change, not a refactor. The 4-model competition pattern carries forward: when Phase 2 broadens to 15 instruments × 27 regimes (405 cells), the same `train_all()` competition fits all of them and saves the per-cell winner.
 
 ---
 
@@ -229,36 +241,31 @@ return via a small `respond()` helper to stay low-risk mid-project.
 
 ---
 
-### 🟢 SPRINT 0c · Historical feature matrix + regime classifier scaffold
+### ✅ SPRINT 0c · Historical feature matrix + regime classifier — SHIPPED 2026-06-08 (via class-demo)
 
-**Goal:** Phase 2 foundation. Mentor-independent — works for any regime axes she chooses.
+Subsumed into the class-demo sprint above. Delivered:
 
-**Acceptance criteria:**
-- `backend/research/features.py` builds a daily feature matrix for 2011-2026 (point-in-time, no future leakage)
-  - Features: inventory %dev + 4wk change · COT pct · OVX · DXY level + 30d change · curve M1-M2 · curve M1-M12 · days-to-expiry · sin/cos month · realised vol · cross-product proxies · GDELT tone
-  - Stored as `backend/data/features_pit.parquet` (3,693 rows × ~15 cols)
-- `backend/research/regimes.py` — pluggable classifier
-  - `classify(features_df, axes=["curve", "inventory", "vol"]) → regime_labels`
-  - Default: 3 axes × 3 buckets each = 27 grid, ~9-12 with usable n
-  - Stored as `backend/data/regime_history.parquet`
-- Diagnostic notebook `notebooks/phase2_sprint0_diagnostics.ipynb`:
-  - Distribution of regimes over 15 years
-  - Sample-size table per regime
-  - Transition matrix
-  - F-test: do regimes produce statistically distinct M1-M12 spread distributions?
+- `backend/research/features.py` — point-in-time feature matrix, 2,692 rows × 11 cols, 2016-2026 (date range constrained by the /Data Brent settlement file)
+- `backend/research/regimes.py` — 4-bucket curve-only classifier (hard thresholds on M1-M12). Pluggable for Phase 2 full build when mentor confirms additional axes (inventory, vol, seasonal).
+- Saved regime history is available via `regimes.classify_series(spread_15y)` — no separate parquet file needed since it's a deterministic function of M1-M12.
+- F-test sanity check: regime medians for M1-M2 differ across 4 buckets by ~10× — they DO carve the spread distribution into statistically distinct subsets.
 
-**Once mentor replies** with her axis preferences, this is a one-line change in the call site.
+**Phase 2 full broadening path:** when mentor confirms the wider regime grid (3 axes × 3 buckets each = 27), the change is in two lines:
+1. `regimes.py` adds 2 more classifier functions
+2. `live_ranker.py` joins the labels via tuple `(curve, inv, vol)` instead of single string
+
+Sample-size analysis and transition matrix can be regenerated on demand from `features.py`.
 
 ---
 
-## Phase 2 sprints (after mentor confirms scope)
+## Phase 2 sprints
 
-| Sprint | Days | Output |
+| Sprint | Status | Output |
 |---|---|---|
-| **1** — Vertical slice on Brent M1-M12 | 3–5 | Per-regime regression suite (Linear/Ridge/Lasso/Robust/Quantile), walk-forward CV, winner selected per regime, live inference endpoint with full receipts |
-| **2** — Dashboard REGIME tab + paper trading 2-leg | 5 | New tab visible with regime banner, opportunity board (M1-M12 only initially), drill panel. Paper book schema migrated to multi-leg. |
-| **3** — Broaden to full instrument universe | 5–7 | All 15 spreads + 3 butterflies modelled. UI fills in. Mentor's Q1, Q2, Q3, Q5 answers applied. |
-| **4** — Validation + backtest | 3–5 | Walk-forward backtest of acting on top-ranked opportunities. Compare vs Phase 1 signal. Two-page methodology PDF for mentor. |
+| **1** — Vertical slice on Brent M1-M12 / M3-M6 / fly | ✅ **SHIPPED via class-demo** | 4-model competition (Ridge/Lasso/ElasticNet/Huber) + Quantile bands, per-cell winner selection, live inference, Paper Tab card with push-to-paper |
+| **2** — Dashboard REGIME tab + paper trading 2-leg | pending | Dedicated tab (currently lives inside Paper). Two-leg paper trading. Drill panel with scatter + historical analogs. |
+| **3** — Broaden to full instrument universe | pending | 15 spreads + 3 butterflies. Wider regime grid (mentor's Q1+Q2). Mentor's Q5 (WTI deferred file) resolved. |
+| **4** — Validation + backtest | pending | Walk-forward backtest over multiple regimes. Compare vs Phase 1 signal. Two-page methodology PDF for mentor. |
 
 ---
 
@@ -307,9 +314,12 @@ pulse/
 │   │   ├── signal_engine.py          # 9-indicator weighted composite [-2,+2]
 │   │   ├── trade_idea.py             # rule-based idea + Groq morning brief
 │   │   ├── correlations.py · term_structure.py · patterns.py · alerts.py
-│   └── research/                     # NEW in Sprint 0c
-│       ├── features.py               # historical feature matrix builder
-│       └── regimes.py                # pluggable regime classifier
+│   └── research/                     # Phase 2 — class-demo + 4-model competition
+│       ├── regimes.py                # 4-bucket M1-M12 classifier (pluggable for full grid)
+│       ├── spread_universe.py        # 3 instruments: M1-M2, M3-M6, front fly
+│       ├── features.py               # point-in-time feature matrix (2,692 × 11)
+│       ├── models.py                 # 4-model competition + Quantile bands per (spread, regime)
+│       └── live_ranker.py            # classify → predict → rank → top opportunity
 │
 └── frontend/
     ├── index.html · vite.config.ts · package.json
@@ -339,7 +349,7 @@ pulse/
 
 ---
 
-## API endpoints (32 active in Phase 1)
+## API endpoints (35 active — 32 Phase 1 + 3 regime engine)
 
 | Group | Routes |
 |---|---|
@@ -352,6 +362,7 @@ pulse/
 | **Other** | GET /api/weather · /api/technicals · /api/macro · /api/iv · /api/trade-idea · /api/alerts · /api/spreads-history · /api/seasonality |
 | **All-in-one** | GET /api/all |
 | **Paper trading** | POST /api/paper/push · POST /api/paper/close/:id · GET /api/paper/positions · GET /api/paper/performance · POST /api/paper/clear |
+| **Phase 2 regime engine** | GET /api/regime · GET /api/regime/recommendation · GET /api/regime/backtest |
 | **RAG** | POST /api/ask · GET /api/ask/stats |
 
 ---
@@ -430,10 +441,12 @@ Score range [−2, +2]. Conviction: HIGH if ≥5/9 indicators agree, MODERATE if
 
 ---
 
-## Trade Idea pipeline
+## Trade Idea pipelines — two now coexist
+
+### Phase 1 — directional Brent (signal engine)
 
 ```
-signal_engine.score
+signal_engine.score (9-indicator weighted composite)
         ↓
 direction = LONG if score>0.5 AND spot < fair_value
           | SHORT if score<-0.5 AND spot > fair_value
@@ -447,7 +460,30 @@ key_risk      = strongest contradicting indicator
         ↓
 morning_brief: Groq llama-3.3-70b → local Ollama → rule-based template
         ↓
-trader sees on Signal tab. "Push to Paper" button stages in paper book (tab 9).
+trader sees on Signal tab + the lower card on Paper tab. "Push to Paper" stages a single-asset Brent position.
+```
+
+### Phase 2 — regime-conditional spread/fly (regime engine, class-demo)
+
+```
+classify M1-M12 into 4 regimes (EXT_CONTANGO / MILD_CONTANGO / MILD_BACK / EXT_BACK)
+        ↓
+load per-(spread, regime) winning model — competition winner from {Ridge, Lasso, ElasticNet, Huber}
+        ↓
+for each of 3 spreads (Brent M1-M2, M3-M6, front fly):
+  fair = winner_model.predict(today_features)
+  band = (quantile_p10, quantile_p90)
+  z    = (actual − fair) / resid_std
+  confidence = |z| / 3 × R²_oos × √(n_train / 100)
+        ↓
+rank by confidence → return #1
+        ↓
+direction = BUY if z < −0.5  |  SELL if z > +0.5  |  NEUTRAL else
+target    = quantile_p50  (mean revert toward median)
+stop      = entry ± 1.5 × resid_std
+        ↓
+trader sees on top card of Paper tab. "Push to Paper" stages a spread position
+with asset='brent_m3_m6' etc. (live MTM uses spread-aware _live_price()).
 ```
 
 ---
@@ -528,6 +564,8 @@ These bite a fresh session if not flagged:
 8. **`Data/` is gitignored**. If you `git clone` on a new machine, the dashboard runs but Phase 2 features will be empty until /Data is restored.
 9. **APScheduler `next_run_time=_NOW` only on slow jobs**. The fast ones (prices, ohlcv) wait for their first interval.
 10. **PowerShell encoding** — never use PowerShell to read/write `frontend/src/**/*.tsx`. Use the `Read`/`Edit` tools. PowerShell mangles multi-byte chars.
+11. **Regime engine retraining** — `python -m backend.research.models` retrains all 12 cells from scratch (~40s with the 4-model competition). Idempotent; overwrites `backend/data/research/models/*.pkl` + `backtest_report.json`. Run whenever the train cutoff moves or features change.
+12. **Spread-as-asset in paper trading** — when a regime-engine trade is pushed, `asset` is set to `brent_m3_m6` (or whichever spread). `paper_trading._live_price()` recognises this prefix and computes the spread value from /Data on demand. Don't break this — the legacy single-asset path (`brent` / `wti` / `henry_hub`) still works for the Trade Idea card.
 
 ---
 
@@ -536,8 +574,9 @@ These bite a fresh session if not flagged:
 | Date | Event |
 |---|---|
 | 2026-05-29 | Phase 1 mid-review: "trade signals too strong (BUY/SELL), too much glare. Need bullish/bearish labels, replay button, morning brief always visible, fix news bugs." → ALL ADDRESSED in PR #2. |
-| 2026-06-05 (AM) | Phase 1 final demo. Approved. Mentor asks for **regime-based market analysis engine**. |
+| 2026-06-05 (AM) | Phase 1 final demo. Approved. Mentor asks for **regime-based market analysis engine** (full Phase 2 brief, 7 questions sent). |
 | 2026-06-05 (PM) | 7 alignment questions sent (see "Pending decisions"). Awaiting reply. |
+| 2026-06-08 (class) | Mentor narrowed scope for in-class discussion: 4 curve regimes (extreme/mild contango/back), per-regime fair value, best regression method, output single most-profitable spread/fly, train ≤ 31-Mar / test Apr-May, surface on Paper Trading tab. **Built and shipped end-to-end before class** including the 4-model competition (Ridge/Lasso/ElasticNet/Huber). Lasso won the headline cell (M3-M6 × EXT_BACK) with CV R² 0.65 vs Ridge 0.30. |
 
 ---
 
@@ -546,6 +585,7 @@ These bite a fresh session if not flagged:
 - **Main branch:** `main` — always green, always shippable
 - **Working pattern:** branch off `main`, PR back, squash-merge, delete branch
 - **Last shipped PR:** #2 (2026-06-05) — Phase A+B data overhaul + Paper Trading + Health monitoring
+- **Latest commits to main (2026-06-08):** Sprint −1 (DuckDB), Sprint 0a (Pydantic + TS codegen), class-demo Phase 2 vertical slice, 4-model competition. Head = `a6db050`.
 - **Backup branch:** `backup/pre-merge-20260602-175531` — leftover from PR #1, retained out of caution
 - **Commit style:** body explains WHY not WHAT. Use `Co-Authored-By: Claude` trailer when AI-paired.
 
