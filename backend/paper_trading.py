@@ -115,7 +115,26 @@ def _now_iso() -> str:
 
 
 def _live_price(asset: str) -> Optional[float]:
-    """Pull latest price for asset from /api/prices cache (no fresh fetch)."""
+    """
+    Pull the latest "price" for asset.
+    Supports two kinds of asset key:
+      • Single-asset    — "brent", "wti", "henry_hub" → from /api/prices cache
+      • Spread / fly    — e.g. "brent_m1_m2", "brent_m3_m6", "brent_fly_123"
+        → computed from /Data Brent settlements via research.spread_universe.
+        This lets MTM compare apples-to-apples for regime-engine trades.
+    """
+    # ── Spread / fly asset keys ────────────────────────────────────────────
+    if asset and asset.startswith("brent_"):
+        try:
+            from research.spread_universe import current_values
+            vals = current_values()
+            v = vals.get(asset)
+            if v is not None:
+                return float(v)
+        except Exception as exc:
+            log.warning("spread price lookup failed for %s: %s", asset, exc)
+            return None
+    # ── Single-asset live price (Brent/WTI/HH) ─────────────────────────────
     try:
         from db.cache import get_cached
         prices = get_cached("prices", 600) or {}

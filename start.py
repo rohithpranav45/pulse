@@ -61,7 +61,7 @@ def check_python():
 
 def check_packages():
     required = ["flask", "flask_cors", "yfinance", "numpy", "pandas",
-                "requests", "dotenv"]
+                "requests", "dotenv", "duckdb", "pyarrow"]
     missing = []
     for pkg in required:
         try:
@@ -73,6 +73,30 @@ def check_packages():
         print(DIM("  Fix: pip install -r requirements.txt"))
         sys.exit(1)
     print(OK("  All required packages present"))
+
+
+def ensure_parquet():
+    """
+    Sprint −1: convert /Data CSV/xlsx to Parquet for fast DuckDB queries.
+    Only runs if any source file is newer than its parquet counterpart (or
+    parquet doesn't exist yet). The CSV/xlsx originals are never deleted.
+    """
+    try:
+        from backend.scripts.convert_data_lake import any_stale, convert_all
+    except Exception as exc:
+        print(WARN(f"  Parquet converter unavailable ({exc}); CSV fallback in effect"))
+        return
+    if not any_stale():
+        print(OK("  Data lake parquet is fresh"))
+        return
+    print(DIM("  Building data lake parquet (one-time, ~1-3 min) ..."))
+    results = convert_all(force=False)
+    ok = sum(1 for r in results if r.get("ok") and not r.get("skipped"))
+    bad = sum(1 for r in results if not r.get("ok"))
+    if bad:
+        print(WARN(f"  Parquet build: {ok} ok, {bad} failed — see logs"))
+    else:
+        print(OK(f"  Parquet build complete ({ok} files converted)"))
 
 
 def wait_for_api(timeout: int = 20) -> bool:

@@ -1,3 +1,37 @@
+import type {
+  PricesData,
+  SignalData,
+  TradeIdeaData,
+  FundamentalsData,
+  NewsData,
+  PaperPosition,
+  PaperPerformanceData,
+  HealthDetailData,
+} from './api-types';
+
+// Re-export the generated types so views can import them from a single place.
+export type {
+  PricesData,
+  PriceQuote,
+  SignalData,
+  AssetSignal,
+  SignalIndicator,
+  TradeIdeaData,
+  FundamentalsData,
+  CotSection,
+  CotEntry,
+  RigCount,
+  NewsData,
+  NewsArticle,
+  PaperPosition,
+  PaperPerformanceData,
+  PaperTradeRef,
+  EquityPoint,
+  HealthDetailData,
+  HealthStream,
+  HealthCounts,
+} from './api-types';
+
 // Thin fetch wrapper that unwraps the Flask `{data, timestamp}` envelope.
 async function getJSON<T = any>(path: string, timeoutMs = 90000): Promise<T> {
   const ctrl = new AbortController();
@@ -78,22 +112,22 @@ function normalizeAll(raw: any): any {
 
 export const api = {
   health:        () => getJSON('/api/health'),
-  healthDetail:  () => getJSON('/api/health-detail'),
-  prices:        () => getJSON('/api/prices'),
+  healthDetail:  () => getJSON<HealthDetailData>('/api/health-detail'),
+  prices:        () => getJSON<PricesData>('/api/prices'),
   ohlcv:         () => getJSON('/api/ohlcv'),
   history:       () => getJSON('/api/history'),
   curve:         () => getJSON('/api/curve'),
   fairValue:     () => getJSON('/api/fair-value'),
-  signal:        () => getJSON('/api/signal'),
+  signal:        () => getJSON<SignalData>('/api/signal'),
   correlations:  () => getJSON('/api/correlations'),
-  fundamentals:  () => getJSON('/api/fundamentals'),
-  news:          () => getJSON('/api/news'),
+  fundamentals:  () => getJSON<FundamentalsData>('/api/fundamentals'),
+  news:          () => getJSON<NewsData>('/api/news'),
   weather:       () => getJSON('/api/weather'),
   technicals:    () => getJSON('/api/technicals'),
   termStructure: () => getJSON('/api/term-structure'),
   macro:         () => getJSON('/api/macro'),
   patterns:      () => getJSON('/api/patterns'),
-  tradeIdea:     () => getJSON('/api/trade-idea'),
+  tradeIdea:     () => getJSON<TradeIdeaData>('/api/trade-idea'),
   alerts:        () => getJSON('/api/alerts'),
   cracks:        () => getJSON('/api/cracks'),
   steo:          () => getJSON('/api/steo'),
@@ -110,9 +144,13 @@ export const api = {
   gdeltTone:     () => getJSON('/api/gdelt-tone'),
   marketaux:     () => getJSON('/api/marketaux'),
   analogs:       () => getJSON('/api/analogs'),
+  // Phase 2 — regime engine
+  regime:                 () => getJSON('/api/regime'),
+  regimeRecommendation:   () => getJSON('/api/regime/recommendation'),
+  regimeBacktest:         () => getJSON('/api/regime/backtest'),
   // Paper trading
-  paperPositions:  () => getJSON('/api/paper/positions'),
-  paperPerformance:() => getJSON('/api/paper/performance'),
+  paperPositions:  () => getJSON<PaperPosition[]>('/api/paper/positions'),
+  paperPerformance:() => getJSON<PaperPerformanceData>('/api/paper/performance'),
   paperPush:       (body: any = {}) => postJSON('/api/paper/push', body),
   paperClose:      (id: number, body: any = {}) => postJSON(`/api/paper/close/${id}`, body),
   paperClear:      (scope: 'all' | 'closed' = 'closed') => postJSON('/api/paper/clear', { scope }),

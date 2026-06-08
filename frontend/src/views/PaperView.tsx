@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { RegimePickCard } from '@/components/panels/RegimePickCard';
 import clsx from 'clsx';
 import { Panel } from '@/components/ui/Panel';
 import { Chip } from '@/components/ui/Chip';
@@ -494,6 +495,9 @@ export function PaperView({ tradeIdea }: { tradeIdea: any }) {
       </div>
 
       {/* Suggested trade — push */}
+      {/* Phase 2 — class-demo regime engine */}
+      <RegimePickCard />
+
       <SuggestedTrade idea={tradeIdea} onPush={handlePush} />
 
       {/* Open positions */}
