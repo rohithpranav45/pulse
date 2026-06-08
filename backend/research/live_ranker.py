@@ -125,11 +125,15 @@ def get_recommendation() -> dict:
 
         # Get this cell's residual std + R² from the saved report
         cell_report = report.get("cells", {}).get(f"{spread}__{regime}", {})
-        resid_std    = cell_report.get("resid_std", 1.0)
-        r2_oos       = cell_report.get("ridge_r2_test")
-        r2_in        = cell_report.get("ridge_r2_train", 0.0)
-        band_hit     = cell_report.get("band_hit_rate")
-        n_train      = cell_report.get("n_train", 0)
+        resid_std       = cell_report.get("resid_std", 1.0)
+        r2_oos          = cell_report.get("ridge_r2_test")
+        r2_in           = cell_report.get("ridge_r2_train", 0.0)
+        band_hit        = cell_report.get("band_hit_rate")
+        n_train         = cell_report.get("n_train", 0)
+        winner          = cell_report.get("winner")
+        active_features = cell_report.get("active_features")
+        total_features  = cell_report.get("total_features")
+        competition     = cell_report.get("competition", {})
 
         z_score = deviation / resid_std if resid_std > 0 else 0.0
 
@@ -164,26 +168,30 @@ def get_recommendation() -> dict:
         drivers = cell_report.get("top_drivers", [])[:3]
 
         ranked.append({
-            "spread":         spread,
-            "label":          LABELS[spread],
-            "description":    DESCRIPTIONS[spread],
-            "direction":      direction,
-            "current":        round(actual, 3),
-            "fair_value":     round(ridge_pred, 3),
-            "band_low":       round(p10, 3),
-            "band_mid":       round(p50, 3),
-            "band_high":      round(p90, 3),
-            "deviation":      round(deviation, 3),
-            "z_score":        round(z_score, 3),
-            "inside_band":    bool(inside_band),
-            "target":         target,
-            "stop":           stop,
-            "confidence":     round(confidence, 4),
-            "r2_train":       r2_in,
-            "r2_oos":         r2_oos,
-            "band_hit_rate":  band_hit,
-            "n_train":        n_train,
-            "drivers":        drivers,
+            "spread":          spread,
+            "label":           LABELS[spread],
+            "description":     DESCRIPTIONS[spread],
+            "direction":       direction,
+            "current":         round(actual, 3),
+            "fair_value":      round(ridge_pred, 3),
+            "band_low":        round(p10, 3),
+            "band_mid":        round(p50, 3),
+            "band_high":       round(p90, 3),
+            "deviation":       round(deviation, 3),
+            "z_score":         round(z_score, 3),
+            "inside_band":     bool(inside_band),
+            "target":          target,
+            "stop":            stop,
+            "confidence":      round(confidence, 4),
+            "r2_train":        r2_in,
+            "r2_oos":          r2_oos,
+            "band_hit_rate":   band_hit,
+            "n_train":         n_train,
+            "drivers":         drivers,
+            "winner_model":    winner,           # which of {Ridge, Lasso, ElasticNet, Huber} won this cell
+            "active_features": active_features,  # non-zero coef count
+            "total_features":  total_features,
+            "competition":     competition,      # all 4 candidates' CV R²
         })
 
     # Sort by confidence × |z_score| (favor strong, statistically-grounded signals)

@@ -53,6 +53,11 @@ type RankedOpp = {
   band_hit_rate: number | null;
   n_train: number;
   drivers: { feature: string; coef: number }[];
+  // Model competition
+  winner_model?: 'Ridge' | 'Lasso' | 'ElasticNet' | 'Huber';
+  active_features?: number;
+  total_features?: number;
+  competition?: Record<string, number | null>;
 };
 
 type Recommendation = {
@@ -303,22 +308,83 @@ export function RegimePickCard() {
             <Stat label="Band hit"    value={top.band_hit_rate !== null ? `${(top.band_hit_rate * 100).toFixed(0)}%` : '—'} sub="Apr–May test" />
           </div>
 
+          {/* Model winner + competition */}
+          {top.winner_model && (
+            <div className="mt-3 pt-3 border-t border-border/40">
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-[10px] font-mono uppercase tracking-widest text-text-muted">
+                  Winning model
+                </div>
+                <div className="flex items-center gap-2">
+                  <Chip tone="gold">{top.winner_model}</Chip>
+                  {top.active_features !== undefined && top.total_features !== undefined && (
+                    <span className="text-[10px] font-mono text-text-tertiary">
+                      {top.active_features}/{top.total_features} features active
+                    </span>
+                  )}
+                </div>
+              </div>
+              {top.competition && Object.keys(top.competition).length > 0 && (
+                <div className="grid grid-cols-4 gap-1.5 mb-2">
+                  {(['Ridge', 'Lasso', 'ElasticNet', 'Huber'] as const).map(name => {
+                    const score = top.competition?.[name];
+                    const isWinner = name === top.winner_model;
+                    const display = (score === null || score === undefined) ? '—' :
+                                    `${score >= 0 ? '+' : ''}${score.toFixed(2)}`;
+                    return (
+                      <div key={name} className={clsx(
+                        'px-2 py-1 rounded text-center border',
+                        isWinner ? 'border-gold/50 bg-gold/10' : 'border-border/40 bg-bg-card/40',
+                      )}>
+                        <div className={clsx(
+                          'text-[9px] font-mono uppercase tracking-widest',
+                          isWinner ? 'text-gold' : 'text-text-muted',
+                        )}>
+                          {name}{isWinner && ' ✓'}
+                        </div>
+                        <div className={clsx(
+                          'text-[11px] font-mono tabular font-semibold',
+                          isWinner ? 'text-text-primary' :
+                          (score !== null && score !== undefined && score > 0) ? 'text-text-secondary' : 'text-text-muted',
+                        )}>
+                          {display}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <div className="text-[9px] font-mono text-text-muted text-center">
+                CV R² across 4 candidates · winner picked by max mean R² (sparsity tiebreak)
+              </div>
+            </div>
+          )}
+
           {/* Drivers */}
           {top.drivers?.length > 0 && (
             <div className="mt-3 pt-3 border-t border-border/40">
               <div className="text-[10px] font-mono uppercase tracking-widest text-text-muted mb-1.5">
-                Top drivers in this regime
+                Top drivers in this regime (winner-model coefficients)
               </div>
               <div className="flex flex-wrap gap-2">
-                {top.drivers.slice(0, 5).map(d => (
-                  <span key={d.feature}
-                        className="px-2 py-0.5 rounded text-[10px] font-mono bg-bg-card/60 border border-border/40">
-                    {d.feature}
-                    <span className={d.coef >= 0 ? 'text-bull ml-1' : 'text-bear ml-1'}>
-                      {d.coef >= 0 ? '+' : ''}{d.coef.toFixed(3)}
+                {top.drivers.slice(0, 5).map(d => {
+                  const isActive = Math.abs(d.coef) > 0.001;
+                  return (
+                    <span key={d.feature}
+                          className={clsx(
+                            'px-2 py-0.5 rounded text-[10px] font-mono border',
+                            isActive ? 'bg-bg-card/60 border-border/40' : 'bg-bg-elev/40 border-border/20 text-text-muted',
+                          )}>
+                      {d.feature}
+                      <span className={clsx(
+                        'ml-1',
+                        !isActive ? 'text-text-muted' : d.coef >= 0 ? 'text-bull' : 'text-bear',
+                      )}>
+                        {d.coef >= 0 ? '+' : ''}{d.coef.toFixed(3)}
+                      </span>
                     </span>
-                  </span>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
