@@ -48,6 +48,11 @@ for _p in (_BACKEND, _ROOT):
 
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+from schemas import (
+    PricesResponse, SignalResponse, TradeIdeaResponse, FundamentalsResponse,
+    NewsResponse, PaperPositionsResponse, PaperPerformanceResponse,
+    HealthDetailResponse, respond,
+)
 from dotenv import load_dotenv
 from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime as _dt
@@ -1045,6 +1050,41 @@ def health():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Phase 2 (class-demo) — regime-based opportunity engine
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _regime_current():
+    from research.live_ranker import get_current_regime
+    return get_current_regime()
+
+def _regime_recommendation():
+    from research.live_ranker import get_recommendation
+    return get_recommendation()
+
+def _regime_backtest():
+    from research.live_ranker import get_backtest_report
+    return get_backtest_report()
+
+@app.route("/api/regime")
+def regime_route():
+    """Current curve regime + drivers."""
+    return jsonify({"data": safe_fetch(_regime_current, {"available": False}),
+                    "timestamp": _now()})
+
+@app.route("/api/regime/recommendation")
+def regime_recommendation_route():
+    """Top-ranked regime-conditional opportunity + full receipts."""
+    return jsonify({"data": safe_fetch(_regime_recommendation, {"available": False}),
+                    "timestamp": _now()})
+
+@app.route("/api/regime/backtest")
+def regime_backtest_route():
+    """Saved training report — OOS R², band-hit rate per (spread, regime)."""
+    return jsonify({"data": safe_fetch(_regime_backtest, {"available": False}),
+                    "timestamp": _now()})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Paper-trading sandbox
 # ─────────────────────────────────────────────────────────────────────────────
 @app.route("/api/paper/push", methods=["POST"])
@@ -1080,13 +1120,13 @@ def paper_close(trade_id: int):
 def paper_positions():
     status = request.args.get("status", "all")
     from paper_trading import list_positions
-    return jsonify({"data": list_positions(status=status), "timestamp": _now()})
+    return respond(PaperPositionsResponse, list_positions(status=status), _now())
 
 
 @app.route("/api/paper/performance")
 def paper_performance():
     from paper_trading import get_performance
-    return jsonify({"data": get_performance(), "timestamp": _now()})
+    return respond(PaperPerformanceResponse, get_performance(), _now())
 
 
 @app.route("/api/paper/clear", methods=["POST"])
@@ -1228,22 +1268,18 @@ def health_detail():
         })
     overall = "ok" if counts["down"] == 0 and counts["stale"] == 0 \
               else "degraded" if counts["down"] == 0 else "down"
-    return jsonify({
-        "data": {
-            "overall":   overall,
-            "counts":    counts,
-            "total":     len(streams),
-            "streams":   streams,
-        },
-        "timestamp": _now(),
-    })
+    return respond(HealthDetailResponse, {
+        "overall":   overall,
+        "counts":    counts,
+        "total":     len(streams),
+        "streams":   streams,
+    }, _now())
 
 
 
 @app.route("/api/prices")
 def prices():
-    data = _fetch_prices()
-    return jsonify({"data": data, "timestamp": _now(), "stale": False})
+    return respond(PricesResponse, _fetch_prices(), _now(), stale=False)
 
 
 @app.route("/api/ohlcv")
@@ -1278,8 +1314,7 @@ def fair_value():
 
 @app.route("/api/signal")
 def signal():
-    data = _fetch_signal()
-    return jsonify({"data": data, "timestamp": _now()})
+    return respond(SignalResponse, _fetch_signal(), _now())
 
 
 @app.route("/api/correlations")
@@ -1290,14 +1325,12 @@ def correlations():
 
 @app.route("/api/fundamentals")
 def fundamentals():
-    data = _fetch_fundamentals()
-    return jsonify({"data": data, "timestamp": _now()})
+    return respond(FundamentalsResponse, _fetch_fundamentals(), _now())
 
 
 @app.route("/api/news")
 def news():
-    data = _fetch_news()
-    return jsonify({"data": data, "timestamp": _now()})
+    return respond(NewsResponse, _fetch_news(), _now())
 
 
 @app.route("/api/weather")
@@ -1339,8 +1372,7 @@ def iv():
 
 @app.route("/api/trade-idea")
 def trade_idea_route():
-    data = _fetch_trade_idea()
-    return jsonify({"data": data, "timestamp": _now()})
+    return respond(TradeIdeaResponse, _fetch_trade_idea(), _now())
 
 
 @app.route("/api/alerts")

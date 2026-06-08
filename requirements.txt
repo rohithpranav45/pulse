@@ -22,6 +22,18 @@ python-dotenv==1.2.2
 # ── Excel / curve data ────────────────────────────────────────────────────────
 openpyxl==3.1.5
 
+# ── Data lake — Parquet + DuckDB query engine (Sprint −1) ────────────────────
+# Phase 2 makes thousands of historical lookups against /Data; pandas + CSV is
+# ~50× too slow. Parquet sits alongside the source CSVs in /Data/parquet and
+# DuckDB executes queries directly on those files via data_lake.py.
+duckdb==1.5.3
+pyarrow==20.0.0
+
+# ── Typed API contracts (Sprint 0a) ──────────────────────────────────────────
+# Response models live in backend/schemas/; scripts/generate_ts_types.py
+# emits frontend/src/lib/api-types.ts from them so backend/frontend can't drift.
+pydantic==2.13.4
+
 # ── News (optional — fallback to NewsAPI if not set) ─────────────────────────
 apify-client==3.0.1        # needs APIFY_API_TOKEN in .env
 

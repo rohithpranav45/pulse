@@ -1,5 +1,5 @@
 # PULSE — Project State File
-**Last updated:** 2026-06-05 · Phase 1 shipped (PR #2), Phase 2 starting
+**Last updated:** 2026-06-08 · Sprint −1 + 0a shipped (DuckDB + typed API contracts) · Sprint 0b next
 **Project:** PULSE — Energy Intelligence Terminal (Futures First internship)
 **Stack:** Flask 3 · React 18 + Vite + Tailwind · SQLite (cache + paper book) · /Data desk feed · 35 named data sources
 **Run:** `python start.py` from `pulse/` root — opens http://127.0.0.1:5000
@@ -69,49 +69,151 @@ The exact build depends on her answers. While she replies, infrastructure work i
 
 ## Current sprint
 
-### 🔴 SPRINT −1 · DuckDB + Parquet conversion of /Data
+### ✅ CLASS-DEMO SPRINT — SHIPPED 2026-06-08 (ahead of today's class)
 
-**Goal:** convert the 3.5 GB /Data lake from CSV/xlsx to Parquet, with DuckDB as the query engine. Phase 2 will run thousands of historical feature lookups — pandas + CSV is ~50× too slow.
+Mom asked in class for a **narrower** scope to discuss today, ahead of the
+full Phase 2 brief. Shipped end-to-end in one session:
 
-**Acceptance criteria:**
-- One-time converter script `backend/scripts/convert_data_lake.py` produces `/Data/parquet/*.parquet`
-- `backend/data_lake.py` public API unchanged (functions still return pandas) but uses DuckDB under the hood
-- First call to any loader: <1s (was 30s for the 1-min files)
-- RAM footprint: <100MB (was 600MB for one 1-min file)
-- New helper: `data_lake.duckdb_conn()` returns a connection for direct SQL on the lake
-- /Data CSVs are not deleted — Parquet sits alongside, so source-of-truth is preserved
+**Scope she defined:**
+- Divide history into **4 regimes** on curve shape only (extreme/mild contango, mild/extreme backwardation)
+- For live data, compute fair value only from the **current regime's history**
+- Output **the most profitable spread or fly** as a single ranked pick
+- Train ≤ 2026-03-31, test on April–May 2026
+- Surface it on the Paper Trading tab
 
-**Files to create / change:**
-- NEW: `backend/scripts/convert_data_lake.py` — idempotent, checks file mtimes, only re-converts when source changed
-- MODIFY: `backend/data_lake.py` — DuckDB-backed loaders, same return shapes
-- MODIFY: `start.py` — run converter at boot if Parquet is older than source CSVs
-- ADD to `requirements.txt`: `duckdb==1.1.x`, `pyarrow==18.x`
+**Delivered:**
+- `backend/research/regimes.py` — hard-threshold classifier on M1-M12 (≤−5 / −5–0 / 0–+10 / >+10)
+- `backend/research/spread_universe.py` — 3 instruments: Brent M1-M2, M3-M6, front fly (M1-2×M2+M3)
+- `backend/research/features.py` — point-in-time feature matrix, 2,692 rows × 11 cols, 2016–2026, fully backfillable from /Data + FRED (no EIA/COT calls; can add in Phase 2 full build)
+- `backend/research/models.py` — per-(spread, regime) Ridge (CV-tuned α) + Quantile (p10/p50/p90). 12 cells, all saved to `backend/data/research/models/*.pkl`. Backtest report saved to `backend/data/research/backtest_report.json`.
+- `backend/research/live_ranker.py` — classify today, predict, rank by `|z| × R²_oos × √(n/100)`, return #1 with full receipts
+- API: `/api/regime`, `/api/regime/recommendation`, `/api/regime/backtest`
+- `frontend/src/components/panels/RegimePickCard.tsx` — new card on Paper Trading tab above the existing Trade Idea
+- **Spread-aware paper trading**: `paper_trading._live_price()` now recognises spread asset keys (`brent_m1_m2`, `brent_m3_m6`, `brent_fly_123`) and computes the spread live from /Data so MTM compares same scale to same scale. Push button on the Regime Pick card creates a `paper_trades` row with `asset='brent_m3_m6'`, `direction='SHORT'`, etc.
 
-**Validation:**
-- `python -m backend.data_lake` still prints same output as today
-- `python -c "from backend.data_lake import load_1min_tail; t = load_1min_tail('brent_1min', days=30, contract='c1'); print(len(t))"` — should complete in <500ms
+**First live recommendation** (2026-06-08, regime = EXTREME_BACKWARDATION, 61 days in regime):
+> **SELL Brent M3-M6** · current $7.09 · fair $6.32 · 80% band $4.49–$6.78
+> z = +2.56σ · confidence 74% · OOS R² 0.86 · band hit 75%
+> Top drivers in this regime: m1_m12 (+1.68), fly_lag1 (-0.45), m1_m2_lag1 (+0.45)
+> Models trained on 2,652 rows ≤ 2026-03-31, validated on 40 April-May rows.
+
+**Backtest summary (April-May 2026 test window):**
+
+| spread × regime | n_train | R² in-sample | R² OOS | band hit |
+|---|---|---|---|---|
+| brent_m1_m2 × EXTREME_BACKWARDATION | 191 | 0.85 | 0.50 | 60% |
+| brent_m3_m6 × EXTREME_BACKWARDATION | 191 | 0.97 | **0.86** | **75%** |
+| brent_fly_123 × EXTREME_BACKWARDATION | 191 | 0.45 | −0.21 | 57% |
+
+The 40 test rows all fell in EXTREME_BACKWARDATION (M1-M12 ≥ +$10 throughout
+April-May), so only that regime's OOS metrics are populated. Other regimes
+have training-only stats — they'll get OOS validation when the test window
+naturally rolls forward.
+
+**Honest caveats:**
+- Fly model is genuinely weak (R²_OOS negative). Reported transparently in the UI rather than hidden.
+- M1-M2 model has 60% band hit — usable but not as strong as M3-M6.
+- Single-leg paper-trading approximation: spread is recorded as one position with `asset='brent_m3_m6'`, MTM uses the live spread value. True two-leg accounting comes in Phase 2 Sprint 2.
+- Features used are tight (curve + macro + seasonal + lagged spreads). Phase 2 full build adds inventory + COT + GDELT tone as features for richer per-regime models.
+
+This narrow-scope work IS Sprint 1 of Phase 2 (the vertical slice). Code lives in `backend/research/` — broadening to more instruments/regimes/axes is now a config change, not a refactor.
 
 ---
 
-### 🟡 SPRINT 0a · Pydantic response models + auto-generated TS types
+### ✅ SPRINT −1 · DuckDB + Parquet conversion of /Data — SHIPPED 2026-06-08
 
-**Goal:** kill the recurring bug class where frontend reads the wrong shape. Phase 2 will add ~15 new endpoints — typed contracts make this safe.
+Converted the 3.5 GB /Data lake to columnar Parquet with DuckDB as the query
+engine. Phase 2 historical feature lookups now run ~10× faster cold, ~130×
+warm, and the RAM footprint dropped from ~600 MB to ~110 MB per process.
 
-**Acceptance criteria:**
-- Every API route returns a typed Pydantic model (`@app.route("/api/foo") def foo() -> FooResponse`)
-- FastAPI is NOT introduced yet (too risky mid-project) — instead, Pydantic models live in `backend/schemas/` and routes manually validate on return
-- `scripts/generate_ts_types.py` reads the Pydantic schema, emits `frontend/src/lib/api-types.ts`
-- TypeScript code imports these types instead of redefining them
-- Start with the 8 most-used endpoints first (prices, fundamentals, news, signal, trade-idea, paper/positions, paper/performance, health-detail)
+**Delivered:**
+- `backend/scripts/convert_data_lake.py` — idempotent mtime-based converter
+  (`--check` reports staleness, `--force` rebuilds all). Daily files convert
+  via pandas; 1-min files stream via DuckDB `COPY ... TO PARQUET (ZSTD)`.
+- `backend/data_lake.py` — every public accessor (`get_brent_settlements`,
+  `get_c12_15y`, `get_spread_15y`, `get_brent_ohlcv_multi`, `load_1min_tail`)
+  reads parquet via DuckDB with a transparent pandas-CSV fallback. New helper
+  `duckdb_conn()` returns a connection with each parquet pre-registered as a
+  view named after its source key (`brent_1min`, `wti_1min`, …) so any caller
+  can do `SELECT ... FROM brent_1min` directly. `reset_duckdb()` lets callers
+  refresh views after a re-conversion. `parquet_path(key)` is exposed.
+- `start.py` — calls `ensure_parquet()` during pre-flight; runs the converter
+  only when any source CSV/xlsx is newer than its parquet counterpart.
+- `requirements.txt` — pinned `duckdb==1.5.3`, `pyarrow==20.0.0`.
 
-**Files to create:**
-- NEW: `backend/schemas/__init__.py` — Pydantic models
-- NEW: `scripts/generate_ts_types.py` — codegen script
-- MODIFY: `frontend/src/lib/api.ts` — import from generated types
+**Measured against acceptance criteria:**
+
+| Metric | Target | Achieved |
+|---|---|---|
+| `load_1min_tail(brent_1min, days=30, c1)` in-process cold | <1 s | 0.87 s |
+| Same call warm (subsequent) | — | ~70 ms |
+| Equivalent old pandas-CSV column-pruned read | — | 9.4 s |
+| Peak RSS for one 1-min file | <100 MB | ~108 MB incl. duckdb+pandas baseline |
+| Parquet vs source size (Brent 1-min) | — | 595 MB CSV → 93 MB parquet (zstd) |
+| Source CSV preserved | yes | yes — `/Data/parquet/` sits alongside |
+
+**Notes:**
+- /Data CSVs are untouched; `FILES[*]` still points at them so legacy paths
+  that bypass the loaders (e.g. `realised_vol._load_1min_close_series`) keep
+  working. Migrating them to `load_1min_tail` / `duckdb_conn` is opportunistic
+  cleanup — pick up when next touching the fetchers.
+- Total parquet footprint: ~3.6 GB of 1-min CSVs → ~530 MB on disk (~6.5:1).
 
 ---
 
-### 🟢 SPRINT 0b · Sentry + Better Stack observability
+### ✅ SPRINT 0a · Pydantic response models + auto-generated TS types — SHIPPED 2026-06-08
+
+Pinned the contract for the 8 most-used endpoints to a Pydantic v2 model and
+emitted a matching TypeScript file. Phase 2 will add ~15 new endpoints; this
+gives them a typed seam so the "frontend reads the wrong shape" bug class can't
+sneak through. FastAPI was *not* introduced — we kept Flask and validate on
+return via a small `respond()` helper to stay low-risk mid-project.
+
+**Delivered:**
+- `backend/schemas/__init__.py` — Pydantic v2 models with `extra="allow"`
+  (forward-compatible) for the 8 endpoints. Public `RESPONSE_MODELS` registry
+  + `respond(Model, data, timestamp, **envelope)` helper. Validation failures
+  log a warning and return the raw payload; set `PULSE_STRICT_SCHEMAS=1` to
+  hard-fail in dev.
+- `scripts/generate_ts_types.py` — codegen that walks Pydantic JSON schemas
+  and emits `frontend/src/lib/api-types.ts` (28 interfaces, ~7 KB). Output is
+  pure types, regeneratable, never hand-edited. Includes an `ApiResponseMap`
+  for endpoint → type lookups.
+- `frontend/src/lib/api.ts` — typed `getJSON<T>` calls on the 8 endpoints,
+  re-exports for view code (`PricesData`, `SignalData`, `TradeIdeaData`,
+  `FundamentalsData`, `NewsData`, `PaperPosition`, `PaperPerformanceData`,
+  `HealthDetailData` and their nested types).
+- `requirements.txt` — pinned `pydantic==2.13.4`.
+
+**Endpoints under typed contracts (Sprint 0a):**
+
+| Endpoint | Model | Live response validates? |
+|---|---|---|
+| GET /api/prices | `PricesResponse` | yes |
+| GET /api/fundamentals | `FundamentalsResponse` | yes |
+| GET /api/news | `NewsResponse` | yes |
+| GET /api/signal | `SignalResponse` | yes |
+| GET /api/trade-idea | `TradeIdeaResponse` | yes |
+| GET /api/paper/positions | `PaperPositionsResponse` | yes |
+| GET /api/paper/performance | `PaperPerformanceResponse` | yes |
+| GET /api/health-detail | `HealthDetailResponse` | yes |
+
+**Verification:**
+- All 8 endpoints return identical JSON shape as pre-Sprint baseline (byte-for-byte ±15B).
+- Zero schema-validation warnings in the API log under live traffic.
+- `npx tsc --noEmit` clean (only pre-existing `baseUrl` deprecation).
+- `npx vite build` succeeds; dashboard renders with live data in preview.
+
+**For new endpoints (Phase 2 onward):**
+1. Add a model in `backend/schemas/__init__.py`.
+2. Register it in `RESPONSE_MODELS`.
+3. Change `return jsonify(...)` → `return respond(MyModel, data, _now())`.
+4. Run `python scripts/generate_ts_types.py`.
+5. Import the type from `frontend/src/lib/api.ts`.
+
+---
+
+### 🟢 SPRINT 0b · Sentry + Better Stack observability  ← **next**
 
 **Goal:** safety net before adding a lot of new code. 30-minute setup with infinite future value.
 
@@ -368,8 +470,8 @@ Phase 2 ships, with empirical measurements to justify each upgrade.
 
 | # | Item | Why now | Sprint |
 |---|---|---|---|
-| 1 | DuckDB + Parquet for /Data | 50× faster historical queries — directly speeds up Phase 2 regressions | **Sprint −1** |
-| 2 | Pydantic + TS codegen | Phase 2 adds ~15 new endpoints; type safety prevents the "wrong shape" bug class on each | **Sprint 0a** |
+| 1 | DuckDB + Parquet for /Data | 50× faster historical queries — directly speeds up Phase 2 regressions | **Sprint −1 ✅ shipped 2026-06-08** |
+| 2 | Pydantic + TS codegen | Phase 2 adds ~15 new endpoints; type safety prevents the "wrong shape" bug class on each | **Sprint 0a ✅ shipped 2026-06-08** |
 | 3 | Sentry observability | Safety net while writing Phase 2 code | **Sprint 0b** |
 
 ### PHASE 3 — Production hardening, batched after Phase 2 ships
