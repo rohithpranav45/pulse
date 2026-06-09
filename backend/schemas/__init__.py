@@ -232,6 +232,20 @@ class NewsResponse(PulseModel):
 # ─────────────────────────────────────────────────────────────────────────────
 # /api/paper/positions  +  /api/paper/performance
 # ─────────────────────────────────────────────────────────────────────────────
+class PaperLeg(PulseModel):
+    id: int
+    trade_id: int
+    contract: str
+    direction: str
+    qty: float
+    entry_price: float
+    mtm_price: Optional[float] = None
+    mtm_at: Optional[str] = None
+    unrealised: Optional[float] = None
+    exit_price: Optional[float] = None
+    realised: Optional[float] = None
+
+
 class PaperPosition(PulseModel):
     id: int
     asset: Optional[str] = None
@@ -254,6 +268,7 @@ class PaperPosition(PulseModel):
     unrealised: Optional[float] = None
     thesis: Optional[str] = None
     metadata: Optional[dict[str, Any]] = None
+    legs: list[PaperLeg] = Field(default_factory=list)
 
 
 class PaperPositionsResponse(PulseModel):

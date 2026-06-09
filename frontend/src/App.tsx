@@ -14,6 +14,7 @@ import { SpreadsView } from '@/views/SpreadsView';
 import { ContractsView } from '@/views/ContractsView';
 import { PlaybookView } from '@/views/PlaybookView';
 import { PaperView } from '@/views/PaperView';
+import { RegimeView } from '@/views/RegimeView';
 import { ChatDock } from '@/components/chat/ChatDock';
 import { OnboardingTour } from '@/components/onboarding/OnboardingTour';
 import { DailySheet } from '@/components/panels/DailySheet';
@@ -35,7 +36,7 @@ export default function App() {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
       const k = e.key;
-      const map: Record<string, ViewKey> = { '1':'signal','2':'charts','3':'fundamentals','4':'intelligence','5':'term','6':'spreads','7':'contracts','8':'playbook','9':'paper' };
+      const map: Record<string, ViewKey> = { '1':'signal','2':'charts','3':'fundamentals','4':'intelligence','5':'term','6':'spreads','7':'contracts','8':'playbook','9':'paper','0':'regime' };
       if (map[k]) setView(map[k]);
       if (k === 'r' || k === 'R') { setRefreshing(true); refetch().finally(() => setTimeout(() => setRefreshing(false), 600)); }
       if (k === 'f' || k === 'F') document.documentElement.requestFullscreen?.();
@@ -86,6 +87,7 @@ export default function App() {
               {view === 'contracts'     && <ContractsView all={merged} />}
               {view === 'playbook'      && <PlaybookView />}
               {view === 'paper'         && <PaperView tradeIdea={tradeIdea} />}
+              {view === 'regime'        && <RegimeView />}
             </ErrorBoundary>
           </div>
         </main>
