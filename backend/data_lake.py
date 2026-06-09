@@ -18,6 +18,8 @@ Files served
   brent_close_c12_15y          — 15-year LCOc12 daily close
   brent_c1_c12_spread_15y      — 15-year M1-M12 spread (for percentile rank)
   brent_daily_ohlcv_multi      — daily OHLCV + buy/sell volume per contract
+  wti_synth_settlements_c1_c6  — SYNTHESISED daily WTI C1-C6 settlements (Sprint 3,
+                                  last 1-min mid per session; mentor file pending)
   brent_1min                   — 5-year Brent M1-M14 1-min mid prices
   brent_1min_volume            — 4-year Brent M1-M14 1-min mid + volume
   wti_1min                     — 5-year WTI M1-M14 1-min mid
@@ -34,6 +36,7 @@ Public API
   get_c12_15y()                → DataFrame (date-indexed, close)
   get_spread_15y()             → DataFrame (date-indexed, c1, c12, m1_m12)
   get_brent_ohlcv_multi()      → DataFrame (instrument, timestamp, ...)
+  get_wti_settlements()        → DataFrame (date-indexed, c1..c6) — SYNTHESISED
   load_1min_tail(key, days, contract, field) → DataFrame (timestamp-indexed)
   duckdb_conn()                → duckdb.DuckDBPyConnection
   parquet_path(key)            → Path
@@ -291,6 +294,100 @@ def get_brent_ohlcv_multi() -> Optional[pd.DataFrame]:
     if "ohlcv_multi" not in _cache:
         _cache["ohlcv_multi"] = _load_brent_daily_ohlcv_multi()
     return _cache["ohlcv_multi"]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# WTI synthesised daily settlements (Sprint 3)
+# ─────────────────────────────────────────────────────────────────────────────
+# Mentor's data feed doesn't include a WTI counterpart to the Brent C1-C31
+# daily settlement file (her Q5, still open). To unblock Sprint 3 we
+# synthesise WTI daily settlements by taking the LAST 1-min mid per
+# trading session for c1..c6. This is a session-end mid, NOT the exchange
+# settlement print — flag it as ESTIMATE in provenance. Swap to her real
+# file when she sends one (the rest of the code only sees `get_wti_settlements`).
+_WTI_SYNTH_PARQUET = _PARQUET / "wti_synth_settlements_c1_c6.parquet"
+_WTI_SYNTH_CONTRACTS = ("c1", "c2", "c3", "c4", "c5", "c6")
+
+
+def _build_wti_settlements_from_1min() -> Optional[pd.DataFrame]:
+    if not parquet_path("wti_1min").exists():
+        log.warning("wti_1min parquet missing — cannot synth settlements")
+        return None
+    con = duckdb_conn()
+    cols = ", ".join(
+        f'w."{c}||weighted_mid" AS {c}' for c in _WTI_SYNTH_CONTRACTS
+    )
+    sql = f"""
+        WITH last_ts AS (
+            SELECT CAST(timestamp AS DATE) AS d, MAX(timestamp) AS ts
+            FROM wti_1min
+            WHERE "c1||weighted_mid" IS NOT NULL
+            GROUP BY CAST(timestamp AS DATE)
+        )
+        SELECT last_ts.d AS date,
+               {cols}
+        FROM last_ts JOIN wti_1min w ON w.timestamp = last_ts.ts
+        ORDER BY date
+    """
+    df = con.execute(sql).df()
+    if df.empty:
+        return None
+    df["date"] = pd.to_datetime(df["date"])
+    df = df.set_index("date").sort_index()
+    # Drop any rows where every c is null (no print that day)
+    df = df.dropna(how="all")
+    return df
+
+
+def _load_wti_settlements() -> Optional[pd.DataFrame]:
+    """
+    Load synthesised WTI C1-C6 daily settlements.
+
+    Cached as parquet at `Data/parquet/wti_synth_settlements_c1_c6.parquet`.
+    If the parquet is missing or stale vs the wti_1min source, rebuild it.
+    """
+    src = parquet_path("wti_1min")
+    if not src.exists():
+        return None
+
+    fresh = (
+        _WTI_SYNTH_PARQUET.exists()
+        and _WTI_SYNTH_PARQUET.stat().st_mtime >= src.stat().st_mtime
+    )
+    if fresh:
+        try:
+            df = pd.read_parquet(_WTI_SYNTH_PARQUET)
+            df.index = pd.to_datetime(df.index)
+            log.info("data_lake: loaded WTI synth settlements from cache — "
+                     "%d rows, %s to %s",
+                     len(df), df.index[0].date(), df.index[-1].date())
+            return df
+        except Exception as exc:
+            log.warning("WTI synth cache read failed (%s) — rebuilding", exc)
+
+    df = _build_wti_settlements_from_1min()
+    if df is None or df.empty:
+        return None
+    try:
+        _WTI_SYNTH_PARQUET.parent.mkdir(parents=True, exist_ok=True)
+        df.to_parquet(_WTI_SYNTH_PARQUET, compression="zstd")
+        log.info("data_lake: built WTI synth settlements — %d rows, cached to %s",
+                 len(df), _WTI_SYNTH_PARQUET.name)
+    except Exception as exc:
+        log.warning("WTI synth cache write failed: %s", exc)
+    return df
+
+
+def get_wti_settlements() -> Optional[pd.DataFrame]:
+    """
+    Daily WTI C1-C6 settlements (SYNTHESISED — last 1-min mid per session).
+
+    See module docstring: this is a synthesis, not exchange-print settlements.
+    Mentor file is the source of truth once she provides it.
+    """
+    if "wti_settlements" not in _cache:
+        _cache["wti_settlements"] = _load_wti_settlements()
+    return _cache["wti_settlements"]
 
 
 # ═════════════════════════════════════════════════════════════════════════════

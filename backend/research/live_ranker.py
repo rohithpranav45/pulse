@@ -1,27 +1,29 @@
 """
-Live regime classification + opportunity ranker.
+Live regime classification + opportunity ranker (Sprint 3).
 
 Given today's market data:
-  1. Classify the regime (4 buckets on M1-M12)
-  2. Load the 3 trained models for this regime
-  3. For each spread, predict fair value + p10-p90 band
-  4. Compare to actual current spread → deviation, z-score
-  5. Rank by composite confidence score
-  6. Return the #1 opportunity + full receipts
+  1. Classify today into the COMPOSITE 3-axis regime (curve / inv / vol).
+  2. For each of the 6 spreads, look up the per-(spread, regime) winner
+     model + quantile bands.
+  3. Predict fair, p10, p50, p90; compute deviation + z-score from train resid std.
+  4. Rank by composite confidence score.
+  5. Return the #1 opportunity + the full ranked list + receipts.
 
 Public API
 ----------
-  get_recommendation() → dict (top-1 opportunity + all 3 ranked)
-  get_current_regime() → dict (regime label + driver breakdown)
-  get_backtest_report() → dict (the saved training report)
+  get_recommendation()   → dict (top-1 + ranked, all 6 spreads)
+  get_current_regime()   → dict (composite label + axis drivers + thresholds)
+  get_backtest_report()  → dict (the saved training report)
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -33,190 +35,520 @@ if _BACKEND not in sys.path:
 log = logging.getLogger("pulse.research.ranker")
 
 
+def _active_mode() -> str:
+    """
+    Resolve the regime mode for live inference.
+
+    Reads `PULSE_REGIME_MODE` env var ("composite" | "pooled"). Defaults to
+    "composite" (Sprint 3 behaviour). Phase 2.5 ships both — set
+    PULSE_REGIME_MODE=pooled to run the 3-cell curve-axis-only engine in
+    production. Falls back to whichever mode has trained models on disk.
+
+    Phase 2.6: `PULSE_GATED_BLEND=1` forces pooled mode internally because the
+    gated rule is defined on pooled labels.
+    """
+    if _gated_blend_enabled():
+        return "pooled"
+    mode = (os.environ.get("PULSE_REGIME_MODE") or "composite").strip().lower()
+    if mode not in ("composite", "pooled"):
+        mode = "composite"
+    return mode
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 2.6 — gated blend (production rule)
+# ─────────────────────────────────────────────────────────────────────────────
+# Mirrors backend.research.walkforward._pooled_passes_gate so the rule
+# evaluated in walk-forward is bit-for-bit the rule served live.
+GATED_REGIME      = "BACK"
+GATED_WINNERS     = {"Lasso", "Huber"}
+GATED_Z_THRESHOLD = 0.5
+ROLLING_WIN       = 252  # baseline z-score window
+
+# Phase 2.7 — sizing on the regime leg of the gated blend. Mirrors
+# backend.research.walkforward.SIZING_*.
+SIZING_MODES         = ("full", "half", "kelly")
+SIZING_KELLY_FLOOR   = 0.10
+SIZING_KELLY_CAP     = 1.00
+SIZING_KELLY_DEFAULT = 0.50
+_WF_REPORT           = Path(__file__).parent.parent / "data" / "research" / "walkforward_report.json"
+
+
+def _gated_blend_enabled() -> bool:
+    """Read PULSE_GATED_BLEND env var. Accepts 1/true/yes (case-insensitive)."""
+    raw = (os.environ.get("PULSE_GATED_BLEND") or "").strip().lower()
+    return raw in ("1", "true", "yes", "on")
+
+
+def _gated_size_mode() -> str:
+    """
+    Read PULSE_GATED_SIZE env var (Phase 2.7). Accepts full|half|kelly,
+    defaults to full (Phase 2.6 behaviour — no sizing). Invalid values
+    fall back to full and log a warning once per process.
+    """
+    raw = (os.environ.get("PULSE_GATED_SIZE") or "full").strip().lower()
+    if raw not in SIZING_MODES:
+        log.warning("PULSE_GATED_SIZE=%r is not one of %s; defaulting to 'full'", raw, SIZING_MODES)
+        return "full"
+    return raw
+
+
+def _kelly_lookup_from_report() -> dict[str, float]:
+    """
+    Read the per-spread Kelly fractions saved by walkforward.run_walkforward.
+
+    The walk-forward stores `sized_blend_summary.kelly_per_spread_latest`
+    keyed by spread — these are the fractions computed at the last refit
+    boundary, which is what live inference should apply going forward.
+    Returns an empty dict if the report is absent / malformed; the caller
+    falls back to SIZING_KELLY_DEFAULT.
+    """
+    try:
+        if not _WF_REPORT.exists():
+            return {}
+        with open(_WF_REPORT) as f:
+            r = json.load(f)
+        latest = (r.get("sized_blend_summary") or {}).get("kelly_per_spread_latest") or {}
+        return {sp: float(v) for sp, v in latest.items()}
+    except Exception as exc:  # pragma: no cover — disk/json errors
+        log.warning("failed to read Kelly lookup from %s: %s", _WF_REPORT, exc)
+        return {}
+
+
+def _notional_scale(spread: str, source: str, mode: str, kelly_map: dict) -> float:
+    """
+    Resolve the per-trade notional scale.
+
+    - Baseline rows always 1.0 (the gate decides who speaks; sizing scales
+      only what the regime engine claims).
+    - mode='full' → 1.0 everywhere.
+    - mode='half' → 0.5 on regime rows.
+    - mode='kelly' → per-spread Kelly fraction from the walk-forward report,
+                     defaults to SIZING_KELLY_DEFAULT when absent.
+    """
+    if source != "regime":
+        return 1.0
+    if mode == "full":
+        return 1.0
+    if mode == "half":
+        return 0.5
+    if mode == "kelly":
+        v = kelly_map.get(spread)
+        if v is None or not np.isfinite(v):
+            return SIZING_KELLY_DEFAULT
+        return float(np.clip(v, SIZING_KELLY_FLOOR, SIZING_KELLY_CAP))
+    return 1.0
+
+
+def _pooled_passes_gate(regime_pooled: str, winner: str | None, z: float) -> bool:
+    """Phase 2.6 production gate."""
+    if regime_pooled != GATED_REGIME:
+        return False
+    if winner not in GATED_WINNERS:
+        return False
+    if not np.isfinite(z) or abs(z) < GATED_Z_THRESHOLD:
+        return False
+    return True
+
+
+def _baseline_rolling_signal(series: pd.Series, n: int = ROLLING_WIN) -> dict | None:
+    """
+    Compute the regime-unaware rolling-z signal for one spread on the most
+    recent observation. Returns None if insufficient history.
+    """
+    s = series.dropna()
+    if len(s) < n + 1:
+        return None
+    window = s.iloc[-n:]
+    mu     = float(window.mean())
+    sigma  = float(window.std(ddof=1))
+    if not np.isfinite(sigma) or sigma <= 0:
+        return None
+    actual = float(s.iloc[-1])
+    z      = (actual - mu) / sigma
+    if z > GATED_Z_THRESHOLD:
+        direction = "SELL"
+    elif z < -GATED_Z_THRESHOLD:
+        direction = "BUY"
+    else:
+        direction = "NEUTRAL"
+    # Symmetric ±1σ band as the simple-baseline analog of p10/p90.
+    band_low  = mu - sigma
+    band_high = mu + sigma
+    return {
+        "actual":    actual,
+        "fair":      mu,
+        "sigma":     sigma,
+        "z":         z,
+        "direction": direction,
+        "p10":       band_low,
+        "p50":       mu,
+        "p90":       band_high,
+        "n_window":  int(len(window)),
+    }
+
+
 def get_current_regime() -> dict:
     """
-    Classify today's regime and return the label + driver breakdown.
+    Classify today's regime and return the composite label + axis breakdown.
 
     Uses the most-recent row from the historical feature matrix as "today".
-    For true live deployment we'd use intraday data; for the class demo
-    the last settled day is sufficient.
+    For true intraday deployment we'd swap to live prints; daily settles
+    are sufficient for the class demo.
     """
     from research.features import build_features
-    from research.regimes  import classify_one, regime_color
+    from research.regimes  import (
+        REGIME_AXES, REGIME_THRESHOLDS, regime_color,
+        classify_curve, classify_inv, classify_vol,
+    )
 
     df = build_features()
     if df.empty:
         return {"available": False, "error": "feature matrix empty"}
 
     latest = df.iloc[-1]
-    regime = latest["regime"]
-    m1_m12 = float(latest["m1_m12"])
+    mode = _active_mode()
+    regime_col = "regime_pooled" if mode == "pooled" else "regime"
+    regime = str(latest[regime_col])
+    regime_legacy = str(latest.get("regime_legacy", ""))
+    regime_composite = str(latest.get("regime", ""))
+    regime_pooled = str(latest.get("regime_pooled", ""))
 
-    # How many consecutive days have we been in this regime?
+    # Per-axis labels (already in `regime`, but pull explicitly for the UI)
+    curve_b = classify_curve(float(latest["m1_m12"]))
+    inv_b   = classify_inv(float(latest["inv_vs_5yr_pct"])) if pd.notna(latest["inv_vs_5yr_pct"]) else "UNKNOWN"
+    vol_b   = classify_vol(float(latest["realised_vol_20d"]))
+
+    # How many consecutive days in the active regime?
     days_in_regime = 0
     for i in range(len(df) - 1, -1, -1):
-        if df.iloc[i]["regime"] == regime:
+        if str(df.iloc[i][regime_col]) == regime:
             days_in_regime += 1
         else:
             break
 
     return {
         "available":      True,
-        "regime":         regime,
+        "regime":         regime,             # active-mode label (composite or pooled)
+        "regime_mode":    mode,
+        "gated_blend":    _gated_blend_enabled(),
+        "regime_composite": regime_composite, # always surfaced for the UI context strip
+        "regime_pooled":  regime_pooled,
+        "regime_legacy":  regime_legacy,
         "regime_color":   regime_color(regime),
+        "size_mode":      _gated_size_mode() if _gated_blend_enabled() else None,
         "as_of":          df.index[-1].strftime("%Y-%m-%d"),
-        "m1_m12":         round(m1_m12, 3),
         "days_in_regime": days_in_regime,
+        "axes": {
+            "curve":     {"bucket": curve_b, "value": round(float(latest["m1_m12"]), 3)},
+            "inventory": {"bucket": inv_b,   "value": round(float(latest["inv_vs_5yr_pct"]), 2) if pd.notna(latest["inv_vs_5yr_pct"]) else None},
+            "vol":       {"bucket": vol_b,   "value": round(float(latest["realised_vol_20d"]) * 100, 2)},
+        },
         "drivers": {
             "brent_close":      round(float(latest["brent_close"]), 2),
+            "wti_close":        round(float(latest["wti_close"]), 2) if pd.notna(latest.get("wti_close")) else None,
             "realised_vol_20d": round(float(latest["realised_vol_20d"]), 4),
             "brent_ret_5d":     round(float(latest["brent_ret_5d"]) * 100, 2),
+            "inv_vs_5yr_pct":   round(float(latest["inv_vs_5yr_pct"]), 2) if pd.notna(latest["inv_vs_5yr_pct"]) else None,
+            "m1_m12":           round(float(latest["m1_m12"]), 3),
         },
-        "regime_thresholds": {
-            "EXTREME_CONTANGO":      "M1-M12 ≤ -$5",
-            "MILD_CONTANGO":         "-$5 < M1-M12 ≤ $0",
-            "MILD_BACKWARDATION":    "$0 < M1-M12 ≤ +$10",
-            "EXTREME_BACKWARDATION": "M1-M12 > +$10",
-        },
-        "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "axis_thresholds":  REGIME_THRESHOLDS,
+        "axis_buckets":     REGIME_AXES,
+        "timestamp":        datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
 
 
 def get_recommendation() -> dict:
     """
-    Run inference on all 3 spreads under the current regime, rank by
-    composite confidence, return #1 opportunity + all ranked details.
+    Run inference on all 6 spreads under the current regime, rank by composite
+    confidence, return #1 opportunity + every spread.
+
+    Phase 2.6: when PULSE_GATED_BLEND=1, internal mode is forced to pooled and
+    each spread's signal is gated. Spreads that pass the gate keep the regime
+    signal (source='regime'); spreads that fail it fall through to a 252-day
+    rolling-z baseline signal (source='baseline'). The mix shows up in the
+    response as `recommendation_source` per spread + a top-level summary.
     """
     from research.features        import build_features, predictors_for
     from research.spread_universe import build_spread_series, INSTRUMENTS, LABELS, DESCRIPTIONS
     from research.models          import load_models, load_report
 
+    gated    = _gated_blend_enabled()
+    size_mode = _gated_size_mode() if gated else "full"
+    kelly_map = _kelly_lookup_from_report() if (gated and size_mode == "kelly") else {}
+    mode     = _active_mode()  # honours gated → pooled
+    regime_col = "regime_pooled" if mode == "pooled" else "regime"
     df       = build_features()
     spreads  = build_spread_series()
-    models   = load_models()
-    report   = load_report() or {}
+    models   = load_models(regime_mode=mode)
+    report   = load_report(regime_mode=mode) or {}
+    # Fall back to composite if pooled mode is requested but not yet trained.
+    if mode == "pooled" and not models:
+        log.warning("pooled models not found on disk; falling back to composite")
+        mode = "composite"
+        regime_col = "regime"
+        models   = load_models(regime_mode=mode)
+        report   = load_report(regime_mode=mode) or {}
+        if gated:
+            log.warning("PULSE_GATED_BLEND=1 but no pooled models; falling back to baseline-only for gated leg")
 
     if df.empty:
         return {"available": False, "error": "feature matrix empty"}
 
     latest_features = df.iloc[-1]
-    latest_spreads  = spreads.iloc[-1] if not spreads.empty else None
-    regime = latest_features["regime"]
+    # Forward-fill spreads up to 3 business days so WTI cells still have a
+    # "today" reading when the synth file lags Brent's latest settle by a
+    # session. Mirrors the ffill(limit=3) inside build_features() so feature
+    # vector and target are time-aligned for live inference.
+    spreads_ffilled = spreads.ffill(limit=3) if not spreads.empty else spreads
+    latest_spreads  = spreads_ffilled.iloc[-1] if not spreads_ffilled.empty else None
+    regime = str(latest_features[regime_col])
     as_of  = df.index[-1].strftime("%Y-%m-%d")
 
     ranked = []
     for spread in INSTRUMENTS:
-        cell_key = (spread, regime)
-        if cell_key not in models:
-            continue
-        bundle = models[cell_key]
         feat_cols = predictors_for(spread)
-        X = latest_features[feat_cols].values.reshape(1, -1)
 
-        ridge_pred = float(bundle["ridge"].predict(X)[0])
-        p10        = float(bundle["q10"].predict(X)[0])
-        p50        = float(bundle["q50"].predict(X)[0])
-        p90        = float(bundle["q90"].predict(X)[0])
+        feat_vals = latest_features[feat_cols]
+        feats_ok  = not feat_vals.isnull().any()
 
-        actual = float(latest_spreads[spread]) if latest_spreads is not None else None
-        if actual is None:
+        actual_raw = latest_spreads.get(spread) if latest_spreads is not None else None
+        if actual_raw is None or (isinstance(actual_raw, float) and not np.isfinite(actual_raw)):
             continue
-        deviation = actual - ridge_pred
+        actual = float(actual_raw)
 
-        # Get this cell's residual std + R² from the saved report
-        cell_report = report.get("cells", {}).get(f"{spread}__{regime}", {})
-        resid_std       = cell_report.get("resid_std", 1.0)
-        r2_oos          = cell_report.get("ridge_r2_test")
-        r2_in           = cell_report.get("ridge_r2_train", 0.0)
-        band_hit        = cell_report.get("band_hit_rate")
-        n_train         = cell_report.get("n_train", 0)
-        winner          = cell_report.get("winner")
-        active_features = cell_report.get("active_features")
-        total_features  = cell_report.get("total_features")
-        competition     = cell_report.get("competition", {})
+        # ── 1. Compute pooled-regime candidate (if we have features + a cell)
+        regime_candidate: dict | None = None
+        cell_key = (spread, regime)
+        if feats_ok and cell_key in models:
+            bundle = models[cell_key]
+            X = feat_vals.values.reshape(1, -1)
+            point_pred = float(bundle["point"].predict(X)[0])
+            p10        = float(bundle["q10"].predict(X)[0])
+            p50        = float(bundle["q50"].predict(X)[0])
+            p90        = float(bundle["q90"].predict(X)[0])
 
-        z_score = deviation / resid_std if resid_std > 0 else 0.0
+            deviation = actual - point_pred
+            cell_report = report.get("cells", {}).get(f"{spread}__{regime}", {})
+            resid_std       = cell_report.get("resid_std", 1.0) or 1.0
+            r2_oos          = cell_report.get("ridge_r2_test")
+            r2_in           = cell_report.get("ridge_r2_train", 0.0) or 0.0
+            band_hit        = cell_report.get("band_hit_rate")
+            n_train         = cell_report.get("n_train", 0)
+            winner          = cell_report.get("winner")
+            active_features = cell_report.get("active_features")
+            total_features  = cell_report.get("total_features")
+            competition     = cell_report.get("competition", {})
 
-        # Inside-band check
-        inside_band = (p10 <= actual <= p90)
+            z_score = deviation / resid_std if resid_std > 0 else 0.0
+            inside_band = (p10 <= actual <= p90)
+            used_r2 = r2_oos if (r2_oos is not None and r2_oos > 0) else max(r2_in, 0.0)
+            confidence = (
+                min(abs(z_score), 3.0) / 3.0
+                * min(used_r2, 1.0)
+                * min((n_train / 100.0) ** 0.5, 1.0)
+            )
+            if z_score > GATED_Z_THRESHOLD:
+                direction = "SELL"
+                target    = round(p50, 3)
+                stop      = round(actual + 1.5 * resid_std, 3)
+            elif z_score < -GATED_Z_THRESHOLD:
+                direction = "BUY"
+                target    = round(p50, 3)
+                stop      = round(actual - 1.5 * resid_std, 3)
+            else:
+                direction = "NEUTRAL"
+                target = stop = None
 
-        # Confidence score:
-        #   abs(z) penalised by max-confidence cap of 3σ
-        #   × R² (OOS if available, else training)
-        #   × sqrt(n / 100) up to cap of 1
-        used_r2 = r2_oos if (r2_oos is not None and r2_oos > 0) else max(r2_in, 0.0)
-        confidence = (
-            min(abs(z_score), 3.0) / 3.0          # 0–1 from |z|
-            * min(used_r2, 1.0)                   # 0–1 from R²
-            * min((n_train / 100.0) ** 0.5, 1.0)  # 0–1 from sample size
-        )
+            drivers = cell_report.get("top_drivers", [])[:3]
 
-        # Direction: if actual > fair → spread looks RICH → SELL
-        if z_score > 0.5:
-            direction = "SELL"
-            target    = round(p50, 3)
-            stop      = round(actual + 1.5 * resid_std, 3)
-        elif z_score < -0.5:
-            direction = "BUY"
-            target    = round(p50, 3)
-            stop      = round(actual - 1.5 * resid_std, 3)
+            regime_candidate = {
+                "spread":          spread,
+                "label":           LABELS[spread],
+                "description":     DESCRIPTIONS[spread],
+                "direction":       direction,
+                "current":         round(actual, 3),
+                "fair_value":      round(point_pred, 3),
+                "band_low":        round(p10, 3),
+                "band_mid":        round(p50, 3),
+                "band_high":       round(p90, 3),
+                "deviation":       round(deviation, 3),
+                "z_score":         round(z_score, 3),
+                "inside_band":     bool(inside_band),
+                "target":          target,
+                "stop":            stop,
+                "confidence":      round(confidence, 4),
+                "r2_train":        r2_in,
+                "r2_oos":          r2_oos,
+                "band_hit_rate":   band_hit,
+                "n_train":         n_train,
+                "drivers":         drivers,
+                "winner_model":    winner,
+                "active_features": active_features,
+                "total_features":  total_features,
+                "competition":     competition,
+                "recommendation_source": "regime",
+                "regime":          regime,
+            }
+
+        # ── 2. Compute the rolling-z baseline candidate (always, for gated mode)
+        baseline_candidate: dict | None = None
+        if gated:
+            base = _baseline_rolling_signal(spreads[spread])
+            if base is not None:
+                b_actual = base["actual"]
+                if base["direction"] == "SELL":
+                    b_target = round(base["p50"], 3)
+                    b_stop   = round(b_actual + 1.5 * base["sigma"], 3)
+                elif base["direction"] == "BUY":
+                    b_target = round(base["p50"], 3)
+                    b_stop   = round(b_actual - 1.5 * base["sigma"], 3)
+                else:
+                    b_target = b_stop = None
+                # Confidence scaling that mirrors the regime path: |z|/3 ×
+                # band-confidence ≈ 0.5 (1σ band), × sqrt window.
+                b_conf = (
+                    min(abs(base["z"]), 3.0) / 3.0
+                    * 0.5
+                    * min((base["n_window"] / 100.0) ** 0.5, 1.0)
+                )
+                baseline_candidate = {
+                    "spread":          spread,
+                    "label":           LABELS[spread],
+                    "description":     DESCRIPTIONS[spread],
+                    "direction":       base["direction"],
+                    "current":         round(b_actual, 3),
+                    "fair_value":      round(base["fair"], 3),
+                    "band_low":        round(base["p10"], 3),
+                    "band_mid":        round(base["p50"], 3),
+                    "band_high":       round(base["p90"], 3),
+                    "deviation":       round(b_actual - base["fair"], 3),
+                    "z_score":         round(base["z"], 3),
+                    "inside_band":     bool(base["p10"] <= b_actual <= base["p90"]),
+                    "target":          b_target,
+                    "stop":            b_stop,
+                    "confidence":      round(b_conf, 4),
+                    "r2_train":        None,
+                    "r2_oos":          None,
+                    "band_hit_rate":   None,
+                    "n_train":         base["n_window"],
+                    "drivers":         [],
+                    "winner_model":    "Rolling252dZ",
+                    "active_features": None,
+                    "total_features":  None,
+                    "competition":     {},
+                    "recommendation_source": "baseline",
+                    "regime":          regime,
+                }
+
+        # ── 3. Pick the winner per spread (or the only one we have)
+        if gated:
+            # Phase 2.6 gate: regime candidate must pass; else baseline.
+            chosen = None
+            if regime_candidate is not None and _pooled_passes_gate(
+                regime, regime_candidate.get("winner_model"), regime_candidate.get("z_score") or 0.0,
+            ):
+                chosen = regime_candidate
+                chosen["gate"] = "pass"
+            elif baseline_candidate is not None:
+                chosen = baseline_candidate
+                chosen["gate"] = "fail" if regime_candidate is not None else "no_pooled_cell"
+            elif regime_candidate is not None:
+                # No baseline (insufficient history) — surface the regime
+                # candidate but label it clearly, since the gate is bypassed
+                # only because we couldn't construct a fallback.
+                chosen = regime_candidate
+                chosen["gate"] = "no_baseline"
+                chosen["recommendation_source"] = "regime"
+            if chosen is not None:
+                # Phase 2.7 — attach notional scale + sizing mode for the UI /
+                # paper-trading downstream. Baseline rows always carry 1.0 so
+                # the chip and push-notional logic don't need to special-case.
+                src = chosen.get("recommendation_source") or "regime"
+                chosen["notional_scale"] = round(_notional_scale(spread, src, size_mode, kelly_map), 4)
+                chosen["sizing_mode"]    = size_mode
+                ranked.append(chosen)
         else:
-            direction = "NEUTRAL"
-            target = stop = None
+            # Sprint-3/Phase-2.5 behaviour: regime candidate only (composite or pooled).
+            if regime_candidate is not None:
+                regime_candidate["gate"] = "off"
+                regime_candidate["notional_scale"] = 1.0
+                regime_candidate["sizing_mode"]    = "full"
+                ranked.append(regime_candidate)
 
-        # Top driver names from saved coefs
-        drivers = cell_report.get("top_drivers", [])[:3]
-
-        ranked.append({
-            "spread":          spread,
-            "label":           LABELS[spread],
-            "description":     DESCRIPTIONS[spread],
-            "direction":       direction,
-            "current":         round(actual, 3),
-            "fair_value":      round(ridge_pred, 3),
-            "band_low":        round(p10, 3),
-            "band_mid":        round(p50, 3),
-            "band_high":       round(p90, 3),
-            "deviation":       round(deviation, 3),
-            "z_score":         round(z_score, 3),
-            "inside_band":     bool(inside_band),
-            "target":          target,
-            "stop":            stop,
-            "confidence":      round(confidence, 4),
-            "r2_train":        r2_in,
-            "r2_oos":          r2_oos,
-            "band_hit_rate":   band_hit,
-            "n_train":         n_train,
-            "drivers":         drivers,
-            "winner_model":    winner,           # which of {Ridge, Lasso, ElasticNet, Huber} won this cell
-            "active_features": active_features,  # non-zero coef count
-            "total_features":  total_features,
-            "competition":     competition,      # all 4 candidates' CV R²
-        })
-
-    # Sort by confidence × |z_score| (favor strong, statistically-grounded signals)
     ranked.sort(key=lambda x: x["confidence"], reverse=True)
-
     top = ranked[0] if ranked else None
 
+    method_blurb = (
+        "Pooled curve-axis regime (CONTANGO/NEUTRAL/BACK)"
+        if mode == "pooled"
+        else "3-axis composite regime (curve × inventory × vol)"
+    )
+
+    # Gated-blend summary counts — what the user is actually being shown
+    gated_summary = None
+    if gated:
+        n_regime   = sum(1 for r in ranked if r.get("recommendation_source") == "regime")
+        n_baseline = sum(1 for r in ranked if r.get("recommendation_source") == "baseline")
+        # Phase 2.7 — surface per-spread sizing so the UI can render the chip
+        # alongside the regime/baseline badge.
+        sizing_per_spread = {}
+        for r in ranked:
+            sp  = r.get("spread")
+            src = r.get("recommendation_source") or "regime"
+            sizing_per_spread[sp] = {
+                "source":         src,
+                "notional_scale": r.get("notional_scale", 1.0),
+            }
+        gated_summary = {
+            "enabled":          True,
+            "regime":           GATED_REGIME,
+            "winners":          sorted(GATED_WINNERS),
+            "z_threshold":      GATED_Z_THRESHOLD,
+            "n_regime":         n_regime,
+            "n_baseline":       n_baseline,
+            "method":           "Pooled signal taken only when regime_pooled=='BACK' AND winner_model ∈ {Lasso, Huber} AND |z|≥0.5σ; else 252d rolling-z baseline.",
+            # Phase 2.7 sizing context
+            "size_mode":        size_mode,
+            "kelly_map":        kelly_map if size_mode == "kelly" else None,
+            "sizing_per_spread": sizing_per_spread,
+        }
+        size_note = ""
+        if size_mode == "half":
+            size_note = " sized to 0.5× notional on the regime leg"
+        elif size_mode == "kelly":
+            size_note = " sized per-spread Kelly on the regime leg"
+        method_blurb = (
+            "Phase 2.6 gated blend — pooled curve-axis engine on BACK + Lasso/Huber, "
+            "else 252-day rolling-z baseline" + size_note
+        )
+
     return {
-        "available":  True,
-        "regime":     regime,
-        "as_of":      as_of,
-        "top":        top,
-        "ranked":     ranked,
-        "method":     "Ridge fair-value + Quantile p10/p90 band; trained on ≤ 2026-03-31",
-        "timestamp":  datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "available":             True,
+        "regime":                regime,
+        "regime_mode":           mode,
+        "gated_blend":           bool(gated),
+        "gated_summary":         gated_summary,
+        "size_mode":             size_mode if gated else None,  # Phase 2.7
+        "recommendation_source": (top.get("recommendation_source") if top else None),
+        "as_of":                 as_of,
+        "n_eligible":            len(ranked),
+        "n_universe":            len(INSTRUMENTS),
+        "top":                   top,
+        "ranked":                ranked,
+        "method":                f"Per-(spread, regime) winner model from {{Ridge/Lasso/ElasticNet/Huber}} competition; Quantile p10/p90 bands; trained ≤ 2026-03-31; {method_blurb}.",
+        "timestamp":             datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
 
 
 def get_backtest_report() -> dict:
-    """Return the saved training/backtest report from disk."""
     from research.models import load_report
-    rpt = load_report()
+    mode = _active_mode()
+    rpt = load_report(regime_mode=mode)
     if not rpt:
         return {"available": False, "error": "no backtest report — run train_all() first"}
     rpt["available"] = True
+    rpt["regime_mode"] = mode
     return rpt
 
 
@@ -224,16 +556,20 @@ if __name__ == "__main__":
     import json
     logging.basicConfig(level=logging.INFO)
     print("=== current regime ===")
-    print(json.dumps(get_current_regime(), indent=2, default=str))
+    cr = get_current_regime()
+    print(f"composite: {cr.get('regime')}  (days in regime: {cr.get('days_in_regime')})")
+    print(f"axes: {cr.get('axes')}")
+    print(f"drivers: {cr.get('drivers')}")
+
     print("\n=== recommendation ===")
     rec = get_recommendation()
+    print(f"regime={rec.get('regime')}  eligible={rec.get('n_eligible')}/{rec.get('n_universe')}")
     if rec.get("top"):
         t = rec["top"]
-        print(f"TOP: {t['label']} — {t['direction']}")
+        print(f"TOP: {t['label']} -- {t['direction']}")
         print(f"  current ${t['current']}  fair ${t['fair_value']}  band [{t['band_low']}, {t['band_high']}]")
-        print(f"  z={t['z_score']:+.2f}  confidence={t['confidence']:.3f}  R²_oos={t['r2_oos']}")
-        print(f"  target ${t['target']}  stop ${t['stop']}")
-        print(f"  top drivers: {[d['feature'] for d in t['drivers']]}")
+        print(f"  z={t['z_score']:+.2f}  conf={t['confidence']:.3f}  R2_oos={t['r2_oos']}  winner={t['winner_model']}")
     print(f"\nAll {len(rec.get('ranked', []))} ranked:")
     for i, r in enumerate(rec.get("ranked", []), 1):
-        print(f"  #{i} {r['label']:<35}  dir={r['direction']:<8}  z={r['z_score']:+.2f}  conf={r['confidence']:.3f}")
+        print(f"  #{i} {r['label']:<35}  dir={r['direction']:<8}  z={r['z_score']:+.2f}  "
+              f"conf={r['confidence']:.3f}  winner={r['winner_model']}")

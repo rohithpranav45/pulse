@@ -9,9 +9,10 @@ import {
   FileBadge,
   History,
   Wallet,
+  Radar,
 } from 'lucide-react';
 
-export type ViewKey = 'signal' | 'charts' | 'fundamentals' | 'intelligence' | 'term' | 'spreads' | 'contracts' | 'playbook' | 'paper';
+export type ViewKey = 'signal' | 'charts' | 'fundamentals' | 'intelligence' | 'term' | 'spreads' | 'contracts' | 'playbook' | 'paper' | 'regime';
 
 export const NAV_ITEMS: { key: ViewKey; label: string; icon: any; hint: string }[] = [
   { key: 'signal',        label: 'Signal',        icon: Gauge,            hint: '1' },
@@ -23,6 +24,7 @@ export const NAV_ITEMS: { key: ViewKey; label: string; icon: any; hint: string }
   { key: 'contracts',     label: 'Contracts',     icon: FileBadge,        hint: '7' },
   { key: 'playbook',      label: 'Playbook',      icon: History,          hint: '8' },
   { key: 'paper',         label: 'Paper Trading', icon: Wallet,           hint: '9' },
+  { key: 'regime',        label: 'Regime',        icon: Radar,            hint: '0' },
 ];
 
 export function Sidebar({ active, onSelect }: { active: ViewKey; onSelect: (k: ViewKey) => void }) {
