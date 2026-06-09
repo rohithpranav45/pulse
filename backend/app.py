@@ -66,6 +66,14 @@ logging.basicConfig(
 )
 log = logging.getLogger("pulse.api")
 
+# ── Observability (Sprint 0b) ────────────────────────────────────────────────
+# Sentry must initialise BEFORE the Flask app is constructed so its Flask
+# integration can hook into request/response handling. Better Stack attaches
+# to the root logger so every log line streams up automatically.
+from observability import init_sentry, init_better_stack_logging  # noqa: E402
+init_sentry()
+init_better_stack_logging()
+
 _STATIC_DIR = os.path.join(_BACKEND, "static")
 app = Flask(__name__, static_folder=None)
 CORS(app)   # allow all origins — dashboard may be served from a different port
@@ -161,7 +169,7 @@ TTL_ANALOGS        = 21600 # matrix-profile analogs — 6h (expensive compute)
 def safe_fetch(func, fallback=None):
     """
     Call func() and return its result.
-    On any exception, log the error and return fallback.
+    On any exception, log the error, ship it to Sentry, and return fallback.
     Handles lambdas (which have no meaningful __name__).
     """
     name = getattr(func, "__name__", None) or repr(func)
@@ -169,6 +177,11 @@ def safe_fetch(func, fallback=None):
         return func()
     except Exception as exc:
         log.error("%s failed: %s", name, exc)
+        try:
+            from observability import capture_exception
+            capture_exception(exc, fetcher=name)
+        except Exception:
+            pass
         return fallback
 
 
@@ -1049,6 +1062,31 @@ def health():
     return jsonify({"status": "ok", "timestamp": _now()})
 
 
+@app.route("/api/_observability/smoke")
+def _observability_smoke():
+    """
+    Sprint 0b smoke test. Disabled in prod; enable with PULSE_OBS_SMOKE=1.
+
+    Logs an INFO + WARNING line (shipped to Better Stack) and raises an
+    exception caught by Sentry's Flask middleware. Returns a quick summary
+    so a curl can confirm the path was exercised.
+    """
+    if os.environ.get("PULSE_OBS_SMOKE") != "1":
+        return jsonify({"error": "disabled", "hint": "set PULSE_OBS_SMOKE=1"}), 403
+    from observability import capture_exception, state as obs_state
+    log.info("pulse smoke test (info): better-stack should receive this line")
+    log.warning("pulse smoke test (warning): sentry breadcrumb")
+    try:
+        raise RuntimeError("pulse smoke test — intentional, ignore")
+    except RuntimeError as exc:
+        capture_exception(exc, source="smoke_test")
+    return jsonify({
+        "ok":     True,
+        "state":  obs_state(),
+        "advice": "check https://sentry.io and Better Stack dashboards for the test event",
+    })
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Phase 2 (class-demo) — regime-based opportunity engine
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1081,6 +1119,36 @@ def regime_recommendation_route():
 def regime_backtest_route():
     """Saved training report — OOS R², band-hit rate per (spread, regime)."""
     return jsonify({"data": safe_fetch(_regime_backtest, {"available": False}),
+                    "timestamp": _now()})
+
+@app.route("/api/regime/drill/<spread>")
+def regime_drill_route(spread: str):
+    """
+    Drill-down receipts for one spread under today's regime:
+      • scatter of actual vs fair value across the regime's full history
+      • 3 closest historical analogs to today's feature vector + 20d forward
+    """
+    def _drill():
+        from research.drill import get_drill_data
+        return get_drill_data(spread)
+    return jsonify({"data": safe_fetch(_drill, {"available": False}),
+                    "timestamp": _now()})
+
+@app.route("/api/regime/walkforward")
+def regime_walkforward_route():
+    """
+    Walk-forward backtest results (Sprint 4). Expanding-window refits across
+    2024-2026 with regime-aware + regime-unaware baseline. Read-only — run
+    `python -m backend.research.walkforward` to regenerate.
+    """
+    def _wf():
+        from research.walkforward import load_report
+        rpt = load_report()
+        if not rpt:
+            return {"available": False, "error": "no walk-forward report — run python -m backend.research.walkforward first"}
+        rpt["available"] = True
+        return rpt
+    return jsonify({"data": safe_fetch(_wf, {"available": False}),
                     "timestamp": _now()})
 
 
@@ -1266,6 +1334,32 @@ def health_detail():
             "age_s":   age,
             "ttl_s":   ttl,
         })
+    # Sprint 0b: surface observability stack health as two synthetic streams.
+    # These don't sit in the cache — we read directly from the observability
+    # module's in-process state, which is cheap.
+    try:
+        from observability import state as _obs_state
+        s = _obs_state()
+        for key, label, enabled, token_key in (
+            ("sentry",       "Sentry (errors)",        s["sentry_enabled"],
+                "sentry_dsn_set"),
+            ("better_stack", "Better Stack (logs)",    s["better_stack_enabled"],
+                "better_stack_token_set"),
+        ):
+            if enabled:
+                status, detail = "up", None
+            elif s.get(token_key):
+                status, detail = "stale", "configured but init failed"
+            else:
+                status, detail = "down", "no token configured"
+            counts[status] += 1
+            streams.append({
+                "key": key, "label": label, "status": status,
+                "detail": detail, "age_s": None, "ttl_s": None,
+            })
+    except Exception as exc:
+        log.warning("health-detail: observability probe failed: %s", exc)
+
     overall = "ok" if counts["down"] == 0 and counts["stale"] == 0 \
               else "degraded" if counts["down"] == 0 else "down"
     return respond(HealthDetailResponse, {

@@ -101,11 +101,50 @@ def _ensure_table() -> None:
     """)
     c.execute("CREATE INDEX IF NOT EXISTS idx_paper_status ON paper_trades(status)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_paper_opened ON paper_trades(opened_at)")
+    # Phase 2 Sprint 2b: per-leg book for spread/butterfly positions.
+    # Parent paper_trades row still records the synthetic-spread entry/MTM/PnL
+    # so all existing analytics (Sharpe, equity curve, etc.) keep working.
+    # Legs are an audit-grade breakdown that lets us show what's actually held.
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS paper_legs (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            trade_id     INTEGER NOT NULL,
+            contract     TEXT    NOT NULL,
+            direction    TEXT    NOT NULL CHECK (direction IN ('LONG','SHORT')),
+            qty          REAL    NOT NULL,
+            entry_price  REAL    NOT NULL,
+            mtm_price    REAL,
+            mtm_at       TEXT,
+            unrealised   REAL,
+            exit_price   REAL,
+            realised     REAL,
+            FOREIGN KEY (trade_id) REFERENCES paper_trades(id)
+        )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_paper_legs_trade ON paper_legs(trade_id)")
     c.commit()
     c.close()
 
 
 _ensure_table()
+
+
+def _leg_defs_for(asset: str) -> list[tuple[str, float]]:
+    """Return [(contract, signed_qty), ...] for a known spread, else []."""
+    try:
+        from research.spread_universe import LEG_DEFS
+        return list(LEG_DEFS.get(asset, []))
+    except Exception:
+        return []
+
+
+def _leg_prices_for(asset: str) -> dict[str, float]:
+    try:
+        from research.spread_universe import current_leg_prices
+        return current_leg_prices(asset)
+    except Exception as exc:
+        log.warning("leg-price lookup failed for %s: %s", asset, exc)
+        return {}
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
@@ -119,12 +158,15 @@ def _live_price(asset: str) -> Optional[float]:
     Pull the latest "price" for asset.
     Supports two kinds of asset key:
       • Single-asset    — "brent", "wti", "henry_hub" → from /api/prices cache
-      • Spread / fly    — e.g. "brent_m1_m2", "brent_m3_m6", "brent_fly_123"
-        → computed from /Data Brent settlements via research.spread_universe.
+      • Spread / fly    — e.g. "brent_m1_m2", "brent_m3_m6", "brent_fly_123",
+        "wti_m1_m2", "wti_m3_m6", "wti_fly_123"
+        → computed from /Data settlements via research.spread_universe.
         This lets MTM compare apples-to-apples for regime-engine trades.
     """
-    # ── Spread / fly asset keys ────────────────────────────────────────────
-    if asset and asset.startswith("brent_"):
+    # ── Spread / fly asset keys (Brent + WTI from Sprint 3 onward) ─────────
+    if asset and (
+        asset.startswith("brent_") or asset.startswith("wti_m") or asset.startswith("wti_fly")
+    ):
         try:
             from research.spread_universe import current_values
             vals = current_values()
@@ -151,14 +193,25 @@ def _pnl(direction: str, entry: float, exit_px: float, size: float) -> float:
     return round((entry - exit_px) * size, 4)
 
 
-def _row_to_dict(r: sqlite3.Row) -> dict:
+def _row_to_dict(r: sqlite3.Row, *, with_legs: bool = True) -> dict:
     d = dict(r)
     # Inflate metadata blob
     md = d.pop("metadata_json", None)
     if md:
         try: d["metadata"] = json.loads(md)
         except Exception: d["metadata"] = None
+    if with_legs:
+        d["legs"] = _fetch_legs(int(d["id"]))
     return d
+
+
+def _fetch_legs(trade_id: int) -> list[dict]:
+    c = _conn()
+    rows = c.execute(
+        "SELECT * FROM paper_legs WHERE trade_id=? ORDER BY id ASC", (trade_id,)
+    ).fetchall()
+    c.close()
+    return [dict(r) for r in rows]
 
 
 # ── Public API ───────────────────────────────────────────────────────────────
@@ -214,11 +267,35 @@ def push_trade(idea: dict, *, size: float = 1.0, source: str = "trade_idea") -> 
           _now_iso(), source, conviction, str(thesis),
           float(entry), _now_iso(), json.dumps(md)))
     trade_id = cur.lastrowid
+
+    # Spread / butterfly: record per-leg book using today's outright settlements.
+    leg_defs = _leg_defs_for(asset)
+    if leg_defs:
+        leg_prices = _leg_prices_for(asset)
+        for contract, signed_qty in leg_defs:
+            px = leg_prices.get(contract)
+            if px is None:
+                log.warning("paper trade #%d: missing leg price for %s; skipped",
+                            trade_id, contract)
+                continue
+            # Long spread keeps the sign; short spread flips every leg.
+            leg_signed = signed_qty if direction == "LONG" else -signed_qty
+            leg_dir = "LONG" if leg_signed > 0 else "SHORT"
+            leg_qty = abs(leg_signed) * float(size)
+            c.execute("""
+                INSERT INTO paper_legs
+                  (trade_id, contract, direction, qty, entry_price,
+                   mtm_price, mtm_at, unrealised)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 0.0)
+            """, (trade_id, contract, leg_dir, leg_qty, float(px),
+                  float(px), _now_iso()))
+
     c.commit()
     row = c.execute("SELECT * FROM paper_trades WHERE id=?", (trade_id,)).fetchone()
     c.close()
-    log.info("paper trade #%d opened: %s %s @ %.2f size=%.2f tgt=%s stop=%s",
-             trade_id, direction, asset, float(entry), size, target, stop)
+    log.info("paper trade #%d opened: %s %s @ %.2f size=%.2f tgt=%s stop=%s legs=%d",
+             trade_id, direction, asset, float(entry), size, target, stop,
+             len(leg_defs))
     return {"ok": True, "trade": _row_to_dict(row)}
 
 
@@ -241,6 +318,24 @@ def close_trade(trade_id: int, *, reason: str = "manual") -> dict:
                realised=?, realised_pct=?
          WHERE id=?
     """, (_now_iso(), exit_px, reason, realised, realised_pct, trade_id))
+
+    # Finalise legs (if any) at today's outright settlements.
+    leg_prices = _leg_prices_for(row["asset"])
+    if leg_prices:
+        legs = c.execute(
+            "SELECT * FROM paper_legs WHERE trade_id=?", (trade_id,)
+        ).fetchall()
+        for leg in legs:
+            px = leg_prices.get(leg["contract"])
+            if px is None:
+                continue
+            pnl = _pnl(leg["direction"], leg["entry_price"], px, leg["qty"])
+            c.execute("""
+                UPDATE paper_legs
+                   SET exit_price=?, mtm_price=?, mtm_at=?, unrealised=?, realised=?
+                 WHERE id=?
+            """, (float(px), float(px), _now_iso(), pnl, pnl, leg["id"]))
+
     c.commit()
     out = c.execute("SELECT * FROM paper_trades WHERE id=?", (trade_id,)).fetchone()
     c.close()
@@ -280,6 +375,21 @@ def mark_to_market() -> dict:
         unreal = _pnl(direction, entry, px, size)
         c.execute("UPDATE paper_trades SET mtm_price=?, mtm_at=?, unrealised=? WHERE id=?",
                   (px, _now_iso(), unreal, r["id"]))
+        # Refresh leg-level MTM for spread trades.
+        leg_prices = _leg_prices_for(r["asset"])
+        if leg_prices:
+            legs = c.execute(
+                "SELECT * FROM paper_legs WHERE trade_id=?", (r["id"],)
+            ).fetchall()
+            for leg in legs:
+                lp = leg_prices.get(leg["contract"])
+                if lp is None:
+                    continue
+                lpnl = _pnl(leg["direction"], leg["entry_price"], lp, leg["qty"])
+                c.execute(
+                    "UPDATE paper_legs SET mtm_price=?, mtm_at=?, unrealised=? WHERE id=?",
+                    (float(lp), _now_iso(), lpnl, leg["id"]),
+                )
         summary["still_open"] += 1
     c.commit(); c.close()
     return summary
@@ -303,11 +413,16 @@ def list_positions(status: str = "all", limit: int = 200) -> list[dict]:
 
 
 def clear_trades(scope: str = "all") -> int:
-    """Wipe trades. scope: 'all' or 'closed'."""
+    """Wipe trades (and their legs). scope: 'all' or 'closed'."""
     c = _conn()
     if scope == "closed":
+        c.execute("""
+            DELETE FROM paper_legs
+             WHERE trade_id IN (SELECT id FROM paper_trades WHERE status='CLOSED')
+        """)
         n = c.execute("DELETE FROM paper_trades WHERE status='CLOSED'").rowcount
     else:
+        c.execute("DELETE FROM paper_legs")
         n = c.execute("DELETE FROM paper_trades").rowcount
     c.commit(); c.close()
     return n

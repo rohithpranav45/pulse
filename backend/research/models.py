@@ -62,8 +62,13 @@ if _BACKEND not in sys.path:
 log = logging.getLogger("pulse.research.models")
 
 # ── Paths ────────────────────────────────────────────────────────────────────
-_MODELS_DIR  = Path(__file__).parent.parent / "data" / "research" / "models"
-_REPORT_FILE = Path(__file__).parent.parent / "data" / "research" / "backtest_report.json"
+_RESEARCH_DIR = Path(__file__).parent.parent / "data" / "research"
+_MODELS_DIR   = _RESEARCH_DIR / "models"                  # composite (Sprint 3)
+_REPORT_FILE  = _RESEARCH_DIR / "backtest_report.json"    # composite (Sprint 3)
+
+# Phase 2.5 pooled-mode artefacts live alongside composite, suffixed by mode.
+_MODELS_DIR_POOLED  = _RESEARCH_DIR / "models_pooled"
+_REPORT_FILE_POOLED = _RESEARCH_DIR / "backtest_report_pooled.json"
 
 # ── Config ───────────────────────────────────────────────────────────────────
 TRAIN_END  = "2026-03-31"
@@ -74,6 +79,36 @@ CV_SPLITS   = 5
 
 # Simplicity tiebreak — lower number wins when R² scores tie within 0.005
 _TIEBREAK_RANK = {"ElasticNet": 0, "Lasso": 1, "Ridge": 2, "Huber": 3}
+
+
+def _safe(name: str) -> str:
+    """Composite regime labels contain '/' — replace for filesystem safety."""
+    return name.replace("/", "-")
+
+
+# ── Regime mode plumbing (Phase 2.5) ─────────────────────────────────────────
+# "composite" — 3-axis 27-cell grid (Sprint 3 default)
+# "pooled"    — curve-axis only 3-cell grid (Phase 2.5: ~5x more rows/cell)
+_VALID_MODES = ("composite", "pooled")
+
+
+def _mode_paths(regime_mode: str) -> tuple[Path, Path]:
+    """Return (models_dir, report_file) for the requested regime mode."""
+    if regime_mode == "pooled":
+        return _MODELS_DIR_POOLED, _REPORT_FILE_POOLED
+    if regime_mode == "composite":
+        return _MODELS_DIR, _REPORT_FILE
+    raise ValueError(f"regime_mode must be one of {_VALID_MODES}, got {regime_mode!r}")
+
+
+def _regime_column(regime_mode: str) -> str:
+    """Feature-matrix column to use as the cell key for this mode."""
+    return "regime_pooled" if regime_mode == "pooled" else "regime"
+
+
+def _regimes_for(regime_mode: str) -> list[str]:
+    from research.regimes import REGIMES, REGIMES_POOLED
+    return list(REGIMES_POOLED) if regime_mode == "pooled" else list(REGIMES)
 
 
 # ── Candidate fitters ────────────────────────────────────────────────────────
@@ -199,7 +234,7 @@ def _candidate_alpha(pipe: Pipeline) -> float | None:
 
 # ── Main: train all cells, select winner per cell ────────────────────────────
 
-def train_all() -> dict:
+def train_all(regime_mode: str = "composite") -> dict:
     """
     Per (spread, regime):
       1. Run all 4 candidates with time-series CV on TRAIN data
@@ -207,12 +242,21 @@ def train_all() -> dict:
       3. Fit winner on full TRAIN; persist
       4. Also fit Quantile p10/p50/p90; persist
       5. If held-out test exists, report final OOS R² (informational only)
+
+    regime_mode = "composite" (Sprint 3, 27 cells/spread) or
+                  "pooled"    (Phase 2.5, 3 cells/spread on curve axis only).
+    Each mode persists models + report to its own paths so both can coexist.
     """
     from research.features        import build_features, predictors_for
     from research.spread_universe import build_spread_series, INSTRUMENTS, LABELS
-    from research.regimes         import REGIMES
 
-    _MODELS_DIR.mkdir(parents=True, exist_ok=True)
+    if regime_mode not in _VALID_MODES:
+        raise ValueError(f"regime_mode must be one of {_VALID_MODES}, got {regime_mode!r}")
+    models_dir, report_file = _mode_paths(regime_mode)
+    regime_col = _regime_column(regime_mode)
+    regime_list = _regimes_for(regime_mode)
+
+    models_dir.mkdir(parents=True, exist_ok=True)
 
     features = build_features()
     spreads  = build_spread_series()
@@ -231,6 +275,7 @@ def train_all() -> dict:
 
     report = {
         "trained_at":  datetime.utcnow().isoformat(timespec="seconds") + "Z",
+        "regime_mode": regime_mode,
         "train_end":   TRAIN_END,
         "test_start":  TEST_START,
         "test_end":    TEST_END,
@@ -250,9 +295,13 @@ def train_all() -> dict:
 
     for spread in INSTRUMENTS:
         feat_cols = predictors_for(spread)
-        for regime in REGIMES:
+        for regime in regime_list:
             key = f"{spread}__{regime}"
-            sub_train = train[train["regime"] == regime]
+            sub_train = train[train[regime_col] == regime]
+            # Drop rows where any feature OR the target is NaN.
+            # WTI rows (target NaN pre-2021, features NaN pre-2021) fall out
+            # for WTI cells; Brent cells keep their full history.
+            sub_train = sub_train.dropna(subset=feat_cols + [spread])
             if len(sub_train) < MIN_SAMPLES:
                 report["cells"][key] = {
                     "spread":   spread,
@@ -297,13 +346,14 @@ def train_all() -> dict:
             q90 = _fit_quantile(X_tr, y_tr, 0.90)
 
             # ── Persist the WINNER + the three quantile models ───────────
-            joblib.dump(best_model, _MODELS_DIR / f"{key}__point.pkl")
-            joblib.dump(q10,        _MODELS_DIR / f"{key}__q10.pkl")
-            joblib.dump(q50,        _MODELS_DIR / f"{key}__q50.pkl")
-            joblib.dump(q90,        _MODELS_DIR / f"{key}__q90.pkl")
+            safe = f"{spread}__{_safe(regime)}"
+            joblib.dump(best_model, models_dir / f"{safe}__point.pkl")
+            joblib.dump(q10,        models_dir / f"{safe}__q10.pkl")
+            joblib.dump(q50,        models_dir / f"{safe}__q50.pkl")
+            joblib.dump(q90,        models_dir / f"{safe}__q90.pkl")
 
             # ── Held-out test R² (if any test days match this regime) ────
-            sub_test = test[test["regime"] == regime]
+            sub_test = test[test[regime_col] == regime].dropna(subset=feat_cols + [spread])
             r2_oos = None
             band_hit = None
             if len(sub_test) >= 3:
@@ -338,30 +388,38 @@ def train_all() -> dict:
             report["cells"][key] = cell
 
     # Save report
-    _REPORT_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(_REPORT_FILE, "w") as f:
+    report_file.parent.mkdir(parents=True, exist_ok=True)
+    with open(report_file, "w") as f:
         json.dump(report, f, indent=2, default=str)
-    log.info("Saved report to %s", _REPORT_FILE)
+    log.info("Saved report to %s", report_file)
     return report
 
 
 # ── Model loading + inference ────────────────────────────────────────────────
 
-def load_models() -> dict:
+def load_models(regime_mode: str = "composite") -> dict:
     out = {}
-    if not _MODELS_DIR.exists():
+    models_dir, _ = _mode_paths(regime_mode)
+    if not models_dir.exists():
         return out
     from research.spread_universe import INSTRUMENTS
-    from research.regimes         import REGIMES
     for spread in INSTRUMENTS:
-        for regime in REGIMES:
+        for regime in _regimes_for(regime_mode):
             key = (spread, regime)
             bundle = {}
+            safe = f"{spread}__{_safe(regime)}"
             for name in ("point", "q10", "q50", "q90"):
-                # Legacy filenames used "ridge"; fall back so we don't break
-                path = _MODELS_DIR / f"{spread}__{regime}__{name}.pkl"
-                if not path.exists() and name == "point":
-                    path = _MODELS_DIR / f"{spread}__{regime}__ridge.pkl"
+                path = models_dir / f"{safe}__{name}.pkl"
+                # Legacy fallbacks: Sprint 1/2 used 4-bucket regimes + the
+                # "ridge" name for the point model. (composite dir only.)
+                if regime_mode == "composite" and not path.exists():
+                    legacy = models_dir / f"{spread}__{regime}__{name}.pkl"
+                    if legacy.exists():
+                        path = legacy
+                if regime_mode == "composite" and not path.exists() and name == "point":
+                    legacy = models_dir / f"{spread}__{regime}__ridge.pkl"
+                    if legacy.exists():
+                        path = legacy
                 if path.exists():
                     bundle[name] = joblib.load(path)
             if bundle:
@@ -372,17 +430,19 @@ def load_models() -> dict:
     return out
 
 
-def load_report() -> dict | None:
-    if _REPORT_FILE.exists():
-        with open(_REPORT_FILE) as f:
+def load_report(regime_mode: str = "composite") -> dict | None:
+    _, report_file = _mode_paths(regime_mode)
+    if report_file.exists():
+        with open(report_file) as f:
             return json.load(f)
     return None
 
 
-def predict_one(spread: str, regime: str, features_row: pd.Series) -> dict | None:
+def predict_one(spread: str, regime: str, features_row: pd.Series,
+                regime_mode: str = "composite") -> dict | None:
     from research.features import predictors_for
     feat_cols = predictors_for(spread)
-    bundle = load_models().get((spread, regime))
+    bundle = load_models(regime_mode).get((spread, regime))
     if not bundle:
         return None
     X = features_row[feat_cols].values.reshape(1, -1)
@@ -395,10 +455,16 @@ def predict_one(spread: str, regime: str, features_row: pd.Series) -> dict | Non
 
 
 if __name__ == "__main__":
+    import argparse
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    print("Training all cells with 4-model competition + sparsity tiebreak...\n")
-    report = train_all()
-    print(f"\n=== TRAINING REPORT — winner per cell ===")
+    parser = argparse.ArgumentParser(description="Train per-cell regression models.")
+    parser.add_argument("--mode", choices=_VALID_MODES, default="composite",
+                        help="Regime mode (composite=27 cells, pooled=3 curve-axis cells)")
+    args = parser.parse_args()
+
+    print(f"Training all cells with 4-model competition + sparsity tiebreak [mode={args.mode}]...\n")
+    report = train_all(regime_mode=args.mode)
+    print(f"\n=== TRAINING REPORT — winner per cell (mode={args.mode}) ===")
     print(f"Train ≤ {report['train_end']} ({report['n_train']} rows)")
     print(f"Test  {report['test_start']} → {report['test_end']} ({report['n_test']} rows)")
     print(f"Method: {report['method']}\n")
