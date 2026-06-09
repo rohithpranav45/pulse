@@ -34,6 +34,12 @@ pyarrow==20.0.0
 # emits frontend/src/lib/api-types.ts from them so backend/frontend can't drift.
 pydantic==2.13.4
 
+# ── Observability (Sprint 0b) ────────────────────────────────────────────────
+# Sentry: errors + lightweight performance traces from the Flask process.
+# Better Stack: structured log shipping. Both have generous free tiers.
+sentry-sdk[flask]==2.46.0
+logtail-python==0.3.4
+
 # ── News (optional — fallback to NewsAPI if not set) ─────────────────────────
 apify-client==3.0.1        # needs APIFY_API_TOKEN in .env
 

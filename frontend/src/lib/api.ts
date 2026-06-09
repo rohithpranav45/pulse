@@ -148,6 +148,7 @@ export const api = {
   regime:                 () => getJSON('/api/regime'),
   regimeRecommendation:   () => getJSON('/api/regime/recommendation'),
   regimeBacktest:         () => getJSON('/api/regime/backtest'),
+  regimeDrill:            (spread: string) => getJSON(`/api/regime/drill/${spread}`),
   // Paper trading
   paperPositions:  () => getJSON<PaperPosition[]>('/api/paper/positions'),
   paperPerformance:() => getJSON<PaperPerformanceData>('/api/paper/performance'),

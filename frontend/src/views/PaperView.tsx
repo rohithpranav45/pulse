@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { RegimePickCard } from '@/components/panels/RegimePickCard';
+import { Fragment, useCallback, useMemo, useState } from 'react';
 import clsx from 'clsx';
 import { Panel } from '@/components/ui/Panel';
 import { Chip } from '@/components/ui/Chip';
@@ -22,6 +21,20 @@ import {
  *   Performance      →  total PnL, win%, Sharpe, max DD, equity curve
  */
 
+type Leg = {
+  id: number;
+  trade_id: number;
+  contract: string;
+  direction: 'LONG' | 'SHORT';
+  qty: number;
+  entry_price: number;
+  mtm_price: number | null;
+  mtm_at: string | null;
+  unrealised: number | null;
+  exit_price: number | null;
+  realised: number | null;
+};
+
 type Position = {
   id: number;
   asset: string;
@@ -42,6 +55,7 @@ type Position = {
   unrealised: number | null;
   realised: number | null;
   realised_pct: number | null;
+  legs?: Leg[];
 };
 
 type Performance = {
@@ -201,44 +215,76 @@ function OpenPositions({ rows, onClose }: { rows: Position[]; onClose: (id: numb
               const unreal = t.unrealised ?? 0;
               const sign = unreal >= 0 ? 'text-bull' : 'text-bear';
               const dirTone = t.direction === 'LONG' ? 'bull' : 'bear';
+              const legs = t.legs ?? [];
               return (
-                <tr key={t.id} className="border-b border-border/40 hover:bg-bg-hover/30">
-                  <td className="py-2 text-text-tertiary">#{t.id}</td>
-                  <td>
-                    <span className="uppercase font-semibold text-text-primary">{t.asset}</span>
-                    <Chip tone={dirTone as any} className="ml-2">{t.direction}</Chip>
-                  </td>
-                  <td className="text-right text-text-secondary">${t.entry_price.toFixed(2)}</td>
-                  <td className="text-right text-text-primary font-semibold">
-                    {t.mtm_price !== null ? `$${t.mtm_price.toFixed(2)}` : '—'}
-                  </td>
-                  <td className="text-right text-text-tertiary">
-                    {t.target_price !== null ? `$${t.target_price.toFixed(2)}` : '—'}
-                  </td>
-                  <td className="text-right text-text-tertiary">
-                    {t.stop_price !== null ? `$${t.stop_price.toFixed(2)}` : '—'}
-                  </td>
-                  <td className={clsx('text-right font-semibold', sign)}>
-                    {unreal >= 0 ? '+' : ''}${unreal.toFixed(2)}
-                  </td>
-                  <td className="text-right text-text-secondary">{t.size}</td>
-                  <td className="text-right text-text-muted text-[10px]">
-                    {fmt.ago ? fmt.ago(t.opened_at) : t.opened_at?.slice(11, 16)}
-                  </td>
-                  <td className="text-right">
-                    <button
-                      onClick={async () => {
-                        setBusy(t.id);
-                        try { await onClose(t.id); } finally { setBusy(null); }
-                      }}
-                      disabled={busy === t.id}
-                      className="px-2 py-1 text-[10px] font-mono uppercase tracking-widest text-bear hover:bg-bear/15 rounded transition-colors"
-                      title="Force close at current market"
-                    >
-                      {busy === t.id ? '…' : 'Close'}
-                    </button>
-                  </td>
-                </tr>
+                <Fragment key={t.id}>
+                  <tr className="border-b border-border/40 hover:bg-bg-hover/30">
+                    <td className="py-2 text-text-tertiary">#{t.id}</td>
+                    <td>
+                      <span className="uppercase font-semibold text-text-primary">{t.asset}</span>
+                      <Chip tone={dirTone as any} className="ml-2">{t.direction}</Chip>
+                      {legs.length > 0 && (
+                        <span className="ml-2 text-[9px] font-mono uppercase tracking-widest text-text-muted">
+                          · {legs.length}-leg
+                        </span>
+                      )}
+                    </td>
+                    <td className="text-right text-text-secondary">${t.entry_price.toFixed(2)}</td>
+                    <td className="text-right text-text-primary font-semibold">
+                      {t.mtm_price !== null ? `$${t.mtm_price.toFixed(2)}` : '—'}
+                    </td>
+                    <td className="text-right text-text-tertiary">
+                      {t.target_price !== null ? `$${t.target_price.toFixed(2)}` : '—'}
+                    </td>
+                    <td className="text-right text-text-tertiary">
+                      {t.stop_price !== null ? `$${t.stop_price.toFixed(2)}` : '—'}
+                    </td>
+                    <td className={clsx('text-right font-semibold', sign)}>
+                      {unreal >= 0 ? '+' : ''}${unreal.toFixed(2)}
+                    </td>
+                    <td className="text-right text-text-secondary">{t.size}</td>
+                    <td className="text-right text-text-muted text-[10px]">
+                      {fmt.ago ? fmt.ago(t.opened_at) : t.opened_at?.slice(11, 16)}
+                    </td>
+                    <td className="text-right">
+                      <button
+                        onClick={async () => {
+                          setBusy(t.id);
+                          try { await onClose(t.id); } finally { setBusy(null); }
+                        }}
+                        disabled={busy === t.id}
+                        className="px-2 py-1 text-[10px] font-mono uppercase tracking-widest text-bear hover:bg-bear/15 rounded transition-colors"
+                        title="Force close at current market"
+                      >
+                        {busy === t.id ? '…' : 'Close'}
+                      </button>
+                    </td>
+                  </tr>
+                  {legs.map(L => {
+                    const legUn = L.unrealised ?? 0;
+                    const legSign = legUn >= 0 ? 'text-bull' : 'text-bear';
+                    const legDirTone = L.direction === 'LONG' ? 'text-bull' : 'text-bear';
+                    return (
+                      <tr key={L.id} className="border-b border-border/20 bg-bg-card/20">
+                        <td className="py-1"></td>
+                        <td className="text-[10px] text-text-tertiary pl-4">
+                          ↳ <span className="uppercase text-text-secondary">{L.contract}</span>
+                          <span className={clsx('ml-2 font-mono', legDirTone)}>{L.direction}</span>
+                          <span className="ml-2 text-text-muted">× {L.qty}</span>
+                        </td>
+                        <td className="text-right text-text-tertiary text-[10px]">${L.entry_price.toFixed(2)}</td>
+                        <td className="text-right text-text-secondary text-[10px]">
+                          {L.mtm_price !== null ? `$${L.mtm_price.toFixed(2)}` : '—'}
+                        </td>
+                        <td colSpan={2}></td>
+                        <td className={clsx('text-right text-[10px]', legSign)}>
+                          {legUn >= 0 ? '+' : ''}${legUn.toFixed(2)}
+                        </td>
+                        <td colSpan={3}></td>
+                      </tr>
+                    );
+                  })}
+                </Fragment>
               );
             })}
           </tbody>
@@ -495,9 +541,6 @@ export function PaperView({ tradeIdea }: { tradeIdea: any }) {
       </div>
 
       {/* Suggested trade — push */}
-      {/* Phase 2 — class-demo regime engine */}
-      <RegimePickCard />
-
       <SuggestedTrade idea={tradeIdea} onPush={handlePush} />
 
       {/* Open positions */}

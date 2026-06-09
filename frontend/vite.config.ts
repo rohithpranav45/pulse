@@ -4,6 +4,10 @@ import path from 'node:path';
 
 export default defineConfig({
   plugins: [react()],
+  // Read .env from the project root so backend + frontend share secrets.
+  // Only `VITE_*` vars are exposed to client code; everything else stays
+  // server-side per Vite's security model.
+  envDir: path.resolve(__dirname, '..'),
   resolve: {
     alias: { '@': path.resolve(__dirname, './src') },
   },

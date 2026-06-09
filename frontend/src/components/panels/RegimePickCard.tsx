@@ -4,9 +4,10 @@ import { Panel } from '@/components/ui/Panel';
 import { Chip } from '@/components/ui/Chip';
 import { Stat } from '@/components/ui/Stat';
 import { SkeletonRows } from '@/components/ui/Skeleton';
-import { Activity, Play, TrendingUp, TrendingDown, BarChart3, Info } from 'lucide-react';
+import { Activity, Play, TrendingUp, TrendingDown, BarChart3, Info, Search } from 'lucide-react';
 import { api } from '@/lib/api';
 import { usePolling } from '@/lib/hooks';
+import { RegimeDrillModal } from '@/components/panels/RegimeDrillModal';
 
 /**
  * Phase 2 class-demo card — surfaces the top regime-conditional opportunity
@@ -21,15 +22,34 @@ import { usePolling } from '@/lib/hooks';
  * Models trained on data ≤ 2026-03-31, validated on April-May 2026.
  */
 
+type AxisReading = { bucket: string; value: number | null };
+
 type RegimeState = {
   available: boolean;
-  regime?: string;
+  regime?: string;        // composite e.g. "BACK/LOW/STRESSED" or pooled "BACK"
+  regime_mode?: 'composite' | 'pooled';
+  gated_blend?: boolean;  // Phase 2.6 production rule active?
+  regime_composite?: string;
+  regime_pooled?: string;
+  regime_legacy?: string; // 4-bucket legacy label
   regime_color?: string;
-  m1_m12?: number;
   days_in_regime?: number;
   as_of?: string;
-  drivers?: { brent_close: number; realised_vol_20d: number; brent_ret_5d: number };
-  regime_thresholds?: Record<string, string>;
+  axes?: {
+    curve:     AxisReading;
+    inventory: AxisReading;
+    vol:       AxisReading;
+  };
+  drivers?: {
+    brent_close:      number;
+    wti_close:        number | null;
+    realised_vol_20d: number;
+    brent_ret_5d:     number;
+    inv_vs_5yr_pct:   number | null;
+    m1_m12:           number;
+  };
+  axis_thresholds?: Record<string, Record<string, string>>;
+  axis_buckets?:    Record<string, string[]>;
 };
 
 type RankedOpp = {
@@ -48,22 +68,49 @@ type RankedOpp = {
   target: number | null;
   stop: number | null;
   confidence: number;
-  r2_train: number;
+  r2_train: number | null;
   r2_oos: number | null;
   band_hit_rate: number | null;
   n_train: number;
   drivers: { feature: string; coef: number }[];
   // Model competition
-  winner_model?: 'Ridge' | 'Lasso' | 'ElasticNet' | 'Huber';
-  active_features?: number;
-  total_features?: number;
+  winner_model?: 'Ridge' | 'Lasso' | 'ElasticNet' | 'Huber' | 'Rolling252dZ';
+  active_features?: number | null;
+  total_features?: number | null;
   competition?: Record<string, number | null>;
+  // Phase 2.6 gated blend — which leg fired for this spread
+  recommendation_source?: 'regime' | 'baseline';
+  gate?: 'pass' | 'fail' | 'no_pooled_cell' | 'no_baseline' | 'off';
+  regime?: string;
+  // Phase 2.7 sizing — per-spread notional scale + active mode
+  notional_scale?: number;
+  sizing_mode?: 'full' | 'half' | 'kelly';
+};
+
+type GatedSummary = {
+  enabled: boolean;
+  regime: string;            // gate criterion: e.g. "BACK"
+  winners: string[];         // e.g. ["Huber", "Lasso"]
+  z_threshold: number;
+  n_regime: number;
+  n_baseline: number;
+  method: string;
+  // Phase 2.7 sizing context
+  size_mode?: 'full' | 'half' | 'kelly';
+  kelly_map?: Record<string, number> | null;
+  sizing_per_spread?: Record<string, { source: string; notional_scale: number }>;
 };
 
 type Recommendation = {
   available: boolean;
   regime?: string;
+  regime_mode?: 'composite' | 'pooled';
+  gated_blend?: boolean;
+  gated_summary?: GatedSummary | null;
+  recommendation_source?: 'regime' | 'baseline' | null;
   as_of?: string;
+  n_eligible?: number;
+  n_universe?: number;
   top?: RankedOpp;
   ranked?: RankedOpp[];
   method?: string;
@@ -72,16 +119,35 @@ type Recommendation = {
 
 function regimeChipTone(regime?: string): 'bull' | 'bear' | 'neut' {
   if (!regime) return 'neut';
-  if (regime.includes('BACKWARDATION')) return 'bull';
-  if (regime.includes('CONTANGO'))      return 'bear';
+  // Composite labels start with the curve axis: "BACK/…" | "CONTANGO/…" | "NEUTRAL/…"
+  const curve = regime.split('/', 1)[0];
+  if (curve === 'BACK' || regime.includes('BACKWARDATION')) return 'bull';
+  if (curve === 'CONTANGO')                                 return 'bear';
   return 'neut';
 }
 
 
-function OppRow({ opp, rank, onPush }: {
+function SourceBadge({ source, gate }: { source?: string; gate?: string }) {
+  if (!source) return null;
+  const isRegime = source === 'regime';
+  const tone = isRegime ? 'gold' : 'neut';
+  const label = isRegime ? 'REGIME' : 'BASELINE';
+  const tip = isRegime
+    ? `Regime engine fired (gate=${gate ?? 'pass'})`
+    : `Fell through to 252d rolling-z baseline (gate=${gate ?? 'fail'})`;
+  return (
+    <span title={tip}>
+      <Chip tone={tone as any}>{label}</Chip>
+    </span>
+  );
+}
+
+
+function OppRow({ opp, rank, onPush, onDrill }: {
   opp: RankedOpp;
   rank: number;
   onPush?: (opp: RankedOpp) => void;
+  onDrill?: (opp: RankedOpp) => void;
 }) {
   const dirTone =
     opp.direction === 'BUY'  ? 'bull' :
@@ -112,6 +178,9 @@ function OppRow({ opp, rank, onPush }: {
             {opp.label}
           </span>
           <Chip tone={dirTone as any}>{opp.direction}</Chip>
+          {opp.recommendation_source && (
+            <SourceBadge source={opp.recommendation_source} gate={opp.gate} />
+          )}
         </div>
         <div className="text-[10px] font-mono text-text-tertiary mt-0.5 truncate" title={opp.description}>
           {opp.description}
@@ -147,7 +216,16 @@ function OppRow({ opp, rank, onPush }: {
           {opp.r2_oos !== null && opp.r2_oos !== undefined ? opp.r2_oos.toFixed(2) : '—'}
         </div>
       </div>
-      <div className="text-right">
+      <div className="text-right flex items-center justify-end gap-1">
+        {onDrill && (
+          <button
+            onClick={() => onDrill(opp)}
+            className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-mono uppercase tracking-widest text-text-tertiary hover:text-gold hover:bg-bg-hover transition-colors"
+            title={`Evidence for ${opp.label}`}
+          >
+            <Search className="w-3 h-3" />
+          </button>
+        )}
         {onPush && rank === 1 && opp.direction !== 'NEUTRAL' && (
           <button
             onClick={() => onPush(opp)}
@@ -172,6 +250,9 @@ export function RegimePickCard() {
   const [pushBusy, setPushBusy] = useState(false);
   const [pushFlash, setPushFlash] = useState<'ok' | 'err' | null>(null);
   const [pushErr, setPushErr]   = useState<string | null>(null);
+  const [drillFor, setDrillFor] = useState<RankedOpp | null>(null);
+  const openDrill = useCallback((opp: RankedOpp) => setDrillFor(opp), []);
+  const closeDrill = useCallback(() => setDrillFor(null), []);
 
   const handlePush = useCallback(async (opp: RankedOpp) => {
     setPushBusy(true); setPushFlash(null); setPushErr(null);
@@ -189,16 +270,16 @@ export function RegimePickCard() {
         conviction:    opp.confidence > 0.6 ? 'HIGH' : opp.confidence > 0.3 ? 'MODERATE' : 'LOW',
         entry_thesis: [
           `${opp.label}: ${opp.direction} — current ${opp.current.toFixed(2)} vs fair ${opp.fair_value.toFixed(2)} (z=${opp.z_score.toFixed(2)}σ)`,
-          `Model: Ridge, OOS R²=${opp.r2_oos?.toFixed(2) ?? '—'}, regime band ${opp.band_low.toFixed(1)}–${opp.band_high.toFixed(1)}`,
+          `Model: ${opp.winner_model ?? 'Ridge'}, OOS R²=${opp.r2_oos?.toFixed(2) ?? '—'}, regime band ${opp.band_low.toFixed(1)}–${opp.band_high.toFixed(1)}`,
           `Top drivers: ${opp.drivers.slice(0, 3).map(d => d.feature).join(', ')}`,
         ],
-        key_risk:     `Mean-reversion not guaranteed in ${regime?.regime?.replace(/_/g, ' ') ?? 'current regime'}`,
+        key_risk:     `Mean-reversion not guaranteed in ${regime?.regime ?? 'current regime'}`,
         time_horizon: '1-2 weeks',
         morning_brief:
           `- Spread: ${opp.label}\n` +
           `- Current vs fair: ${opp.current.toFixed(2)} → ${opp.fair_value.toFixed(2)} (band ${opp.band_low.toFixed(1)}–${opp.band_high.toFixed(1)})\n` +
-          `- z-score: ${opp.z_score.toFixed(2)}σ in ${regime?.regime?.replace(/_/g, ' ') ?? 'current regime'}\n` +
-          `- Model: Ridge, OOS R²=${opp.r2_oos?.toFixed(2) ?? '—'}, ${opp.n_train} training obs\n` +
+          `- z-score: ${opp.z_score.toFixed(2)}σ in regime ${regime?.regime ?? '—'}\n` +
+          `- Model: ${opp.winner_model ?? 'Ridge'}, OOS R²=${opp.r2_oos?.toFixed(2) ?? '—'}, ${opp.n_train} training obs\n` +
           `- Bias: ${opp.direction} on mean-reversion to regime fair value`,
         source: 'regime_engine',
       };
@@ -224,10 +305,16 @@ export function RegimePickCard() {
     return <Panel title="Regime Pick · Phase 2 Engine" source="signal_engine"><SkeletonRows rows={4} /></Panel>;
   }
 
-  const regimeLabel = (regime.regime ?? '').replace(/_/g, ' ');
+  const regimeLabel = regime.regime ?? '—';
   const chipTone = regimeChipTone(regime.regime);
   const top = rec.top;
   const ranked = rec.ranked ?? [];
+
+  // Phase 2.6 — show active mode + which leg sourced #1
+  const gated      = Boolean(rec.gated_blend);
+  const activeMode = rec.regime_mode ?? regime.regime_mode ?? 'composite';
+  const topSource  = rec.recommendation_source ?? top?.recommendation_source ?? null;
+  const summary    = rec.gated_summary ?? null;
 
   // Pull this cell's training stats from the backtest report
   const cellStat = (() => {
@@ -235,16 +322,44 @@ export function RegimePickCard() {
     return backtest.cells[`${top.spread}__${regime.regime}`] || null;
   })();
 
+  const axes = regime.axes;
+  const eligible = rec.n_eligible ?? ranked.length;
+  const universe = rec.n_universe ?? ranked.length;
+
   return (
     <Panel
       title="Regime Pick · Phase 2 Engine"
-      subtitle={`Trained ≤ 2026-03-31 · tested Apr-May 2026 · Ridge + Quantile bands`}
+      subtitle={
+        gated
+          ? `Phase 2.6 GATED BLEND · pooled regime on BACK + {Lasso/Huber} + |z|≥${summary?.z_threshold ?? 0.5}σ · else 252d rolling-z baseline`
+          : (activeMode === 'pooled'
+              ? `Pooled curve-axis regime · 3 cells/spread · 4-model competition`
+              : `3-axis composite regime · 6 spreads × 27 cells · 4-model competition`)
+      }
       accent={chipTone as any}
       source="signal_engine"
-      sourceNote="4-regime curve classifier + per-regime Ridge fair value + Quantile p10/p90 confidence band. Ranks 3 spreads by |z-score| × R²_oos × √(n_train/100). #1 is surfaced for push-to-paper."
+      sourceNote={
+        gated
+          ? `Phase 2.6 production rule: pooled engine fires only when regime_pooled='BACK' AND winner_model ∈ {Lasso, Huber} AND |z|≥0.5σ. All other (spread, day) pairs fall through to the regime-unaware 252-day rolling-z baseline. Walk-forward verifies the gate end-to-end before live trading.`
+          : `3-axis composite regime (curve × inventory × vol) + per-cell {Ridge / Lasso / ElasticNet / Huber} competition + Quantile p10/p90 bands. Ranks 6 spreads (3 Brent + 3 WTI) by |z| × R²_oos × √(n_train/100). #1 is surfaced for push-to-paper.`
+      }
       right={
         <div className="flex items-center gap-2">
+          {gated && <Chip tone="gold">GATED BLEND</Chip>}
+          {gated && summary?.size_mode && summary.size_mode !== 'full' && (
+            <span title={`Phase 2.7: regime-leg notional sized by ${summary.size_mode}${summary.size_mode === 'kelly' ? ' (per-spread)' : ''}`}>
+              <Chip tone="neut">{`SIZE ${summary.size_mode.toUpperCase()}`}</Chip>
+            </span>
+          )}
           <Chip tone={chipTone as any}>{regimeLabel}</Chip>
+          {gated && summary && (
+            <span className="text-[10px] font-mono text-text-tertiary tabular" title={summary.method}>
+              regime {summary.n_regime} / baseline {summary.n_baseline}
+            </span>
+          )}
+          <span className="text-[10px] font-mono text-text-tertiary tabular">
+            {eligible}/{universe} eligible
+          </span>
           <button
             onClick={() => setShowAll(s => !s)}
             className="text-[10px] font-mono uppercase tracking-widest text-text-tertiary hover:text-gold px-2 py-1 rounded hover:bg-bg-hover"
@@ -254,12 +369,34 @@ export function RegimePickCard() {
         </div>
       }
     >
-      {/* Regime context strip */}
+      {/* 3-axis regime context strip */}
       <div className="grid grid-cols-4 gap-3 mb-4">
-        <Stat label="M1-M12"        value={`$${regime.m1_m12?.toFixed(2)}`}    tone={chipTone as any} />
-        <Stat label="Days in regime" value={`${regime.days_in_regime ?? '—'}d`} />
-        <Stat label="Brent C1"      value={`$${regime.drivers?.brent_close?.toFixed(2)}`} />
-        <Stat label="Realised vol"   value={`${((regime.drivers?.realised_vol_20d ?? 0) * 100).toFixed(0)}%`} sub="20-day annualised" />
+        <Stat
+          label="Curve"
+          value={axes?.curve?.bucket ?? '—'}
+          sub={axes?.curve?.value !== null && axes?.curve?.value !== undefined
+                ? `M1-M12 $${axes.curve.value.toFixed(2)}` : undefined}
+          tone={chipTone as any}
+        />
+        <Stat
+          label="Inventory"
+          value={axes?.inventory?.bucket ?? '—'}
+          sub={axes?.inventory?.value !== null && axes?.inventory?.value !== undefined
+                ? `${axes.inventory.value >= 0 ? '+' : ''}${axes.inventory.value.toFixed(1)}% vs 5y` : '5y backfill'}
+          tone={axes?.inventory?.bucket === 'LOW' ? 'bull' : axes?.inventory?.bucket === 'HIGH' ? 'bear' : 'neut'}
+        />
+        <Stat
+          label="Vol"
+          value={axes?.vol?.bucket ?? '—'}
+          sub={axes?.vol?.value !== null && axes?.vol?.value !== undefined
+                ? `RV20 ${axes.vol.value.toFixed(0)}%` : undefined}
+          tone={axes?.vol?.bucket === 'STRESSED' ? 'bear' : 'neut'}
+        />
+        <Stat
+          label="Days in regime"
+          value={`${regime.days_in_regime ?? '—'}d`}
+          sub={regime.as_of ? `as of ${regime.as_of}` : undefined}
+        />
       </div>
 
       {/* Top opportunity hero */}
@@ -273,10 +410,21 @@ export function RegimePickCard() {
               <Chip tone={top.direction === 'BUY' ? 'bull' : 'bear' as any}>
                 {top.direction} {top.label}
               </Chip>
+              {gated && topSource && (
+                <SourceBadge source={topSource} gate={top.gate} />
+              )}
             </div>
             <div className="flex items-center gap-3">
               {pushFlash === 'ok'  && <span className="text-bull text-[10px] font-mono">✓ pushed</span>}
               {pushFlash === 'err' && <span className="text-bear text-[10px] font-mono">✕ {pushErr}</span>}
+              <button
+                onClick={() => openDrill(top)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded font-mono uppercase tracking-widest text-[11px] font-bold border border-gold/40 text-gold hover:bg-gold/15 transition-colors"
+                title="See the model's evidence — scatter + historical analogs"
+              >
+                <Search className="w-3 h-3" />
+                Evidence
+              </button>
               <button
                 onClick={() => handlePush(top)}
                 disabled={pushBusy}
@@ -395,7 +543,7 @@ export function RegimePickCard() {
         <div className="p-4 bg-bg-card/40 rounded text-center">
           <Info className="w-4 h-4 mx-auto mb-2 text-text-tertiary" />
           <div className="text-[11px] font-mono text-text-tertiary">
-            All 3 spreads currently inside their 80% confidence band — no high-conviction opportunity. Wait for a deviation.
+            All eligible spreads currently inside their 80% confidence band — no high-conviction opportunity. Wait for a deviation.
           </div>
         </div>
       )}
@@ -416,7 +564,9 @@ export function RegimePickCard() {
             <span></span>
           </div>
           {ranked.map((opp, i) => (
-            <OppRow key={opp.spread} opp={opp} rank={i + 1} onPush={i === 0 ? handlePush : undefined} />
+            <OppRow key={opp.spread} opp={opp} rank={i + 1}
+                    onPush={i === 0 ? handlePush : undefined}
+                    onDrill={openDrill} />
           ))}
         </div>
       )}
@@ -430,6 +580,14 @@ export function RegimePickCard() {
             ` · ${backtest.n_train} train / ${backtest.n_test} test rows · ${Object.keys(backtest.cells ?? {}).length} (spread × regime) cells`}
         </span>
       </div>
+
+      <RegimeDrillModal
+        open={drillFor !== null}
+        onClose={closeDrill}
+        spread={drillFor?.spread ?? null}
+        label={drillFor?.label}
+        regime={regime.regime}
+      />
     </Panel>
   );
 }

@@ -113,6 +113,21 @@ export interface NewsData {
   [key: string]: unknown;
 }
 
+export interface PaperLeg {
+  id: number;
+  trade_id: number;
+  contract: string;
+  direction: string;
+  qty: number;
+  entry_price: number;
+  mtm_price?: number | null;
+  mtm_at?: string | null;
+  unrealised?: number | null;
+  exit_price?: number | null;
+  realised?: number | null;
+  [key: string]: unknown;
+}
+
 export interface PaperPerformanceData {
   total_trades?: number | null;
   wins?: number | null;
@@ -154,6 +169,7 @@ export interface PaperPosition {
   unrealised?: number | null;
   thesis?: string | null;
   metadata?: Record<string, unknown> | null;
+  legs?: Array<PaperLeg>;
   [key: string]: unknown;
 }
 
