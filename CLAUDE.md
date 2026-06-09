@@ -1522,9 +1522,9 @@ These bite a fresh session if not flagged:
 
 - **Main branch:** `main` — always green, always shippable
 - **Working pattern:** branch off `main`, PR back, squash-merge, delete branch
-- **Last shipped PR:** #2 (2026-06-05) — Phase A+B data overhaul + Paper Trading + Health monitoring
-- **Latest commits to main (2026-06-08):** Sprint −1 (DuckDB), Sprint 0a (Pydantic + TS codegen), class-demo Phase 2 vertical slice, 4-model competition. Head = `a6db050`.
-- **Branch `feat/phase-2-regime-engine-gated-sized` (2026-06-09):** Sprints 0b, 2a, 2b, 2c, 3, 4, 2.5, 2.6, 2.7 committed as `9475d6c` and pushed to origin. PR open at https://github.com/rohithpranav45/pulse/compare/main...feat/phase-2-regime-engine-gated-sized — title "Phase 2 Sprints 0b + 2a/2b/2c + 3 + 4 + 2.5 + 2.6 + 2.7 — regime engine end-to-end with gated-blend production rule + sized-blend opt-in"; body in `PR_BODY.md` at repo root (paste into the PR description after clicking the URL).
+- **Last shipped PR:** **#3 (2026-06-09)** — Phase 2 regime engine end-to-end with gated-blend production rule + sized-blend opt-in. Merged to main as `827eca8` via https://github.com/rohithpranav45/pulse/pull/3. Bundles Sprints 0b, 2a, 2b, 2c, 3, 4, 2.5, 2.6, 2.7. Feature branch deleted local + remote. PR body archived at `PR_BODY.md` in repo root.
+- **Previous PR:** #2 (2026-06-05) — Phase A+B data overhaul + Paper Trading + Health monitoring
+- **Latest commits to main (2026-06-09):** PR #3 merged (regime engine + gated/sized). Head = `827eca8`.
 - **Backup branch:** `backup/pre-merge-20260602-175531` — leftover from PR #1, retained out of caution
 - **Commit style:** body explains WHY not WHAT. Use `Co-Authored-By: Claude` trailer when AI-paired.
 
