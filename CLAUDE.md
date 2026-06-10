@@ -1,5 +1,5 @@
 # PULSE — Project State File
-**Last updated:** 2026-06-09 · Sprint −1 + 0a + 0b + 2a + 2b + 2c + 3 + 4 + 2.5 + 2.6 + **2.7** shipped · Phase 2 + Phase 2.5 + Phase 2.6 + Phase 2.7 complete — gated blend beats baseline; sizing experiment surfaces an honest negative + a per-spread positive on Brent fly; ready for mentor review
+**Last updated:** 2026-06-10 · Sprint −1 + 0a + 0b + 2a + 2b + 2c + 3 + 4 + 2.5 + 2.6 + 2.7 shipped · **Frontend makeover + per-tab polish** landed while waiting on ma'am's review — IA cut to 8 tabs, framer-motion language, Signal hero / Paper equity / Regime drill all glow up
 **Project:** PULSE — Energy Intelligence Terminal (Futures First internship)
 **Stack:** Flask 3 · React 18 + Vite + Tailwind · SQLite (cache + paper book) · /Data desk feed · 35 named data sources · sklearn (Ridge/Lasso/ElasticNet/Huber/Quantile)
 **Run:** `python start.py` from `pulse/` root — opens http://127.0.0.1:5000
@@ -1524,7 +1524,7 @@ These bite a fresh session if not flagged:
 - **Working pattern:** branch off `main`, PR back, squash-merge, delete branch
 - **Last shipped PR:** **#3 (2026-06-09)** — Phase 2 regime engine end-to-end with gated-blend production rule + sized-blend opt-in. Merged to main as `827eca8` via https://github.com/rohithpranav45/pulse/pull/3. Bundles Sprints 0b, 2a, 2b, 2c, 3, 4, 2.5, 2.6, 2.7. Feature branch deleted local + remote. PR body archived at `PR_BODY.md` in repo root.
 - **Previous PR:** #2 (2026-06-05) — Phase A+B data overhaul + Paper Trading + Health monitoring
-- **Latest commits to main (2026-06-09):** PR #3 merged (regime engine + gated/sized). Head = `827eca8`.
+- **Latest commits to main (2026-06-10):** Frontend per-tab polish — Signal hero choreography (stagger + scaleIn on score), Paper hero KPI strip + equity-curve draw-in animation + leg-row tree indent, Regime drill modal entrance + scatter build-in. Also fixed a latent tab-switch wedge: replaced `AnimatePresence mode="wait"` in App.tsx with a simple key remount because nested motion components inside views weren't completing exit cleanly. Head advanced past `827eca8` with two commits: frontend makeover (`4637aa7`) + per-tab polish.
 - **Backup branch:** `backup/pre-merge-20260602-175531` — leftover from PR #1, retained out of caution
 - **Commit style:** body explains WHY not WHAT. Use `Co-Authored-By: Claude` trailer when AI-paired.
 
