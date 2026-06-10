@@ -88,6 +88,38 @@ sign-off when she replies and the design will be revisited if she pushes back.
 
 ## Current sprint
 
+### 🚧 PHASE 2.8 — REAL MODEL UPGRADE (the alpha sprint)
+
+Goal: take the gated blend from Sharpe **+0.46** to **+0.70+** by attacking
+the two real weaknesses honest assessment surfaced — linear models leaving
+interactions on the table, and a feature set that's missing the alpha-bearing
+columns. Walk-forward proves the lift end-to-end; methodology PDF + dashboard
+update to reflect.
+
+#### Tasks — ordered by expected lift, each scoped to fit in one session
+
+| # | Task | Effort | Expected lift | Confidence |
+|---|---|---|---|---|
+| **2.8.1** | **Add gradient-boosting families to the per-cell competition.** In `backend/research/models.py`: register `_fit_xgb`, `_fit_lgbm`, `_fit_catboost` alongside the existing `_fit_ridge / _fit_lasso / _fit_elastic / _fit_huber`. Same CV harness (`_cv_r2`), same TIEBREAK_RANK simplicity ordering with the boosters at the bottom (linear preferred when ties within 0.005 to keep interpretability). Retrain all 162 cells; expect boosting to win the high-data cells, linear to keep the small-n cells. Acceptance: `backtest_report.json` shows winner distribution including the boosters; per-cell CV R² improves on average. | 1 day | +0.10 to +0.30 Sharpe | High |
+| **2.8.2** | **Add the alpha-bearing features that aren't in the matrix yet.** In `backend/research/features.py`: append (i) EIA inventory **surprise** = WCRSTUS1 weekly Δ minus 4-week average Δ (alpha is in surprise, not level — we already collect this via the `eia_surprise.py` fetcher but it isn't fed to models); (ii) **COT managed-money net** as a percentile over a 156-week window (covered by `cot.py`); (iii) **curvature** = M1 − 2·M6 + M12 (one line — captures fly-specific information that flat `m1_m12` misses); (iv) **3-2-1 crack** + **gasoline crack** (via `cracks.py`); (v) **WTI–Brent and Brent–Dubai inter-product spreads**; (vi) **DGS10 minus 5y TIPS breakeven** (real rate, storage-economics driver); (vii) **OVX / VIX ratio** (crude vol risk-premium); (viii) **days to front-month expiry**. Retrain. Feature set goes from ~11 → ~22. Acceptance: feature matrix passes NaN audit, walk-forward re-runs cleanly, per-cell driver lists in `backtest_report.json` show the new features earning non-zero weight. | 1 day | +0.05 to +0.15 Sharpe (compounds with 2.8.1) | High |
+| **2.8.3** | **Replace per-quantile regression with conformal prediction for the 80% band.** New `backend/research/conformal.py` — implement split-conformal (or CQR — Romano, Patterson, Candès 2019) wrapping whichever model won the competition. Drops the 3 separate quantile regressions (q10/q50/q90) per cell; the winner model + conformal residuals gives a coverage-guaranteed band. Acceptance: band-hit-rate column in the backtest report converges on the nominal 80% (currently varies 57-85% per cell). | 0.5 day | 0 Sharpe but tighter, valid bands — methodologically cleaner | High |
+| **2.8.4** | **Pool to one global model with regime-as-feature.** Replace the 27-cell + 3-cell grids with a single regression that takes the regime label as a one-hot interaction feature. Uses all 2,692 rows for every prediction instead of fragmenting. Coexists with composite/pooled modes as a third option: `PULSE_REGIME_MODE=global`. Walk-forward verifies. Acceptance: global mode block in `walkforward_report.json` with by-regime Sharpe breakdown for apples-to-apples vs composite/pooled. | 0.5 day | +0.05 to +0.10 Sharpe | Medium |
+| **2.8.5** | **Soft regime probabilities — replace hard thresholds.** In `backend/research/regimes.py`: add `classify_soft(...)` that returns a 27-vector of regime probabilities via logistic on threshold distance for each axis. Live inference reads the dominant regime as before; downstream models can either pick the max-prob cell or blend predictions weighted by regime posterior. Acceptance: eliminate the daily-flip jitter for spreads sitting near boundaries — observable as a stable regime label for the ±5 days around today. | 0.5 day | +0.02 to +0.05 Sharpe + cosmetic stability | Medium |
+| **2.8.6** | **Transaction costs in the walk-forward.** In `backend/research/walkforward.py`: subtract 2 bp roundtrip × 2 legs per trade × known $-per-bbl from `fwd_pnl` at trade close. Add `gross_pnl` + `net_pnl` columns to the trade tape, report both. Acceptance: methodology PDF shows NET Sharpe headline alongside gross; gated/sized/baseline all re-evaluated net. | 0.5 day | −0.10 to −0.15 honest subtraction | Required for credibility |
+| **2.8.7** | **Multi-horizon sweep (5/20/60d) and pick per spread.** Walk-forward currently hardcodes `FORWARD_DAYS=20`. Refactor to run all three horizons in one pass; the report picks the per-spread winner. Front-carry spreads will favour 5d; flies favour 60d. Acceptance: `walkforward_report.json` exposes `horizon_per_spread` with the picked horizon + Sharpe at each. | 1 day | +0.05 to +0.15 Sharpe | Medium |
+| **2.8.8** | **Extend walk-forward to 2018-2026.** Currently 2024-2026 only — missed contango entirely. Add 8 more quarterly refits going back. Limited by EIA inventory backfill (already 10y) + WTI synth (only 2021+ — Brent-only models in pre-2021 cells). Acceptance: full report covers 2 deep-contango windows (2018-19, 2020 COVID) and 2 deep-back windows (2022, 2023). Mentor sees real OOS exposure to contango regimes. | 1 day | 0 alpha but real OOS coverage | High |
+| **2.8.9** | **HMM or change-point regime detection.** Replace hard thresholds + soft thresholds with a 3-state HMM over the curve axis (CONTANGO/NEUTRAL/BACK). State transitions are penalised so the engine doesn't flip regime daily under noise. Acceptance: regime label has natural persistence (mean dwell time ≥ 30 days), measurable as fewer regime switches per year vs hard thresholds. | 1 day | +0.02 to +0.05 Sharpe (regime persistence) | Medium |
+| **2.8.10** | **Portfolio-level vol targeting.** Right now each spread is sized independently. Add cross-spread correlation matrix (rolling 252d), scale positions so the aggregate book vol targets a fixed daily $-σ. Acceptance: max DD on the gated blend drops materially (currently −271) without giving up the Sharpe headline; covariance matrix surfaced on the dashboard. | 1 day | Better risk-adjusted PnL, lower DD | High |
+| **2.8.11** | **Methodology PDF + CLAUDE.md update.** Regenerate the 2-page PDF with the Phase 2.8 numbers; update the comparison tables; document each technique in the methodology section so ma'am can review what changed and why. | 0.5 day | — | — |
+
+**Total estimated effort: ~8 days of focused work** (one task per session). Plausible best-case headline at the end: **gated Sharpe +0.65 to +0.85 NET of transaction costs**, walk-forward across 8 years covering contango + neutral + back regimes, with calibrated bands and portfolio-level sizing. That's a genuinely deployable strategy, not a class demo.
+
+**Sequencing**: do 2.8.1 and 2.8.2 first — they're the biggest single lifts and compound. After those land, the model itself is in a much better place and we can decide whether to invest the rest of the chain or stop at "real model with real features."
+
+**Acceptance for Phase 2.8 as a whole**: gated_blend NET Sharpe ≥ +0.65 over the full 2018-2026 walk-forward, with methodology PDF + walk-forward report regenerated and CLAUDE.md updated.
+
+---
+
 ### ✅ CLASS-DEMO SPRINT + 4-MODEL COMPETITION — SHIPPED 2026-06-08
 
 Mom asked in class for a **narrower** scope to discuss today, ahead of the
