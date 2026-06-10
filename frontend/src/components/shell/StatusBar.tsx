@@ -1,4 +1,5 @@
 import { fmt } from '@/lib/fmt';
+import { motion } from 'framer-motion';
 import clsx from 'clsx';
 
 export function StatusBar({
@@ -20,20 +21,25 @@ export function StatusBar({
   const crack = cracks?.crack_321?.value ?? null;
 
   const Item = ({ label, value, tone }: { label: string; value: string; tone?: 'bull' | 'bear' | 'neut' }) => (
-    <div className="flex items-baseline gap-1.5">
-      <span className="text-[9px] font-mono tracking-widest text-text-muted uppercase">{label}</span>
+    <div className="flex items-baseline gap-1.5 transition-opacity hover:opacity-90">
+      <span className="text-[9px] font-mono tracking-[0.18em] text-text-muted uppercase">{label}</span>
       <span className={clsx(
-        'text-[10px] font-mono tabular',
+        'text-[10px] font-mono tabular font-medium',
         tone === 'bull' ? 'text-bull' : tone === 'bear' ? 'text-bear' : tone === 'neut' ? 'text-neut' : 'text-text-secondary'
       )}>{value}</span>
     </div>
   );
 
   return (
-    <footer className="h-7 flex-shrink-0 bg-bg-elev/80 border-t border-border flex items-center px-5 gap-5 text-[10px] font-mono z-30">
+    <motion.footer
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.42, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
+      className="h-7 flex-shrink-0 bg-bg-elev/80 backdrop-blur-xl border-t border-border flex items-center px-5 gap-5 text-[10px] font-mono z-30"
+    >
       <span className="flex items-center gap-1.5">
         <span className="live-dot" />
-        <span className="text-text-secondary tracking-widest text-[9px] uppercase">LIVE</span>
+        <span className="text-text-secondary tracking-[0.22em] text-[9px] uppercase">LIVE</span>
       </span>
       <span className="w-px h-3 bg-border" />
       <Item label="M1–M2" value={m1m2 !== null ? fmt.signed(m1m2) : '—'} tone={m1m2 !== null ? (m1m2 > 0 ? 'bull' : 'bear') : undefined} />
@@ -43,9 +49,9 @@ export function StatusBar({
       <Item label="COT" value={cot !== null ? `${cot.toFixed(0)}%ile` : '—'} />
       <Item label="GEO·IDX" value={geo !== null ? geo.toFixed(0) : '—'} tone={geo !== null && geo > 60 ? 'bear' : undefined} />
       <div className="flex-1" />
-      <span className="text-text-muted">v2.0 · React</span>
+      <span className="text-text-muted tracking-wider">v2.0 · React</span>
       <span className="w-px h-3 bg-border" />
       <span className="text-text-tertiary">Updated {fmt.ago(lastUpdated)}</span>
-    </footer>
+    </motion.footer>
   );
 }

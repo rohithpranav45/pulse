@@ -8,38 +8,76 @@
     font-family: 'Inter', system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     background:
-      radial-gradient(ellipse 90% 55% at 50% -10%, rgba(77,142,255,0.10), transparent 60%),
-      radial-gradient(ellipse 60% 40% at 100% 100%, rgba(212,175,55,0.06), transparent 60%),
-      #070b14;
+      radial-gradient(ellipse 90% 55% at 50% -10%, rgba(77,142,255,0.12), transparent 60%),
+      radial-gradient(ellipse 70% 45% at 100% 100%, rgba(212,175,55,0.07), transparent 60%),
+      radial-gradient(ellipse 50% 30% at 0% 80%, rgba(77,142,255,0.05), transparent 70%),
+      #060a13;
     color: #eef2f9;
     overflow: hidden;
   }
   * { -webkit-tap-highlight-color: transparent; }
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: #1c2745; border-radius: 6px; border: 2px solid transparent; background-clip: padding-box; }
-  ::-webkit-scrollbar-thumb:hover { background: #2a3a5e; background-clip: padding-box; border: 2px solid transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: #1c2745;
+    border-radius: 6px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    transition: background 200ms ease;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #2a3a5e;
+    background-clip: padding-box;
+    border: 2px solid transparent;
+  }
 
   /* Numeric tabular */
   .tabular { font-variant-numeric: tabular-nums; }
+
+  /* Accessibility — visible focus ring on keyboard nav only */
+  :focus-visible {
+    outline: 2px solid rgba(212,175,55,0.55);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  button:focus-visible {
+    outline-offset: 3px;
+  }
+
+  /* Respect users who ask for reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
 
 @layer components {
   .panel {
     @apply relative bg-bg-surface/90 border border-border rounded-lg backdrop-blur-sm;
-    box-shadow: 0 1px 0 rgba(255,255,255,0.04) inset, 0 12px 40px -16px rgba(0,0,0,0.7);
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.04) inset,
+      0 0 0 1px rgba(255,255,255,0.01) inset,
+      0 14px 44px -18px rgba(0,0,0,0.78),
+      0 2px 6px -2px rgba(0,0,0,0.5);
+    transition: box-shadow 280ms cubic-bezier(0.22, 1, 0.36, 1), border-color 220ms ease;
   }
-  .panel::before {
-    content: '';
-    position: absolute; top: 0; left: 12px; right: 12px; height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(212,175,55,0.45), transparent);
-    pointer-events: none;
+  .panel:hover {
+    border-color: rgba(212,175,55,0.18);
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.06) inset,
+      0 0 0 1px rgba(255,255,255,0.02) inset,
+      0 22px 56px -20px rgba(0,0,0,0.85),
+      0 4px 10px -2px rgba(0,0,0,0.55);
   }
   .panel-hdr {
     @apply flex items-center justify-between gap-2 px-4 py-3 border-b border-border/70;
   }
   .panel-title {
-    @apply font-display font-bold tracking-[0.18em] text-[11px] text-text-secondary uppercase;
+    @apply font-display font-bold tracking-[0.2em] text-[11px] text-text-secondary uppercase;
   }
   .panel-sub {
     @apply font-mono text-[10px] text-text-tertiary tabular;
@@ -58,11 +96,11 @@
   .live-dot {
     @apply inline-block w-1.5 h-1.5 rounded-full bg-bull;
     box-shadow: 0 0 0 0 rgba(16,217,151,0.7);
-    animation: livePulse 2s infinite;
+    animation: livePulse 2s cubic-bezier(0.22, 1, 0.36, 1) infinite;
   }
   @keyframes livePulse {
-    0% { box-shadow: 0 0 0 0 rgba(16,217,151,0.7); }
-    70% { box-shadow: 0 0 0 6px rgba(16,217,151,0); }
+    0%   { box-shadow: 0 0 0 0 rgba(16,217,151,0.7); }
+    70%  { box-shadow: 0 0 0 6px rgba(16,217,151,0); }
     100% { box-shadow: 0 0 0 0 rgba(16,217,151,0); }
   }
 
@@ -79,11 +117,14 @@
   }
 
   .nav-item {
-    @apply flex items-center gap-3 px-3 py-2.5 rounded-md text-text-tertiary hover:text-text-primary hover:bg-bg-hover/60 cursor-pointer transition-all;
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-md text-text-tertiary cursor-pointer transition-colors duration-200;
+  }
+  .nav-item:hover {
+    @apply text-text-primary;
+    background: rgba(23, 34, 64, 0.55);
   }
   .nav-item.active {
-    @apply text-gold bg-gold-soft;
-    box-shadow: inset 2px 0 0 #d4af37;
+    @apply text-gold;
   }
   .nav-icon { @apply w-4 h-4 flex-shrink-0; }
   .nav-label { @apply font-display tracking-[0.18em] text-[11px] font-semibold uppercase; }
@@ -97,6 +138,10 @@
     background-size: 200% 100%;
     animation: shimmer 2.4s linear infinite;
     border-radius: 4px;
+  }
+  @keyframes shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
   }
 
   .prose-tight strong { @apply text-text-primary font-semibold; }
