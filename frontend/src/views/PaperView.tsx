@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useMemo, useState } from 'react';
 import clsx from 'clsx';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Panel } from '@/components/ui/Panel';
 import { Chip } from '@/components/ui/Chip';
 import { Stat } from '@/components/ui/Stat';
@@ -7,9 +8,10 @@ import { SkeletonRows } from '@/components/ui/Skeleton';
 import { fmt } from '@/lib/fmt';
 import { api } from '@/lib/api';
 import { usePolling } from '@/lib/hooks';
+import { staggerContainer, staggerTight, fadeUp, scaleIn } from '@/lib/motion';
 import {
-  Play, X, RefreshCw, TrendingUp, TrendingDown,
-  ShieldCheck, Target, AlertOctagon, Wallet, Activity, Trash2,
+  Play, TrendingUp, TrendingDown,
+  ShieldCheck, AlertOctagon, Wallet, Activity, Trash2,
 } from 'lucide-react';
 
 /**
@@ -83,7 +85,7 @@ function SuggestedTrade({ idea, onPush }: { idea: any; onPush: (size: number) =>
   const [flash, setFlash] = useState<'ok' | 'err' | null>(null);
   const [errMsg, setErrMsg] = useState<string | null>(null);
 
-  if (!idea) return <Panel title="Suggested Trade"><SkeletonRows rows={4} /></Panel>;
+  if (!idea) return <Panel title="Suggested Trade" staticMount><SkeletonRows rows={4} /></Panel>;
 
   const dir = (idea.direction || 'NEUTRAL').toUpperCase();
   const isNeutral = dir === 'NEUTRAL';
@@ -119,23 +121,40 @@ function SuggestedTrade({ idea, onPush }: { idea: any; onPush: (size: number) =>
       source="trade_idea_rule"
       dataTimestamp={idea.timestamp}
       right={<Chip tone={tone as any}>{dir}</Chip>}
+      staticMount
     >
-      <div className="grid grid-cols-4 gap-3 mb-4">
-        <Stat label="Spot"       value={`$${fmt.price(idea.live_price)}`} />
-        <Stat label="Target"     value={`$${fmt.price(idea.target_level)}`} tone="bull" />
-        <Stat label="Stop"       value={`$${fmt.price(idea.stop_level)}`}   tone="bear" />
-        <Stat label="Fair Value" value={`$${fmt.price(idea.fair_value)}`}   tone="gold" />
-      </div>
+      <motion.div
+        variants={staggerTight}
+        initial="hidden"
+        animate="show"
+        className="grid grid-cols-4 gap-3 mb-4"
+      >
+        {[
+          { label: 'Spot',       value: `$${fmt.price(idea.live_price)}` },
+          { label: 'Target',     value: `$${fmt.price(idea.target_level)}`, tone: 'bull' as const },
+          { label: 'Stop',       value: `$${fmt.price(idea.stop_level)}`,   tone: 'bear' as const },
+          { label: 'Fair Value', value: `$${fmt.price(idea.fair_value)}`,   tone: 'gold' as const },
+        ].map(s => (
+          <motion.div key={s.label} variants={scaleIn}>
+            <Stat label={s.label} value={s.value} tone={s.tone} />
+          </motion.div>
+        ))}
+      </motion.div>
 
       {idea.entry_thesis && (
-        <ul className="p-3 bg-bg-card/40 rounded space-y-1.5 text-[11.5px] leading-relaxed text-text-secondary mb-3 list-none">
+        <motion.ul
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15, duration: 0.32 }}
+          className="p-3 bg-bg-card/40 rounded space-y-1.5 text-[11.5px] leading-relaxed text-text-secondary mb-3 list-none"
+        >
           {(Array.isArray(idea.entry_thesis) ? idea.entry_thesis : [idea.entry_thesis]).slice(0, 3).map((t: string, i: number) => (
             <li key={i} className="flex items-start gap-2">
               <span className="text-gold mt-0.5 flex-shrink-0">•</span>
               <span>{t}</span>
             </li>
           ))}
-        </ul>
+        </motion.ul>
       )}
 
       {idea.key_risk && (
@@ -155,15 +174,18 @@ function SuggestedTrade({ idea, onPush }: { idea: any; onPush: (size: number) =>
             step={0.1}
             value={size}
             onChange={(e) => setSize(parseFloat(e.target.value) || 1)}
-            className="w-16 bg-bg-card/70 border border-border rounded px-2 py-1 text-[12px] font-mono text-text-primary tabular outline-none focus:border-gold/60"
+            className="w-16 bg-bg-card/70 border border-border rounded px-2 py-1 text-[12px] font-mono text-text-primary tabular outline-none focus:border-gold/60 transition-colors"
           />
         </label>
 
-        <button
+        <motion.button
           onClick={push}
           disabled={busy || isNeutral}
+          whileHover={!busy && !isNeutral ? { y: -1 } : {}}
+          whileTap={!busy && !isNeutral ? { scale: 0.97 } : {}}
+          transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
           className={clsx(
-            'flex items-center gap-2 px-4 py-2 rounded-md font-mono uppercase tracking-widest text-[11px] font-bold transition-all',
+            'flex items-center gap-2 px-4 py-2 rounded-md font-mono uppercase tracking-widest text-[11px] font-bold transition-colors',
             isNeutral ? 'bg-bg-elev text-text-muted cursor-not-allowed'
             : busy   ? 'bg-gold/40 text-bg cursor-wait'
                      : 'bg-gold text-bg hover:bg-gold-bright shadow-md',
@@ -171,10 +193,32 @@ function SuggestedTrade({ idea, onPush }: { idea: any; onPush: (size: number) =>
         >
           <Play className="w-3.5 h-3.5" />
           {isNeutral ? 'No trade — neutral bias' : busy ? 'pushing…' : 'Push to Paper'}
-        </button>
+        </motion.button>
 
-        {flash === 'ok'  && <span className="text-bull text-[11px] font-mono">✓ paper trade opened</span>}
-        {flash === 'err' && <span className="text-bear text-[11px] font-mono">✕ {errMsg}</span>}
+        <AnimatePresence>
+          {flash === 'ok'  && (
+            <motion.span
+              key="ok"
+              initial={{ opacity: 0, x: -4 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0 }}
+              className="text-bull text-[11px] font-mono"
+            >
+              ✓ paper trade opened
+            </motion.span>
+          )}
+          {flash === 'err' && (
+            <motion.span
+              key="err"
+              initial={{ opacity: 0, x: -4 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0 }}
+              className="text-bear text-[11px] font-mono"
+            >
+              ✕ {errMsg}
+            </motion.span>
+          )}
+        </AnimatePresence>
       </div>
     </Panel>
   );
@@ -186,14 +230,14 @@ function SuggestedTrade({ idea, onPush }: { idea: any; onPush: (size: number) =>
 function OpenPositions({ rows, onClose }: { rows: Position[]; onClose: (id: number) => Promise<void> }) {
   const [busy, setBusy] = useState<number | null>(null);
   if (!rows.length) return (
-    <Panel title="Open Positions" accent="blue">
+    <Panel title="Open Positions" accent="blue" staticMount>
       <div className="text-[11px] font-mono text-text-tertiary p-4 text-center">
         No open paper trades. Push one from the suggested-trade card above.
       </div>
     </Panel>
   );
   return (
-    <Panel title="Open Positions" subtitle={`${rows.length} active · marked to market every minute`} accent="blue">
+    <Panel title="Open Positions" subtitle={`${rows.length} active · marked to market every minute`} accent="blue" staticMount>
       <div className="overflow-x-auto">
         <table className="w-full text-[11px] font-mono tabular">
           <thead>
@@ -210,7 +254,7 @@ function OpenPositions({ rows, onClose }: { rows: Position[]; onClose: (id: numb
               <th className="text-right">·</th>
             </tr>
           </thead>
-          <tbody>
+          <motion.tbody variants={staggerTight} initial="hidden" animate="show">
             {rows.map(t => {
               const unreal = t.unrealised ?? 0;
               const sign = unreal >= 0 ? 'text-bull' : 'text-bear';
@@ -218,14 +262,17 @@ function OpenPositions({ rows, onClose }: { rows: Position[]; onClose: (id: numb
               const legs = t.legs ?? [];
               return (
                 <Fragment key={t.id}>
-                  <tr className="border-b border-border/40 hover:bg-bg-hover/30">
+                  <motion.tr
+                    variants={fadeUp}
+                    className="border-b border-border/40 hover:bg-bg-hover/30 transition-colors"
+                  >
                     <td className="py-2 text-text-tertiary">#{t.id}</td>
                     <td>
                       <span className="uppercase font-semibold text-text-primary">{t.asset}</span>
                       <Chip tone={dirTone as any} className="ml-2">{t.direction}</Chip>
                       {legs.length > 0 && (
-                        <span className="ml-2 text-[9px] font-mono uppercase tracking-widest text-text-muted">
-                          · {legs.length}-leg
+                        <span className="ml-2 text-[9px] font-mono uppercase tracking-widest text-gold/70">
+                          · {legs.length}-LEG
                         </span>
                       )}
                     </td>
@@ -239,7 +286,7 @@ function OpenPositions({ rows, onClose }: { rows: Position[]; onClose: (id: numb
                     <td className="text-right text-text-tertiary">
                       {t.stop_price !== null ? `$${t.stop_price.toFixed(2)}` : '—'}
                     </td>
-                    <td className={clsx('text-right font-semibold', sign)}>
+                    <td className={clsx('text-right font-semibold transition-colors', sign)}>
                       {unreal >= 0 ? '+' : ''}${unreal.toFixed(2)}
                     </td>
                     <td className="text-right text-text-secondary">{t.size}</td>
@@ -247,28 +294,38 @@ function OpenPositions({ rows, onClose }: { rows: Position[]; onClose: (id: numb
                       {fmt.ago ? fmt.ago(t.opened_at) : t.opened_at?.slice(11, 16)}
                     </td>
                     <td className="text-right">
-                      <button
+                      <motion.button
                         onClick={async () => {
                           setBusy(t.id);
                           try { await onClose(t.id); } finally { setBusy(null); }
                         }}
                         disabled={busy === t.id}
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
                         className="px-2 py-1 text-[10px] font-mono uppercase tracking-widest text-bear hover:bg-bear/15 rounded transition-colors"
                         title="Force close at current market"
                       >
                         {busy === t.id ? '…' : 'Close'}
-                      </button>
+                      </motion.button>
                     </td>
-                  </tr>
-                  {legs.map(L => {
+                  </motion.tr>
+                  {legs.map((L, li) => {
                     const legUn = L.unrealised ?? 0;
                     const legSign = legUn >= 0 ? 'text-bull' : 'text-bear';
                     const legDirTone = L.direction === 'LONG' ? 'text-bull' : 'text-bear';
                     return (
-                      <tr key={L.id} className="border-b border-border/20 bg-bg-card/20">
+                      <motion.tr
+                        key={L.id}
+                        initial={{ opacity: 0, x: -4 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ duration: 0.28, delay: 0.05 + li * 0.04, ease: [0.16, 1, 0.3, 1] }}
+                        className="border-b border-border/20 bg-gradient-to-r from-bg-card/30 via-bg-card/20 to-transparent"
+                      >
                         <td className="py-1"></td>
-                        <td className="text-[10px] text-text-tertiary pl-4">
-                          ↳ <span className="uppercase text-text-secondary">{L.contract}</span>
+                        <td className="text-[10px] text-text-tertiary pl-4 relative">
+                          <span className="absolute left-2 top-0 bottom-0 w-px bg-gradient-to-b from-transparent via-gold/40 to-transparent" />
+                          <span className="text-gold/60 mr-1.5">↳</span>
+                          <span className="uppercase text-text-secondary">{L.contract}</span>
                           <span className={clsx('ml-2 font-mono', legDirTone)}>{L.direction}</span>
                           <span className="ml-2 text-text-muted">× {L.qty}</span>
                         </td>
@@ -281,13 +338,13 @@ function OpenPositions({ rows, onClose }: { rows: Position[]; onClose: (id: numb
                           {legUn >= 0 ? '+' : ''}${legUn.toFixed(2)}
                         </td>
                         <td colSpan={3}></td>
-                      </tr>
+                      </motion.tr>
                     );
                   })}
                 </Fragment>
               );
             })}
-          </tbody>
+          </motion.tbody>
         </table>
       </div>
     </Panel>
@@ -299,12 +356,12 @@ function OpenPositions({ rows, onClose }: { rows: Position[]; onClose: (id: numb
 
 function ClosedHistory({ rows }: { rows: Position[] }) {
   if (!rows.length) return (
-    <Panel title="Closed Trades">
+    <Panel title="Closed Trades" staticMount>
       <div className="text-[11px] font-mono text-text-tertiary p-4 text-center">No closed trades yet.</div>
     </Panel>
   );
   return (
-    <Panel title="Closed Trades" subtitle={`${rows.length} in history`}>
+    <Panel title="Closed Trades" subtitle={`${rows.length} in history`} staticMount>
       <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
         <table className="w-full text-[11px] font-mono tabular">
           <thead className="sticky top-0 bg-bg-elev">
@@ -318,13 +375,17 @@ function ClosedHistory({ rows }: { rows: Position[] }) {
               <th className="text-right">Closed</th>
             </tr>
           </thead>
-          <tbody>
+          <motion.tbody variants={staggerTight} initial="hidden" animate="show">
             {rows.map(t => {
               const r = t.realised ?? 0;
               const rPct = t.realised_pct ?? 0;
               const sign = r >= 0 ? 'text-bull' : 'text-bear';
               return (
-                <tr key={t.id} className="border-b border-border/40 hover:bg-bg-hover/30">
+                <motion.tr
+                  key={t.id}
+                  variants={fadeUp}
+                  className="border-b border-border/40 hover:bg-bg-hover/30 transition-colors"
+                >
                   <td className="py-1.5 text-text-tertiary">#{t.id}</td>
                   <td>
                     <span className="uppercase">{t.asset}</span>
@@ -347,10 +408,10 @@ function ClosedHistory({ rows }: { rows: Position[] }) {
                   <td className="text-right text-text-muted text-[10px]">
                     {fmt.ago ? fmt.ago(t.closed_at) : t.closed_at?.slice(11, 16)}
                   </td>
-                </tr>
+                </motion.tr>
               );
             })}
-          </tbody>
+          </motion.tbody>
         </table>
       </div>
     </Panel>
@@ -361,7 +422,7 @@ function ClosedHistory({ rows }: { rows: Position[] }) {
 // ─── Performance panel ─────────────────────────────────────────────────────
 
 function PerformancePanel({ perf, onClear }: { perf: Performance | null; onClear: () => void }) {
-  if (!perf) return <Panel title="Performance"><SkeletonRows rows={4} /></Panel>;
+  if (!perf) return <Panel title="Performance" staticMount><SkeletonRows rows={4} /></Panel>;
   const totalTone = perf.total_pnl >= 0 ? 'bull' : 'bear';
   const sharpeTone =
     perf.sharpe_annualised === null ? 'neut' :
@@ -383,54 +444,97 @@ function PerformancePanel({ perf, onClear }: { perf: Performance | null; onClear
     }).join(' ');
   })();
 
+  // Build matching area-fill path under the curve
+  const sparkArea = (() => {
+    if (eq.length < 2) return '';
+    const ys = eq.map(e => e.cum_pnl);
+    const min = Math.min(0, ...ys);
+    const max = Math.max(0.001, ...ys);
+    const w = 100, h = 40;
+    const pts = eq.map((e, i) => {
+      const x = (i / (eq.length - 1)) * w;
+      const y = h - ((e.cum_pnl - min) / (max - min)) * h;
+      return [x, y] as const;
+    });
+    const first = pts[0]; const last = pts[pts.length - 1];
+    return `M ${first[0]},${h} L ${pts.map(p => `${p[0]},${p[1]}`).join(' L ')} L ${last[0]},${h} Z`;
+  })();
+
   return (
     <Panel
       title="Performance"
       subtitle="closed trades only · realised PnL"
       accent={totalTone as any}
+      staticMount
       right={
-        <button
+        <motion.button
           onClick={onClear}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
           className="flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-mono uppercase tracking-widest text-text-tertiary hover:text-bear hover:bg-bear/10 transition-colors"
           title="Clear closed-trade history"
         >
           <Trash2 className="w-3 h-3" />
           Reset
-        </button>
+        </motion.button>
       }
     >
-      <div className="grid grid-cols-4 gap-3 mb-4">
-        <Stat label="Total PnL" tone={totalTone as any}
-              value={`${perf.total_pnl >= 0 ? '+' : ''}$${perf.total_pnl.toFixed(2)}`} />
-        <Stat label="Trades"    value={`${perf.total_trades}`} />
-        <Stat label="Win Rate"  tone={perf.win_rate_pct >= 50 ? 'bull' : 'bear'}
-              value={`${perf.win_rate_pct.toFixed(1)}%`} sub={`${perf.wins}W / ${perf.losses}L`} />
-        <Stat label="Sharpe (ann.)" tone={sharpeTone as any}
-              value={perf.sharpe_annualised === null ? '—' : perf.sharpe_annualised.toFixed(2)} />
-      </div>
+      <motion.div
+        variants={staggerTight}
+        initial="hidden"
+        animate="show"
+        className="grid grid-cols-4 gap-3 mb-4"
+      >
+        {[
+          <Stat label="Total PnL" tone={totalTone as any}
+                value={`${perf.total_pnl >= 0 ? '+' : ''}$${perf.total_pnl.toFixed(2)}`} />,
+          <Stat label="Trades"    value={`${perf.total_trades}`} />,
+          <Stat label="Win Rate"  tone={perf.win_rate_pct >= 50 ? 'bull' : 'bear'}
+                value={`${perf.win_rate_pct.toFixed(1)}%`} sub={`${perf.wins}W / ${perf.losses}L`} />,
+          <Stat label="Sharpe (ann.)" tone={sharpeTone as any}
+                value={perf.sharpe_annualised === null ? '—' : perf.sharpe_annualised.toFixed(2)} />,
+        ].map((node, i) => (
+          <motion.div key={i} variants={scaleIn}>{node}</motion.div>
+        ))}
+      </motion.div>
 
-      <div className="grid grid-cols-4 gap-3 mb-4">
-        <Stat label="Avg Win"        tone="bull" value={`+$${perf.avg_win.toFixed(2)}`} />
-        <Stat label="Avg Loss"       tone="bear" value={`$${perf.avg_loss.toFixed(2)}`} />
-        <Stat label="Profit Factor"  tone={(perf.profit_factor ?? 0) > 1 ? 'bull' : 'bear'}
-              value={perf.profit_factor === null ? '—' : perf.profit_factor.toFixed(2)} />
-        <Stat label="Max Drawdown"   tone="bear" value={`-$${perf.max_drawdown.toFixed(2)}`} />
-      </div>
+      <motion.div
+        variants={staggerTight}
+        initial="hidden"
+        animate="show"
+        className="grid grid-cols-4 gap-3 mb-4"
+      >
+        {[
+          <Stat label="Avg Win"        tone="bull" value={`+$${perf.avg_win.toFixed(2)}`} />,
+          <Stat label="Avg Loss"       tone="bear" value={`$${perf.avg_loss.toFixed(2)}`} />,
+          <Stat label="Profit Factor"  tone={(perf.profit_factor ?? 0) > 1 ? 'bull' : 'bear'}
+                value={perf.profit_factor === null ? '—' : perf.profit_factor.toFixed(2)} />,
+          <Stat label="Max Drawdown"   tone="bear" value={`-$${perf.max_drawdown.toFixed(2)}`} />,
+        ].map((node, i) => (
+          <motion.div key={i} variants={scaleIn}>{node}</motion.div>
+        ))}
+      </motion.div>
 
-      {/* Equity curve mini-spark */}
+      {/* Equity curve mini-spark — area + draw-in stroke */}
       {eq.length >= 2 && (
-        <div className="mt-4 pt-3 border-t border-border/40">
-          <div className="text-[9px] font-mono uppercase tracking-widest text-text-muted mb-1">
-            Cumulative PnL · {eq.length} closed trades
+        <motion.div
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.25, duration: 0.32 }}
+          className="mt-4 pt-3 border-t border-border/40"
+        >
+          <div className="text-[9px] font-mono uppercase tracking-widest text-text-muted mb-2 flex items-center justify-between">
+            <span>Cumulative PnL · {eq.length} closed trades</span>
+            <span className="text-text-tertiary">{(perf.total_pnl >= 0 ? '+$' : '-$') + Math.abs(perf.total_pnl).toFixed(2)} total</span>
           </div>
-          <svg viewBox="0 0 100 40" className="w-full h-16" preserveAspectRatio="none">
-            <polyline
-              points={sparkPts}
-              fill="none"
-              stroke={totalTone === 'bull' ? '#10d997' : '#ff4d6d'}
-              strokeWidth="0.8"
-            />
-            {/* zero line */}
+          <svg viewBox="0 0 100 40" className="w-full h-20" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="eqfill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%"  stopColor={totalTone === 'bull' ? '#10d997' : '#ff4d6d'} stopOpacity="0.28" />
+                <stop offset="100%" stopColor={totalTone === 'bull' ? '#10d997' : '#ff4d6d'} stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            {/* zero baseline */}
             {(() => {
               const ys = eq.map(e => e.cum_pnl);
               const min = Math.min(0, ...ys);
@@ -438,25 +542,69 @@ function PerformancePanel({ perf, onClear }: { perf: Performance | null; onClear
               const y0  = 40 - ((0 - min) / (max - min)) * 40;
               return <line x1="0" x2="100" y1={y0} y2={y0} stroke="#2a3a5e" strokeWidth="0.3" strokeDasharray="1 1" />;
             })()}
+            {/* fill area */}
+            <motion.path
+              d={sparkArea}
+              fill="url(#eqfill)"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.5, delay: 0.55 }}
+            />
+            {/* stroke — draws in left-to-right */}
+            <motion.polyline
+              points={sparkPts}
+              fill="none"
+              stroke={totalTone === 'bull' ? '#10d997' : '#ff4d6d'}
+              strokeWidth="0.9"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              initial={{ pathLength: 0, opacity: 0 }}
+              animate={{ pathLength: 1, opacity: 1 }}
+              transition={{ duration: 0.9, delay: 0.35, ease: [0.16, 1, 0.3, 1] }}
+            />
+            {/* terminal dot */}
+            {eq.length >= 2 && (() => {
+              const ys = eq.map(e => e.cum_pnl);
+              const min = Math.min(0, ...ys);
+              const max = Math.max(0.001, ...ys);
+              const last = eq[eq.length - 1];
+              const x = 100;
+              const y = 40 - ((last.cum_pnl - min) / (max - min)) * 40;
+              return (
+                <motion.circle
+                  cx={x} cy={y} r="0.9"
+                  fill={totalTone === 'bull' ? '#10d997' : '#ff4d6d'}
+                  stroke="#fff" strokeWidth="0.2"
+                  initial={{ opacity: 0, scale: 0 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.3, delay: 1.2 }}
+                />
+              );
+            })()}
           </svg>
-        </div>
+        </motion.div>
       )}
 
       {perf.best_trade && perf.worst_trade && (
-        <div className="mt-3 grid grid-cols-2 gap-3 text-[10px] font-mono">
-          <div className="p-2 bg-bg-card/40 rounded">
+        <motion.div
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.45, duration: 0.32 }}
+          className="mt-3 grid grid-cols-2 gap-3 text-[10px] font-mono"
+        >
+          <div className="p-2 bg-bg-card/40 rounded transition-colors hover:bg-bg-card/70">
             <span className="text-text-muted uppercase tracking-widest">Best</span>
             <div className={perf.best_trade.pnl >= 0 ? 'text-bull' : 'text-bear'}>
               #{perf.best_trade.id} {perf.best_trade.asset} {perf.best_trade.pnl >= 0 ? '+$' : '-$'}{Math.abs(perf.best_trade.pnl).toFixed(2)}
             </div>
           </div>
-          <div className="p-2 bg-bg-card/40 rounded">
+          <div className="p-2 bg-bg-card/40 rounded transition-colors hover:bg-bg-card/70">
             <span className="text-text-muted uppercase tracking-widest">Worst</span>
             <div className={perf.worst_trade.pnl >= 0 ? 'text-bull' : 'text-bear'}>
               #{perf.worst_trade.id} {perf.worst_trade.asset} {perf.worst_trade.pnl >= 0 ? '+$' : '-$'}{Math.abs(perf.worst_trade.pnl).toFixed(2)}
             </div>
           </div>
-        </div>
+        </motion.div>
       )}
     </Panel>
   );
@@ -492,65 +640,90 @@ export function PaperView({ tradeIdea }: { tradeIdea: any }) {
   // Live count of open trades for the header chip
   const openCount = open.length;
   const closedCount = closed.length;
+  const realisedTotal = perf?.total_pnl ?? 0;
+  const realisedTone = realisedTotal >= 0 ? 'bull' : 'bear';
 
   return (
-    <div className="space-y-4">
-      {/* Header strip — at-a-glance counters */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-        <Panel title="Open" accent="blue" bodyClassName="!p-3">
-          <div className="flex items-baseline gap-2">
-            <Wallet className="w-4 h-4 text-accent-blue" />
-            <span className="text-3xl font-display font-extrabold tabular text-text-primary">{openCount}</span>
-            <span className="text-[10px] font-mono uppercase tracking-widest text-text-tertiary">positions</span>
-          </div>
-        </Panel>
-        <Panel title="Closed" accent="gold" bodyClassName="!p-3">
-          <div className="flex items-baseline gap-2">
-            <Activity className="w-4 h-4 text-gold" />
-            <span className="text-3xl font-display font-extrabold tabular text-text-primary">{closedCount}</span>
-            <span className="text-[10px] font-mono uppercase tracking-widest text-text-tertiary">trades</span>
-          </div>
-        </Panel>
-        <Panel
-          title="Realised PnL"
-          accent={(perf?.total_pnl ?? 0) >= 0 ? 'bull' : 'bear'}
-          bodyClassName="!p-3"
-        >
-          <div className="flex items-baseline gap-2">
-            {(perf?.total_pnl ?? 0) >= 0
-              ? <TrendingUp className="w-4 h-4 text-bull" />
-              : <TrendingDown className="w-4 h-4 text-bear" />}
-            <span className={clsx(
-              'text-3xl font-display font-extrabold tabular',
-              (perf?.total_pnl ?? 0) >= 0 ? 'text-bull' : 'text-bear',
-            )}>
-              {perf ? ((perf.total_pnl >= 0 ? '+$' : '-$') + Math.abs(perf.total_pnl).toFixed(2)) : '—'}
-            </span>
-          </div>
-        </Panel>
-        <Panel title="Win rate / Sharpe" accent="neut" bodyClassName="!p-3">
-          <div className="flex items-baseline gap-3">
-            <span className="text-2xl font-display font-extrabold tabular text-text-primary">
-              {perf ? `${perf.win_rate_pct.toFixed(0)}%` : '—'}
-            </span>
-            <span className="text-[10px] font-mono uppercase tracking-widest text-text-tertiary">
-              · Sharpe {perf?.sharpe_annualised?.toFixed(2) ?? '—'}
-            </span>
-          </div>
-        </Panel>
-      </div>
+    <motion.div
+      className="space-y-4"
+      variants={staggerContainer}
+      initial="hidden"
+      animate="show"
+    >
+      {/* Hero KPI strip — at-a-glance counters */}
+      <motion.div
+        variants={staggerTight}
+        initial="hidden"
+        animate="show"
+        className="grid grid-cols-2 md:grid-cols-4 gap-3"
+      >
+        <motion.div variants={scaleIn}>
+          <Panel title="Open" accent="blue" bodyClassName="!p-3" staticMount>
+            <div className="flex items-baseline gap-2">
+              <Wallet className="w-4 h-4 text-accent-blue" />
+              <span className="text-3xl font-display font-extrabold tabular text-text-primary">{openCount}</span>
+              <span className="text-[10px] font-mono uppercase tracking-widest text-text-tertiary">positions</span>
+            </div>
+          </Panel>
+        </motion.div>
+        <motion.div variants={scaleIn}>
+          <Panel title="Closed" accent="gold" bodyClassName="!p-3" staticMount>
+            <div className="flex items-baseline gap-2">
+              <Activity className="w-4 h-4 text-gold" />
+              <span className="text-3xl font-display font-extrabold tabular text-text-primary">{closedCount}</span>
+              <span className="text-[10px] font-mono uppercase tracking-widest text-text-tertiary">trades</span>
+            </div>
+          </Panel>
+        </motion.div>
+        <motion.div variants={scaleIn}>
+          <Panel
+            title="Realised PnL"
+            accent={realisedTone as any}
+            bodyClassName="!p-3"
+            staticMount
+          >
+            <div className="flex items-baseline gap-2">
+              {realisedTotal >= 0
+                ? <TrendingUp className="w-4 h-4 text-bull" />
+                : <TrendingDown className="w-4 h-4 text-bear" />}
+              <span className={clsx(
+                'text-3xl font-display font-extrabold tabular transition-colors duration-300',
+                realisedTone === 'bull' ? 'text-bull' : 'text-bear',
+              )}>
+                {perf ? ((realisedTotal >= 0 ? '+$' : '-$') + Math.abs(realisedTotal).toFixed(2)) : '—'}
+              </span>
+            </div>
+          </Panel>
+        </motion.div>
+        <motion.div variants={scaleIn}>
+          <Panel title="Win rate / Sharpe" accent="neut" bodyClassName="!p-3" staticMount>
+            <div className="flex items-baseline gap-3">
+              <span className="text-2xl font-display font-extrabold tabular text-text-primary">
+                {perf ? `${perf.win_rate_pct.toFixed(0)}%` : '—'}
+              </span>
+              <span className="text-[10px] font-mono uppercase tracking-widest text-text-tertiary">
+                · Sharpe {perf?.sharpe_annualised?.toFixed(2) ?? '—'}
+              </span>
+            </div>
+          </Panel>
+        </motion.div>
+      </motion.div>
 
       {/* Suggested trade — push */}
-      <SuggestedTrade idea={tradeIdea} onPush={handlePush} />
+      <motion.div variants={fadeUp}>
+        <SuggestedTrade idea={tradeIdea} onPush={handlePush} />
+      </motion.div>
 
       {/* Open positions */}
-      <OpenPositions rows={open} onClose={handleClose} />
+      <motion.div variants={fadeUp}>
+        <OpenPositions rows={open} onClose={handleClose} />
+      </motion.div>
 
       {/* Performance + closed history side-by-side on wide screens */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+      <motion.div variants={fadeUp} className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <PerformancePanel perf={perf} onClear={handleClear} />
         <ClosedHistory rows={closed} />
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

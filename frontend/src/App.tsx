@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { TopBar } from '@/components/shell/TopBar';
 import { Sidebar, NAV_ITEMS, ViewKey } from '@/components/shell/Sidebar';
 import { StatusBar } from '@/components/shell/StatusBar';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { usePolling, useLocalStorage } from '@/lib/hooks';
 import { api } from '@/lib/api';
-import { slideRight } from '@/lib/motion';
 import { SignalView } from '@/views/SignalView';
 import { ChartsView } from '@/views/ChartsView';
 import { FundamentalsView } from '@/views/FundamentalsView';
@@ -76,18 +75,15 @@ export default function App() {
           {/* View header */}
           <div className="px-6 pt-5 pb-3 flex items-baseline justify-between border-b border-border/40 sticky top-0 bg-bg/85 backdrop-blur-md z-10">
             <div className="flex items-baseline gap-3">
-              <AnimatePresence mode="wait">
-                <motion.h1
-                  key={activeLabel}
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -4 }}
-                  transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-                  className="font-display font-extrabold text-2xl tracking-[0.16em] uppercase"
-                >
-                  {activeLabel}
-                </motion.h1>
-              </AnimatePresence>
+              <motion.h1
+                key={activeLabel}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+                className="font-display font-extrabold text-2xl tracking-[0.16em] uppercase"
+              >
+                {activeLabel}
+              </motion.h1>
               <span className="text-[10px] font-mono text-text-muted uppercase tracking-widest">
                 {loading && !all ? 'initializing data layer…' : `${Object.keys(all ?? {}).length} streams active`}
               </span>
@@ -102,24 +98,26 @@ export default function App() {
 
           <div className="p-6 pb-12">
             <ErrorBoundary label={activeLabel}>
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={view}
-                  variants={slideRight}
-                  initial="hidden"
-                  animate="show"
-                  exit="exit"
-                >
-                  {view === 'signal'        && <SignalView all={merged} tradeIdea={tradeIdea} alerts={Array.isArray(alerts) ? alerts : (alerts as any)?.alerts ?? []} />}
-                  {view === 'charts'        && <ChartsView all={merged} history={history} ohlcv={ohlcv} />}
-                  {view === 'fundamentals'  && <FundamentalsView all={merged} />}
-                  {view === 'intelligence'  && <IntelligenceView all={merged} />}
-                  {view === 'spreads'       && <SpreadsView all={merged} />}
-                  {view === 'playbook'      && <PlaybookView />}
-                  {view === 'paper'         && <PaperView tradeIdea={tradeIdea} />}
-                  {view === 'regime'        && <RegimeView />}
-                </motion.div>
-              </AnimatePresence>
+              {/* Per-view key remount with simple enter animation. Avoiding
+                  AnimatePresence mode="wait" — nested motion children inside
+                  the views don't always settle their exit cleanly, which can
+                  wedge wait-mode and leave the old view mounted. Each view
+                  owns its own enter/stagger choreography. */}
+              <motion.div
+                key={view}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+              >
+                {view === 'signal'        && <SignalView all={merged} tradeIdea={tradeIdea} alerts={Array.isArray(alerts) ? alerts : (alerts as any)?.alerts ?? []} />}
+                {view === 'charts'        && <ChartsView all={merged} history={history} ohlcv={ohlcv} />}
+                {view === 'fundamentals'  && <FundamentalsView all={merged} />}
+                {view === 'intelligence'  && <IntelligenceView all={merged} />}
+                {view === 'spreads'       && <SpreadsView all={merged} />}
+                {view === 'playbook'      && <PlaybookView />}
+                {view === 'paper'         && <PaperView tradeIdea={tradeIdea} />}
+                {view === 'regime'        && <RegimeView />}
+              </motion.div>
             </ErrorBoundary>
           </div>
         </main>
