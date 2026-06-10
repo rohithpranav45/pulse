@@ -1,17 +1,17 @@
 import { useEffect, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { TopBar } from '@/components/shell/TopBar';
 import { Sidebar, NAV_ITEMS, ViewKey } from '@/components/shell/Sidebar';
 import { StatusBar } from '@/components/shell/StatusBar';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { usePolling, useLocalStorage } from '@/lib/hooks';
 import { api } from '@/lib/api';
+import { slideRight } from '@/lib/motion';
 import { SignalView } from '@/views/SignalView';
 import { ChartsView } from '@/views/ChartsView';
 import { FundamentalsView } from '@/views/FundamentalsView';
 import { IntelligenceView } from '@/views/IntelligenceView';
-import { TermStructureView } from '@/views/TermStructureView';
 import { SpreadsView } from '@/views/SpreadsView';
-import { ContractsView } from '@/views/ContractsView';
 import { PlaybookView } from '@/views/PlaybookView';
 import { PaperView } from '@/views/PaperView';
 import { RegimeView } from '@/views/RegimeView';
@@ -30,13 +30,26 @@ export default function App() {
   const { data: alerts } = usePolling(api.alerts, 60000);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Legacy view keys (term / contracts) silently coalesce to spreads —
+  // anyone whose localStorage was set before the IA merge lands cleanly.
+  useEffect(() => {
+    const valid = NAV_ITEMS.map(n => n.key) as ViewKey[];
+    if (!valid.includes(view)) {
+      setView(view === 'term' as any || view === 'contracts' as any ? 'spreads' : 'signal');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Keyboard shortcuts
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
       const k = e.key;
-      const map: Record<string, ViewKey> = { '1':'signal','2':'charts','3':'fundamentals','4':'intelligence','5':'term','6':'spreads','7':'contracts','8':'playbook','9':'paper','0':'regime' };
+      const map: Record<string, ViewKey> = {
+        '1':'signal','2':'charts','3':'fundamentals','4':'intelligence',
+        '5':'spreads','6':'playbook','7':'paper','8':'regime',
+      };
       if (map[k]) setView(map[k]);
       if (k === 'r' || k === 'R') { setRefreshing(true); refetch().finally(() => setTimeout(() => setRefreshing(false), 600)); }
       if (k === 'f' || k === 'F') document.documentElement.requestFullscreen?.();
@@ -63,7 +76,18 @@ export default function App() {
           {/* View header */}
           <div className="px-6 pt-5 pb-3 flex items-baseline justify-between border-b border-border/40 sticky top-0 bg-bg/85 backdrop-blur-md z-10">
             <div className="flex items-baseline gap-3">
-              <h1 className="font-display font-extrabold text-2xl tracking-[0.16em] uppercase">{activeLabel}</h1>
+              <AnimatePresence mode="wait">
+                <motion.h1
+                  key={activeLabel}
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+                  className="font-display font-extrabold text-2xl tracking-[0.16em] uppercase"
+                >
+                  {activeLabel}
+                </motion.h1>
+              </AnimatePresence>
               <span className="text-[10px] font-mono text-text-muted uppercase tracking-widest">
                 {loading && !all ? 'initializing data layer…' : `${Object.keys(all ?? {}).length} streams active`}
               </span>
@@ -78,16 +102,24 @@ export default function App() {
 
           <div className="p-6 pb-12">
             <ErrorBoundary label={activeLabel}>
-              {view === 'signal'        && <SignalView all={merged} tradeIdea={tradeIdea} alerts={Array.isArray(alerts) ? alerts : (alerts as any)?.alerts ?? []} />}
-              {view === 'charts'        && <ChartsView all={merged} history={history} ohlcv={ohlcv} />}
-              {view === 'fundamentals'  && <FundamentalsView all={merged} />}
-              {view === 'intelligence'  && <IntelligenceView all={merged} />}
-              {view === 'term'          && <TermStructureView all={merged} />}
-              {view === 'spreads'       && <SpreadsView all={merged} />}
-              {view === 'contracts'     && <ContractsView all={merged} />}
-              {view === 'playbook'      && <PlaybookView />}
-              {view === 'paper'         && <PaperView tradeIdea={tradeIdea} />}
-              {view === 'regime'        && <RegimeView />}
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={view}
+                  variants={slideRight}
+                  initial="hidden"
+                  animate="show"
+                  exit="exit"
+                >
+                  {view === 'signal'        && <SignalView all={merged} tradeIdea={tradeIdea} alerts={Array.isArray(alerts) ? alerts : (alerts as any)?.alerts ?? []} />}
+                  {view === 'charts'        && <ChartsView all={merged} history={history} ohlcv={ohlcv} />}
+                  {view === 'fundamentals'  && <FundamentalsView all={merged} />}
+                  {view === 'intelligence'  && <IntelligenceView all={merged} />}
+                  {view === 'spreads'       && <SpreadsView all={merged} />}
+                  {view === 'playbook'      && <PlaybookView />}
+                  {view === 'paper'         && <PaperView tradeIdea={tradeIdea} />}
+                  {view === 'regime'        && <RegimeView />}
+                </motion.div>
+              </AnimatePresence>
             </ErrorBoundary>
           </div>
         </main>

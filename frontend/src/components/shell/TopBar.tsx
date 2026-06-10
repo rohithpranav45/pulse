@@ -3,6 +3,7 @@ import { fmt } from '@/lib/fmt';
 import { Chip } from '@/components/ui/Chip';
 import { TICKER_KEYS } from '@/lib/api';
 import { Activity, RefreshCw, Maximize2, Printer, HelpCircle } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { resetOnboarding } from '@/components/onboarding/OnboardingTour';
 import { ProvenanceLegend } from '@/components/shell/ProvenanceLegend';
 import { HealthPill } from '@/components/shell/HealthPill';
@@ -36,14 +37,52 @@ function MarketStatus() {
   );
 }
 
+function IconButton({
+  onClick,
+  title,
+  children,
+  className,
+}: {
+  onClick: () => void;
+  title: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <motion.button
+      onClick={onClick}
+      title={title}
+      whileHover={{ y: -1, scale: 1.05 }}
+      whileTap={{ scale: 0.95 }}
+      transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+      className={clsx(
+        'p-2 rounded-md text-text-tertiary hover:text-gold transition-colors',
+        'hover:bg-bg-hover/60',
+        className,
+      )}
+    >
+      {children}
+    </motion.button>
+  );
+}
+
 export function TopBar({ ticker, onRefresh, refreshing }: { ticker: TickerData | null; onRefresh: () => void; refreshing?: boolean }) {
   return (
-    <header className="h-16 flex-shrink-0 bg-bg-elev/80 backdrop-blur-xl border-b border-border flex items-center px-5 gap-6 relative z-30">
+    <motion.header
+      initial={{ opacity: 0, y: -8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+      className="h-16 flex-shrink-0 bg-bg-elev/80 backdrop-blur-xl border-b border-border flex items-center px-5 gap-6 relative z-30"
+    >
       {/* Logo */}
       <div className="flex items-center gap-3 flex-shrink-0">
-        <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-gold to-gold-bright flex items-center justify-center shadow-lg shadow-gold/30">
+        <motion.div
+          whileHover={{ rotate: -6, scale: 1.06 }}
+          transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+          className="w-9 h-9 rounded-lg bg-gradient-to-br from-gold to-gold-bright flex items-center justify-center shadow-lg shadow-gold/30"
+        >
           <Activity className="w-5 h-5 text-bg" strokeWidth={2.5} />
-        </div>
+        </motion.div>
         <div className="flex flex-col leading-tight">
           <span className="font-display font-extrabold tracking-[0.32em] text-base text-gold">PULSE</span>
           <span className="font-mono text-[8px] tracking-[0.28em] text-text-muted uppercase">Energy Intelligence</span>
@@ -57,11 +96,17 @@ export function TopBar({ ticker, onRefresh, refreshing }: { ticker: TickerData |
           const chg = q?.change_pct ?? 0;
           const up = chg >= 0;
           return (
-            <div key={key} className="ticker-item border-r border-border/60 last:border-r-0">
+            <div key={key} className="ticker-item border-r border-border/60 last:border-r-0 hover:bg-bg-hover/30 transition-colors">
               <span className="text-[9px] font-mono tracking-widest text-text-tertiary uppercase">{label}</span>
-              <span className={clsx('text-sm font-mono font-semibold tabular', q ? 'text-text-primary' : 'text-text-muted')}>
+              <motion.span
+                key={q?.price ?? '—'}
+                initial={{ opacity: 0.6 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.4 }}
+                className={clsx('text-sm font-mono font-semibold tabular', q ? 'text-text-primary' : 'text-text-muted')}
+              >
                 {q ? fmt.price(q.price) : '—'}
-              </span>
+              </motion.span>
               <span className={clsx('text-[10px] font-mono tabular px-1', up ? 'text-bull' : 'text-bear')}>
                 {q?.change_pct !== undefined ? fmt.pct(q.change_pct) : ''}
               </span>
@@ -71,44 +116,30 @@ export function TopBar({ ticker, onRefresh, refreshing }: { ticker: TickerData |
       </div>
 
       {/* Right cluster */}
-      <div className="flex items-center gap-3 flex-shrink-0">
+      <div className="flex items-center gap-2 flex-shrink-0">
         <HealthPill />
         <MarketStatus />
-        <div className="flex border-l border-border pl-4">
+        <div className="flex border-l border-border pl-3 ml-1">
           <TimeChip tz="America/New_York" label="NYC" />
           <TimeChip tz="Europe/London" label="LON" />
           <TimeChip tz="Asia/Singapore" label="SGP" />
         </div>
-        <button
-          onClick={onRefresh}
-          title="Refresh all data (R)"
-          className="p-2 rounded hover:bg-bg-hover text-text-tertiary hover:text-gold transition-colors"
-        >
-          <RefreshCw className={clsx('w-4 h-4', refreshing && 'animate-spin')} />
-        </button>
-        <button
-          onClick={() => window.print()}
-          title="Print daily briefing sheet (P)"
-          className="p-2 rounded hover:bg-bg-hover text-text-tertiary hover:text-gold transition-colors"
-        >
-          <Printer className="w-4 h-4" />
-        </button>
-        <button
-          onClick={() => document.documentElement.requestFullscreen?.()}
-          title="Fullscreen (F)"
-          className="p-2 rounded hover:bg-bg-hover text-text-tertiary hover:text-gold transition-colors"
-        >
-          <Maximize2 className="w-4 h-4" />
-        </button>
-        <ProvenanceLegend />
-        <button
-          onClick={() => resetOnboarding()}
-          title="Restart onboarding tour"
-          className="p-2 rounded hover:bg-bg-hover text-text-tertiary hover:text-gold transition-colors"
-        >
-          <HelpCircle className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-1 pl-2 border-l border-border ml-1">
+          <IconButton onClick={onRefresh} title="Refresh all data (R)">
+            <RefreshCw className={clsx('w-4 h-4', refreshing && 'animate-spin')} />
+          </IconButton>
+          <IconButton onClick={() => window.print()} title="Print daily briefing sheet (P)">
+            <Printer className="w-4 h-4" />
+          </IconButton>
+          <IconButton onClick={() => document.documentElement.requestFullscreen?.()} title="Fullscreen (F)">
+            <Maximize2 className="w-4 h-4" />
+          </IconButton>
+          <ProvenanceLegend />
+          <IconButton onClick={() => resetOnboarding()} title="Restart onboarding tour">
+            <HelpCircle className="w-4 h-4" />
+          </IconButton>
+        </div>
       </div>
-    </header>
+    </motion.header>
   );
 }
