@@ -72,8 +72,15 @@ export function TopBar({ ticker, onRefresh, refreshing }: { ticker: TickerData |
       initial={{ opacity: 0, y: -8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-      className="h-16 flex-shrink-0 bg-bg-elev/80 backdrop-blur-xl border-b border-border flex items-center px-5 gap-6 relative z-30"
+      className="h-16 flex-shrink-0 bg-bg-elev/85 backdrop-blur-xl flex items-center px-5 gap-6 relative z-30"
+      style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}
     >
+      {/* hairline gold accent at the bottom edge */}
+      <div
+        aria-hidden
+        className="absolute bottom-0 left-0 right-0 h-px pointer-events-none"
+        style={{ background: 'linear-gradient(90deg, transparent, rgba(212,175,55,0.28) 20%, rgba(212,175,55,0.45) 50%, rgba(212,175,55,0.28) 80%, transparent)' }}
+      />
       {/* Logo */}
       <div className="flex items-center gap-3 flex-shrink-0">
         <motion.div

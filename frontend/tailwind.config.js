@@ -5,16 +5,18 @@ export default {
     extend: {
       colors: {
         bg: {
-          DEFAULT: '#070b14',
-          elev: '#0b1220',
-          surface: '#0f1729',
-          card: '#121b30',
-          hover: '#172240',
+          /* Near-black palette — the dashboard's "void". Each step up is small
+             so panels read as floating glass, not stacked cards. */
+          DEFAULT: '#04060c',   // page void
+          elev:    '#070a13',   // chrome (sidebar, topbar)
+          surface: '#0b101d',   // panel surface
+          card:    '#0f1626',   // nested card inside a panel
+          hover:   '#131b2e',
         },
         border: {
-          DEFAULT: '#1c2745',
-          strong: '#2a3a5e',
-          accent: 'rgba(212,175,55,0.32)',
+          DEFAULT: 'rgba(255,255,255,0.06)',  // hairline default
+          strong:  'rgba(255,255,255,0.10)',
+          accent:  'rgba(212,175,55,0.32)',
         },
         text: {
           primary: '#eef2f9',
