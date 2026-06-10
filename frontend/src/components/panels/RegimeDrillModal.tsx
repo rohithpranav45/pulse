@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import clsx from 'clsx';
+import { motion } from 'framer-motion';
 import { Modal } from '@/components/ui/Modal';
-import { Chip } from '@/components/ui/Chip';
 import { Stat } from '@/components/ui/Stat';
 import { SkeletonRows } from '@/components/ui/Skeleton';
 import { api } from '@/lib/api';
+import { staggerContainer, staggerTight, fadeUp, scaleIn } from '@/lib/motion';
 
 /**
  * Phase 2 Sprint 2c — drill-down receipts for a regime pick.
@@ -83,14 +84,31 @@ export function RegimeDrillModal({
     >
       {loading && <SkeletonRows rows={8} />}
       {err && !loading && (
-        <div className="p-4 text-[12px] font-mono text-bear">⚠ {err}</div>
+        <motion.div
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="p-4 text-[12px] font-mono text-bear"
+        >
+          ⚠ {err}
+        </motion.div>
       )}
       {data?.available && (
-        <>
-          <TopStrip d={data} />
-          <ScatterPlot d={data} />
-          <AnalogsTable d={data} />
-        </>
+        <motion.div
+          variants={staggerContainer}
+          initial="hidden"
+          animate="show"
+          className="space-y-1"
+        >
+          <motion.div variants={fadeUp}>
+            <TopStrip d={data} />
+          </motion.div>
+          <motion.div variants={fadeUp}>
+            <ScatterPlot d={data} />
+          </motion.div>
+          <motion.div variants={fadeUp}>
+            <AnalogsTable d={data} />
+          </motion.div>
+        </motion.div>
       )}
     </Modal>
   );
@@ -100,16 +118,25 @@ function TopStrip({ d }: { d: Drill }) {
   if (!d.today) return null;
   const devTone = d.today.deviation > 0 ? 'bear' : d.today.deviation < 0 ? 'bull' : 'neut';
   return (
-    <div className="grid grid-cols-4 gap-3 mb-4">
-      <Stat label="Today actual" value={`$${d.today.actual.toFixed(2)}`} />
-      <Stat label="Today fair"   value={`$${d.today.fair.toFixed(2)}`} tone="gold" />
-      <Stat label="Deviation"
-            value={`${d.today.deviation >= 0 ? '+' : ''}$${d.today.deviation.toFixed(2)}`}
-            tone={devTone as any} />
-      <Stat label="In-sample R²"
-            value={d.in_sample_r2 !== undefined ? d.in_sample_r2.toFixed(2) : '—'}
-            sub={`${d.n_points ?? 0} pts in regime`} />
-    </div>
+    <motion.div
+      variants={staggerTight}
+      initial="hidden"
+      animate="show"
+      className="grid grid-cols-4 gap-3 mb-4"
+    >
+      {[
+        <Stat label="Today actual" value={`$${d.today.actual.toFixed(2)}`} />,
+        <Stat label="Today fair"   value={`$${d.today.fair.toFixed(2)}`} tone="gold" />,
+        <Stat label="Deviation"
+              value={`${d.today.deviation >= 0 ? '+' : ''}$${d.today.deviation.toFixed(2)}`}
+              tone={devTone as any} />,
+        <Stat label="In-sample R²"
+              value={d.in_sample_r2 !== undefined ? d.in_sample_r2.toFixed(2) : '—'}
+              sub={`${d.n_points ?? 0} pts in regime`} />,
+      ].map((node, i) => (
+        <motion.div key={i} variants={scaleIn}>{node}</motion.div>
+      ))}
+    </motion.div>
   );
 }
 
@@ -119,13 +146,11 @@ function ScatterPlot({ d }: { d: Drill }) {
   const pts = d.scatter ?? [];
   const today = d.today;
 
-  const { minV, maxV, plot } = useMemo(() => {
-    if (!pts.length) return { minV: 0, maxV: 1, plot: '' };
+  const { minV, maxV } = useMemo(() => {
+    if (!pts.length) return { minV: 0, maxV: 1 };
     const xs = pts.map(p => p.fair).concat(today ? [today.fair] : []);
     const ys = pts.map(p => p.actual).concat(today ? [today.actual] : []);
-    const minV = Math.min(...xs, ...ys);
-    const maxV = Math.max(...xs, ...ys);
-    return { minV, maxV, plot: '' };
+    return { minV: Math.min(...xs, ...ys), maxV: Math.max(...xs, ...ys) };
   }, [pts, today]);
 
   if (!pts.length) return null;
@@ -157,24 +182,42 @@ function ScatterPlot({ d }: { d: Drill }) {
           </span>
         </div>
       </div>
-      <div className="border border-border/40 bg-bg-card/30 rounded p-3">
+      <div className="border border-border/40 bg-bg-card/30 rounded p-3 overflow-hidden">
         <svg viewBox="0 0 100 100" className="w-full h-[320px]" preserveAspectRatio="none">
-          {/* identity line */}
-          <line x1={idA.x} y1={idA.y} x2={idB.x} y2={idB.y}
-                stroke="#5a6781" strokeWidth="0.3" strokeDasharray="1 1" />
           {/* axes */}
           <line x1={PAD} y1={H - PAD} x2={W - PAD} y2={H - PAD} stroke="#2a3a5e" strokeWidth="0.2" />
           <line x1={PAD} y1={PAD}     x2={PAD}     y2={H - PAD} stroke="#2a3a5e" strokeWidth="0.2" />
-          {/* history points */}
-          {pts.map((p, i) => (
-            <circle key={i}
-                    cx={scale(p.fair)} cy={ySvg(p.actual)}
-                    r={0.5}
-                    fill="rgba(180,196,224,0.55)" />
-          ))}
-          {/* today's point */}
+          {/* identity line — draw in */}
+          <motion.line
+            x1={idA.x} y1={idA.y} x2={idB.x} y2={idB.y}
+            stroke="#5a6781" strokeWidth="0.3" strokeDasharray="1 1"
+            initial={{ pathLength: 0, opacity: 0 }}
+            animate={{ pathLength: 1, opacity: 1 }}
+            transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: 0.05 }}
+          />
+          {/* history points — fade in as a cloud */}
+          <motion.g
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.5, delay: 0.25 }}
+          >
+            {pts.map((p, i) => (
+              <circle key={i}
+                      cx={scale(p.fair)} cy={ySvg(p.actual)}
+                      r={0.5}
+                      fill="rgba(180,196,224,0.55)" />
+            ))}
+          </motion.g>
+          {/* today's point — pop in last */}
           {today && (
-            <>
+            <motion.g
+              initial={{ opacity: 0, scale: 0.4 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1], delay: 0.55 }}
+              style={{ transformOrigin: `${scale(today.fair)}px ${ySvg(today.actual)}px` }}
+            >
+              <circle cx={scale(today.fair)} cy={ySvg(today.actual)}
+                      r={2.4} fill="#d4af37" opacity="0.18" />
               <circle cx={scale(today.fair)} cy={ySvg(today.actual)}
                       r={1.6} fill="#d4af37" stroke="#fff" strokeWidth="0.3" />
               {/* faint crosshair lines from axes to today */}
@@ -182,7 +225,7 @@ function ScatterPlot({ d }: { d: Drill }) {
                     stroke="#d4af37" strokeWidth="0.15" strokeDasharray="0.6 0.6" />
               <line x1={PAD} y1={ySvg(today.actual)} x2={scale(today.fair)} y2={ySvg(today.actual)}
                     stroke="#d4af37" strokeWidth="0.15" strokeDasharray="0.6 0.6" />
-            </>
+            </motion.g>
           )}
           {/* axis labels */}
           <text x={W/2} y={H - 1} fontSize="2.4" fill="#7a89a8" textAnchor="middle" fontFamily="monospace">
@@ -237,13 +280,17 @@ function AnalogsTable({ d }: { d: Drill }) {
               <th className="text-left pl-4">Closest features</th>
             </tr>
           </thead>
-          <tbody>
+          <motion.tbody variants={staggerTight} initial="hidden" animate="show">
             {rows.map(a => {
               const change = a.forward_change;
               const sign = change === null ? 'text-text-muted'
                           : change > 0 ? 'text-bull' : change < 0 ? 'text-bear' : 'text-text-secondary';
               return (
-                <tr key={a.rank} className="border-b border-border/30 align-top">
+                <motion.tr
+                  key={a.rank}
+                  variants={fadeUp}
+                  className="border-b border-border/30 align-top hover:bg-bg-hover/30 transition-colors"
+                >
                   <td className="py-2 text-gold font-bold">#{a.rank}</td>
                   <td className="text-text-primary">{a.date}</td>
                   <td className="text-right text-text-secondary">{a.distance.toFixed(2)}</td>
@@ -267,10 +314,10 @@ function AnalogsTable({ d }: { d: Drill }) {
                       ))}
                     </div>
                   </td>
-                </tr>
+                </motion.tr>
               );
             })}
-          </tbody>
+          </motion.tbody>
         </table>
       </div>
       <div className="mt-3 text-[10px] font-mono text-text-muted">
