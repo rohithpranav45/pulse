@@ -72,24 +72,30 @@ export default function App() {
       <div className="flex flex-1 min-h-0">
         <Sidebar active={view} onSelect={setView} />
         <main className="flex-1 overflow-y-auto overflow-x-hidden bg-grid-faint" style={{ backgroundSize: '32px 32px' }}>
-          {/* View header */}
-          <div className="px-6 pt-5 pb-3 flex items-baseline justify-between border-b border-border/40 sticky top-0 bg-bg/85 backdrop-blur-md z-10">
-            <div className="flex items-baseline gap-3">
+          {/* View header — bigger display heading, hairline gold rule */}
+          <div className="relative px-7 pt-6 pb-4 flex items-baseline justify-between sticky top-0 z-10 bg-bg/90 backdrop-blur-xl">
+            <div
+              aria-hidden
+              className="absolute bottom-0 left-0 right-0 h-px pointer-events-none"
+              style={{ background: 'linear-gradient(90deg, transparent, rgba(212,175,55,0.32) 12%, rgba(255,255,255,0.05) 50%, rgba(212,175,55,0.32) 88%, transparent)' }}
+            />
+            <div className="flex items-baseline gap-4">
               <motion.h1
                 key={activeLabel}
                 initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-                className="font-display font-extrabold text-2xl tracking-[0.16em] uppercase"
+                transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+                className="font-display font-black text-[28px] leading-none tracking-[0.22em] uppercase text-text-primary"
+                style={{ textShadow: '0 0 24px rgba(212,175,55,0.08)' }}
               >
                 {activeLabel}
               </motion.h1>
-              <span className="text-[10px] font-mono text-text-muted uppercase tracking-widest">
-                {loading && !all ? 'initializing data layer…' : `${Object.keys(all ?? {}).length} streams active`}
+              <span className="text-[10px] font-mono text-text-muted uppercase tracking-[0.24em]">
+                {loading && !all ? 'initializing data layer…' : `${Object.keys(all ?? {}).length} streams · live`}
               </span>
             </div>
-            <div className="text-[10px] font-mono text-text-tertiary tabular">
-              {lastUpdated ? new Date(lastUpdated).toLocaleTimeString('en-US', { hour12: false }) : ''}
+            <div className="text-[10px] font-mono text-text-tertiary tabular tracking-wider">
+              {lastUpdated ? `LAST UPDATE  ${new Date(lastUpdated).toLocaleTimeString('en-US', { hour12: false })}` : ''}
             </div>
           </div>
 

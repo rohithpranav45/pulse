@@ -37,11 +37,11 @@ export function Panel({
   staticMount,
 }: Props) {
   const accentColor = {
-    gold: 'rgba(212,175,55,0.45)',
-    bull: 'rgba(16,217,151,0.55)',
-    bear: 'rgba(255,77,109,0.55)',
-    neut: 'rgba(245,166,35,0.55)',
-    blue: 'rgba(77,142,255,0.55)',
+    gold: 'rgba(212,175,55,0.55)',
+    bull: 'rgba(16,217,151,0.65)',
+    bear: 'rgba(255,77,109,0.65)',
+    neut: 'rgba(245,166,35,0.65)',
+    blue: 'rgba(77,142,255,0.65)',
     none: 'transparent',
   }[accent];
 
@@ -56,13 +56,13 @@ export function Panel({
   return (
     <motion.section
       {...motionProps}
-      whileHover={{ y: -1, transition: { duration: 0.18, ease: [0.22, 1, 0.36, 1] } }}
       className={clsx('panel group', className)}
     >
+      {/* Single 1px accent stripe across the top — the only "decoration" */}
       <div
         aria-hidden
-        className="absolute inset-x-3 top-0 h-px pointer-events-none transition-opacity duration-300 group-hover:opacity-100 opacity-80"
-        style={{ background: `linear-gradient(90deg, transparent, ${accentColor}, transparent)` }}
+        className="absolute inset-x-0 top-0 h-px pointer-events-none"
+        style={{ background: `linear-gradient(90deg, transparent 8%, ${accentColor} 50%, transparent 92%)` }}
       />
       {(title || right || source) && (
         <div className="panel-hdr">
