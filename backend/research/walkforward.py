@@ -136,7 +136,12 @@ def _train_cells_through(
     Returns dict keyed by (spread, regime) → {pipe, q10, q50, q90, resid_std, winner, n_train}.
     Cells with n_train < MIN_SAMPLES are skipped.
     """
-    from research.models          import _fit_ridge, _fit_lasso, _fit_elastic, _fit_huber, _fit_quantile, _cv_r2, _TIEBREAK_RANK
+    from research.models          import (
+        _fit_ridge, _fit_lasso, _fit_elastic, _fit_huber,
+        _fit_xgb, _fit_lgbm, _fit_catboost,
+        _fit_quantile, _cv_r2, _TIEBREAK_RANK,
+        _HAS_XGB, _HAS_LGBM, _HAS_CATBOOST, _BOOSTER_MIN_ROWS,
+    )
     from research.features        import predictors_for
     from research.spread_universe import INSTRUMENTS
     from research.regimes         import REGIMES, REGIMES_POOLED
@@ -144,12 +149,26 @@ def _train_cells_through(
     regime_list = REGIMES_POOLED if regime_mode == "pooled" else REGIMES
     regime_col  = "regime_pooled" if regime_mode == "pooled" else "regime"
 
-    fitters = {
+    linear_fitters = {
         "Ridge":      _fit_ridge,
         "Lasso":      _fit_lasso,
         "ElasticNet": _fit_elastic,
         "Huber":      _fit_huber,
     }
+    # Phase 2.8.1: Booster competition runs only in pooled mode for walk-forward.
+    # Composite (27 cells × 10 refits = 270 cells/refit) blows up wall time and
+    # the Phase 2.6 gated blend only consumes pooled winners ∈ {Lasso, Huber}
+    # anyway — boosters in composite-mode walk-forward never feed the headline
+    # gated_blend Sharpe. The standalone composite training in models.py still
+    # competes all 7 candidates (that's the deployed model on /api/regime).
+    booster_fitters: dict = {}
+    if regime_mode == "pooled":
+        if _HAS_XGB:
+            booster_fitters["XGBoost"] = _fit_xgb
+        if _HAS_LGBM:
+            booster_fitters["LightGBM"] = _fit_lgbm
+        if _HAS_CATBOOST:
+            booster_fitters["CatBoost"] = _fit_catboost
 
     train_df = joined[joined.index <= cutoff]
     out: dict = {}
@@ -163,9 +182,12 @@ def _train_cells_through(
             X = sub[feat_cols].values
             y = sub[spread].values
 
+            cell_fitters = dict(linear_fitters)
+            if len(sub) >= _BOOSTER_MIN_ROWS:
+                cell_fitters.update(booster_fitters)
             scores: dict[str, float] = {}
             fitted: dict = {}
-            for name, fitter in fitters.items():
+            for name, fitter in cell_fitters.items():
                 try:
                     scores[name] = _cv_r2(fitter, X, y)
                     fitted[name] = fitter(X, y)

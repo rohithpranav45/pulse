@@ -73,8 +73,11 @@ type RankedOpp = {
   band_hit_rate: number | null;
   n_train: number;
   drivers: { feature: string; coef: number }[];
-  // Model competition
-  winner_model?: 'Ridge' | 'Lasso' | 'ElasticNet' | 'Huber' | 'Rolling252dZ';
+  // Model competition (Phase 2.8.1 — boosters added)
+  winner_model?:
+    | 'Ridge' | 'Lasso' | 'ElasticNet' | 'Huber'
+    | 'XGBoost' | 'LightGBM' | 'CatBoost'
+    | 'Rolling252dZ';
   active_features?: number | null;
   total_features?: number | null;
   competition?: Record<string, number | null>;
@@ -473,8 +476,14 @@ export function RegimePickCard() {
                 </div>
               </div>
               {top.competition && Object.keys(top.competition).length > 0 && (
-                <div className="grid grid-cols-4 gap-1.5 mb-2">
-                  {(['Ridge', 'Lasso', 'ElasticNet', 'Huber'] as const).map(name => {
+                <div className={clsx(
+                  'gap-1.5 mb-2 grid',
+                  Object.keys(top.competition).length > 4 ? 'grid-cols-4 md:grid-cols-7' : 'grid-cols-4',
+                )}>
+                  {(['Ridge', 'Lasso', 'ElasticNet', 'Huber',
+                     'XGBoost', 'LightGBM', 'CatBoost'] as const)
+                    .filter(name => top.competition && name in top.competition)
+                    .map(name => {
                     const score = top.competition?.[name];
                     const isWinner = name === top.winner_model;
                     const display = (score === null || score === undefined) ? '—' :

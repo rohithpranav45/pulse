@@ -536,7 +536,7 @@ def get_recommendation() -> dict:
         "n_universe":            len(INSTRUMENTS),
         "top":                   top,
         "ranked":                ranked,
-        "method":                f"Per-(spread, regime) winner model from {{Ridge/Lasso/ElasticNet/Huber}} competition; Quantile p10/p90 bands; trained ≤ 2026-03-31; {method_blurb}.",
+        "method":                f"Per-(spread, regime) winner from 7-model competition (Ridge/Lasso/ElasticNet/Huber/XGBoost/LightGBM/CatBoost — Phase 2.8.1); Quantile p10/p90 bands; trained ≤ 2026-03-31; {method_blurb}.",
         "timestamp":             datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
 

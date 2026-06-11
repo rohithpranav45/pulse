@@ -1,7 +1,7 @@
 """
 Train + persist per-(spread, regime) regression models.
 
-Per cell we compete FOUR candidate models and pick the winner empirically:
+Per cell we compete SEVEN candidate models and pick the winner empirically:
 
     Ridge        — shrinks all coefficients toward zero, keeps all features.
                    Strong with correlated commodity predictors.
@@ -10,10 +10,18 @@ Per cell we compete FOUR candidate models and pick the winner empirically:
     ElasticNet   — L1 + L2 blend. Best-of-both for mixed feature sets.
     Huber        — robust loss, down-weights outliers (good for regimes
                    containing COVID 2020 / Russia 2022 shocks).
+    XGBoost      — gradient boosting on decision trees. Captures non-linear
+                   interactions between features. Wins where linear leaves
+                   alpha on the table (Phase 2.8.1).
+    LightGBM     — leaf-wise gradient boosting. Faster than XGB, similar
+                   capacity. Wins on the same kinds of cells.
+    CatBoost     — ordered boosting + symmetric trees. More regularised
+                   than XGB/LGBM; usually safest on small samples.
 
 Selection criterion: mean R² across a 5-fold TimeSeriesSplit on the training
-data (chronology-respecting CV). Ties broken by simplicity (sparser model
-wins → ElasticNet > Lasso > Ridge > Huber).
+data (chronology-respecting CV). Ties broken by simplicity (boosters rank
+last so a tied linear model always wins — Phase 2.8.1 interpretability rule):
+  ElasticNet > Lasso > Ridge > Huber > XGBoost > LightGBM > CatBoost.
 
 For cells with held-out April-May test data, we ALSO report the final
 out-of-sample R² but do NOT use it for model selection (would leak the test
@@ -55,6 +63,24 @@ from sklearn.pipeline import Pipeline
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.metrics import r2_score
 
+# Phase 2.8.1 — gradient-boosting families. Imported lazily so a missing
+# install degrades gracefully (linear competition still works).
+try:
+    from xgboost import XGBRegressor                        # type: ignore
+    _HAS_XGB = True
+except Exception:                                            # pragma: no cover
+    _HAS_XGB = False
+try:
+    from lightgbm import LGBMRegressor                       # type: ignore
+    _HAS_LGBM = True
+except Exception:                                            # pragma: no cover
+    _HAS_LGBM = False
+try:
+    from catboost import CatBoostRegressor                   # type: ignore
+    _HAS_CATBOOST = True
+except Exception:                                            # pragma: no cover
+    _HAS_CATBOOST = False
+
 _BACKEND = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if _BACKEND not in sys.path:
     sys.path.insert(0, _BACKEND)
@@ -77,8 +103,55 @@ TEST_END   = "2026-05-31"
 MIN_SAMPLES = 30
 CV_SPLITS   = 5
 
-# Simplicity tiebreak — lower number wins when R² scores tie within 0.005
-_TIEBREAK_RANK = {"ElasticNet": 0, "Lasso": 1, "Ridge": 2, "Huber": 3}
+# Simplicity tiebreak — lower number wins when R² scores tie within 0.005.
+# Boosters sit at the bottom so linear models win ties (Phase 2.8.1
+# interpretability rule: prefer coefficients over trees when both fit).
+_TIEBREAK_RANK = {
+    "ElasticNet": 0,
+    "Lasso":      1,
+    "Ridge":      2,
+    "Huber":      3,
+    "XGBoost":    4,
+    "LightGBM":   5,
+    "CatBoost":   6,
+}
+
+# Phase 2.8.1 — booster hyperparameters tuned for small-sample regimes
+# (≥30 rows, up to ~2,000). Shallow trees + high regularisation + modest
+# tree counts so they don't simply memorise the training fold AND don't
+# blow up walk-forward refit time (10 refits × ~100 cells × 7 models × 6
+# CV+full fits each).
+_BOOSTER_RNG       = 42
+_BOOSTER_TREES     = 150        # ↓ from 400 — shallow boosters converge fast
+_BOOSTER_LR        = 0.05
+
+_XGB_KWARGS = dict(
+    n_estimators=_BOOSTER_TREES, learning_rate=_BOOSTER_LR, max_depth=3,
+    subsample=0.85, colsample_bytree=0.85,
+    reg_lambda=1.0, reg_alpha=0.1,
+    objective="reg:squarederror",
+    tree_method="hist", random_state=_BOOSTER_RNG, n_jobs=1,
+    verbosity=0,
+)
+_LGBM_KWARGS = dict(
+    n_estimators=_BOOSTER_TREES, learning_rate=_BOOSTER_LR, num_leaves=15,
+    max_depth=4, min_child_samples=10,
+    subsample=0.85, colsample_bytree=0.85,
+    reg_lambda=1.0, reg_alpha=0.1,
+    random_state=_BOOSTER_RNG, n_jobs=1, verbosity=-1,
+)
+_CATBOOST_KWARGS = dict(
+    iterations=_BOOSTER_TREES, learning_rate=_BOOSTER_LR, depth=4,
+    l2_leaf_reg=3.0, subsample=0.85,
+    bootstrap_type="Bernoulli",
+    random_seed=_BOOSTER_RNG, allow_writing_files=False, verbose=False,
+    thread_count=1,
+)
+
+# Cells smaller than this skip the booster fits entirely — small samples
+# can't reliably distinguish booster from linear via CV and the booster
+# fits dominate walk-forward refit time.
+_BOOSTER_MIN_ROWS = 80
 
 
 def _safe(name: str) -> str:
@@ -162,6 +235,44 @@ def _fit_huber(X: np.ndarray, y: np.ndarray) -> Pipeline:
     return pipe
 
 
+# ── Phase 2.8.1 booster fitters ──────────────────────────────────────────────
+# Trees don't need feature scaling, but we keep the StandardScaler in the
+# pipeline so the upstream `_extract_coefs` / `_active_features` helpers can
+# inspect named_steps["model"] consistently with the linear candidates.
+
+def _fit_xgb(X: np.ndarray, y: np.ndarray) -> Pipeline:
+    pipe = Pipeline([
+        ("scaler", StandardScaler()),
+        ("model",  XGBRegressor(**_XGB_KWARGS)),
+    ])
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        pipe.fit(X, y)
+    return pipe
+
+
+def _fit_lgbm(X: np.ndarray, y: np.ndarray) -> Pipeline:
+    pipe = Pipeline([
+        ("scaler", StandardScaler()),
+        ("model",  LGBMRegressor(**_LGBM_KWARGS)),
+    ])
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        pipe.fit(X, y)
+    return pipe
+
+
+def _fit_catboost(X: np.ndarray, y: np.ndarray) -> Pipeline:
+    pipe = Pipeline([
+        ("scaler", StandardScaler()),
+        ("model",  CatBoostRegressor(**_CATBOOST_KWARGS)),
+    ])
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        pipe.fit(X, y)
+    return pipe
+
+
 def _fit_quantile(X: np.ndarray, y: np.ndarray, q: float, alpha: float = 0.1) -> Pipeline:
     pipe = Pipeline([
         ("scaler", StandardScaler()),
@@ -209,25 +320,42 @@ def _r2(y_true: np.ndarray, y_pred: np.ndarray) -> float:
 
 
 def _extract_coefs(pipe: Pipeline, feat_cols: list[str]) -> list[dict]:
-    """Pull (feature, coef) pairs from a fitted pipeline, scaled-space."""
+    """
+    Pull (feature, coef) pairs from a fitted pipeline, scaled-space.
+    For tree models (boosters), use feature_importances_ as a 'coef' proxy
+    so the driver list stays informative even when the winner isn't linear.
+    """
     model = pipe.named_steps.get("model")
-    if model is None or not hasattr(model, "coef_"):
+    if model is None:
         return []
-    coefs = list(zip(feat_cols, model.coef_.tolist()))
-    coefs.sort(key=lambda kv: abs(kv[1]), reverse=True)
-    return [{"feature": f, "coef": round(c, 4)} for f, c in coefs]
+    if hasattr(model, "coef_"):
+        coefs = list(zip(feat_cols, model.coef_.tolist()))
+        coefs.sort(key=lambda kv: abs(kv[1]), reverse=True)
+        return [{"feature": f, "coef": round(c, 4)} for f, c in coefs]
+    if hasattr(model, "feature_importances_"):
+        imps = list(zip(feat_cols, [float(v) for v in model.feature_importances_]))
+        imps.sort(key=lambda kv: abs(kv[1]), reverse=True)
+        return [{"feature": f, "coef": round(c, 4)} for f, c in imps]
+    return []
 
 
 def _active_features(pipe: Pipeline, feat_cols: list[str], tol: float = 1e-6) -> int:
-    """Count of features with non-zero coefficient (post-scaling)."""
+    """
+    Count of features the model actually relies on.
+    Linear: non-zero coefficients. Trees: features with importance > tol.
+    """
     model = pipe.named_steps.get("model")
-    if model is None or not hasattr(model, "coef_"):
+    if model is None:
         return len(feat_cols)
-    return int(np.sum(np.abs(model.coef_) > tol))
+    if hasattr(model, "coef_"):
+        return int(np.sum(np.abs(model.coef_) > tol))
+    if hasattr(model, "feature_importances_"):
+        return int(np.sum(np.asarray(model.feature_importances_) > tol))
+    return len(feat_cols)
 
 
 def _candidate_alpha(pipe: Pipeline) -> float | None:
-    """Pull the chosen α (regularization) from CV-tuned models."""
+    """Pull the chosen α (regularization) from CV-tuned linear models."""
     m = pipe.named_steps.get("model")
     return float(getattr(m, "alpha_", None)) if m and hasattr(m, "alpha_") else None
 
@@ -281,17 +409,24 @@ def train_all(regime_mode: str = "composite") -> dict:
         "test_end":    TEST_END,
         "n_train":     int(len(train)),
         "n_test":      int(len(test)),
-        "method":      "Per-cell: Ridge / Lasso / ElasticNet / Huber competed via 5-fold TimeSeriesSplit CV. Winner = max mean CV R² (sparsity tiebreak). Quantile p10/p50/p90 fit separately for confidence bands.",
-        "candidates":  ["Ridge", "Lasso", "ElasticNet", "Huber"],
+        "method":      "Per-cell: Ridge / Lasso / ElasticNet / Huber / XGBoost / LightGBM / CatBoost competed via 5-fold TimeSeriesSplit CV. Winner = max mean CV R² (Phase 2.8.1 tiebreak: linear preferred when CV scores tie within 0.005, then boosters by listed order). Quantile p10/p50/p90 fit separately for confidence bands.",
+        "candidates":  ["Ridge", "Lasso", "ElasticNet", "Huber", "XGBoost", "LightGBM", "CatBoost"],
         "cells":       {},
     }
 
-    fitters = {
+    linear_fitters: dict[str, callable] = {
         "Ridge":      _fit_ridge,
         "Lasso":      _fit_lasso,
         "ElasticNet": _fit_elastic,
         "Huber":      _fit_huber,
     }
+    booster_fitters: dict[str, callable] = {}
+    if _HAS_XGB:
+        booster_fitters["XGBoost"] = _fit_xgb
+    if _HAS_LGBM:
+        booster_fitters["LightGBM"] = _fit_lgbm
+    if _HAS_CATBOOST:
+        booster_fitters["CatBoost"] = _fit_catboost
 
     for spread in INSTRUMENTS:
         feat_cols = predictors_for(spread)
@@ -316,9 +451,15 @@ def train_all(regime_mode: str = "composite") -> dict:
             y_tr = sub_train[spread].values
 
             # ── Competition: CV R² per candidate ─────────────────────────
+            # Boosters only compete when the cell has enough rows (small-n
+            # cells can't reliably distinguish tree from linear via CV and
+            # the booster fits dominate refit time).
+            cell_fitters = dict(linear_fitters)
+            if len(sub_train) >= _BOOSTER_MIN_ROWS:
+                cell_fitters.update(booster_fitters)
             cv_scores: dict[str, float] = {}
             fitted: dict[str, Pipeline] = {}
-            for name, fitter in fitters.items():
+            for name, fitter in cell_fitters.items():
                 try:
                     cv_scores[name] = _cv_r2(fitter, X_tr, y_tr)
                     # Also fit on full training data for the persisted model
@@ -462,11 +603,11 @@ if __name__ == "__main__":
                         help="Regime mode (composite=27 cells, pooled=3 curve-axis cells)")
     args = parser.parse_args()
 
-    print(f"Training all cells with 4-model competition + sparsity tiebreak [mode={args.mode}]...\n")
+    print(f"Training all cells with 7-model competition + sparsity tiebreak [mode={args.mode}]...\n")
     report = train_all(regime_mode=args.mode)
-    print(f"\n=== TRAINING REPORT — winner per cell (mode={args.mode}) ===")
-    print(f"Train ≤ {report['train_end']} ({report['n_train']} rows)")
-    print(f"Test  {report['test_start']} → {report['test_end']} ({report['n_test']} rows)")
+    print(f"\n=== TRAINING REPORT - winner per cell (mode={args.mode}) ===")
+    print(f"Train <= {report['train_end']} ({report['n_train']} rows)")
+    print(f"Test  {report['test_start']} -> {report['test_end']} ({report['n_test']} rows)")
     print(f"Method: {report['method']}\n")
     hdr = f"  {'cell':<55} {'winner':<11} {'#f':>3}  {'r2_in':>6}  {'r2_oos':>6}  {'band%':>5}"
     print(hdr); print("-" * len(hdr))
@@ -482,12 +623,22 @@ if __name__ == "__main__":
               f"{(r2_oos if r2_oos is not None else 0.0):>6.3f}  "
               f"{(band*100 if band is not None else 0.0):>5.1f}")
     # Per-cell competition table
+    cand_order = report.get("candidates", ["Ridge","Lasso","ElasticNet","Huber"])
     print("\n=== Per-cell CV R² competition ===")
     for key, cell in report["cells"].items():
         if cell.get("skipped"): continue
         comp = cell.get("competition", {})
-        bits = [f"{n}={comp[n]:+.3f}" if comp.get(n) is not None else f"{n}=NaN" for n in ("Ridge","Lasso","ElasticNet","Huber")]
-        marker = ""
-        for n in ("Ridge","Lasso","ElasticNet","Huber"):
-            if n == cell["winner"]: marker = f" ← {n}"
+        bits = [f"{n}={comp[n]:+.3f}" if comp.get(n) is not None else f"{n}=NaN" for n in cand_order]
+        marker = f"  <- WINNER: {cell['winner']}"
         print(f"  {key:<55} {' '.join(bits)}{marker}")
+
+    # Winner distribution rollup
+    win_counts: dict[str, int] = {}
+    for cell in report["cells"].values():
+        if cell.get("skipped"): continue
+        w = cell.get("winner")
+        if w:
+            win_counts[w] = win_counts.get(w, 0) + 1
+    print("\n=== Winner distribution ===")
+    for w, n in sorted(win_counts.items(), key=lambda kv: -kv[1]):
+        print(f"  {w:<12} {n:>4}")
