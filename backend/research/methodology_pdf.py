@@ -181,35 +181,58 @@ def build_pdf(out_path: Path = _OUT_PDF) -> Path:
             body,
         ),
 
-        Paragraph("4. Feature set", h2),
+        Paragraph("4. Feature set (Phase 2.8.2 expansion)", h2),
         Paragraph(
-            "11 Brent features &mdash; M1-M12 + its square, Brent close, 5d "
-            "return, 20d realised vol, inventory vs 5y seasonal, sin/cos of "
-            "day-of-year, and three lag-1 spread terms. WTI cells append "
-            "5 more (WTI M1-M12, close, 3 lag-1 spreads). The target spread's "
-            "own lag is removed to avoid self-leakage.",
+            "<b>20 Brent features</b> per cell (was 11): "
+            "<i>Curve shape</i> &mdash; M1-M12, its square, and <b>curvature</b> "
+            "(M1 &minus; 2&times;M6 + M12) for fly-specific information. "
+            "<i>Front state</i> &mdash; Brent close + 5d return + 20d realised vol. "
+            "<i>Inventory</i> &mdash; US crude vs 5y seasonal AND <b>inventory "
+            "surprise</b> (weekly &Delta; minus its 4-week MA). "
+            "<i>Seasonality</i> &mdash; sin/cos of day-of-year. "
+            "<i>Lagged spreads</i> &mdash; M1-M2 / M3-M6 / fly lag-1.",
+            body,
+        ),
+        Paragraph(
+            "<b>Phase 2.8.2 alpha features</b> (new) &mdash; <b>COT managed-money "
+            "percentile</b> (rolling 156-week, contrarian crowding), <b>3-2-1 "
+            "crack</b> + <b>gasoline crack</b> (refining-margin pressure on the "
+            "front), <b>WTI-Brent spread</b> (Atlantic-basin arb), <b>real rate</b> "
+            "(DGS10 &minus; 5y TIPS breakeven; storage-cost driver), <b>OVX/VIX "
+            "ratio</b> (crude vs equity vol risk-premium), and <b>days to "
+            "front-month expiry</b>. WTI cells append 5 more (WTI close, M1-M12, "
+            "3 lag-1 spreads). The target spread's own lag is removed to "
+            "avoid self-leakage.",
             body,
         ),
 
         Paragraph("5. Per-cell model competition", h2),
         Paragraph(
             "We <i>do not</i> pick a single regression family a priori. For "
-            "each (spread, regime) cell, four candidates compete on 5-fold "
-            "TimeSeriesSplit cross-validated R²:",
+            "each (spread, regime) cell, <b>seven candidates</b> compete on 5-fold "
+            "TimeSeriesSplit cross-validated R² (Phase 2.8.1 expansion):",
             body,
         ),
         Paragraph(
-            "<b>Ridge</b> — shrinks all coefficients (good when predictors are "
-            "correlated). <b>Lasso</b> — zeroes out noise features (good when "
-            "3-4 signals dominate). <b>ElasticNet</b> — L1+L2 blend (mixed "
-            "correlation patterns). <b>Huber</b> — robust loss (regimes "
-            "containing COVID-2020 / Russia-2022 outliers).",
+            "<b>Linear:</b> Ridge (shrinks coefficients — good with correlated "
+            "predictors), Lasso (zeroes out noise features — good when 3-4 "
+            "signals dominate), ElasticNet (L1+L2 blend — mixed correlation), "
+            "Huber (robust loss — COVID-2020 / Russia-2022 outliers).",
             body,
         ),
         Paragraph(
-            "Winner = max mean CV R², simplicity tiebreak within 0.005 "
-            "(ElasticNet &gt; Lasso &gt; Ridge &gt; Huber). Quantile regressors "
-            "(p10/p50/p90) are fit separately for the 80% confidence band.",
+            "<b>Gradient boosting (Phase 2.8.1):</b> XGBoost, LightGBM, "
+            "CatBoost — shallow trees with strong regularisation that capture "
+            "non-linear interactions between features. Win in cells where "
+            "linear leaves alpha on the table.",
+            body,
+        ),
+        Paragraph(
+            "Winner = max mean CV R², simplicity tiebreak within 0.005: linear "
+            "families rank above boosters (ElasticNet &gt; Lasso &gt; Ridge &gt; "
+            "Huber &gt; XGBoost &gt; LightGBM &gt; CatBoost), so interpretability "
+            "wins when CV scores are close. Quantile regressors (p10/p50/p90) "
+            "are fit separately for the 80% confidence band.",
             body,
         ),
 
@@ -274,6 +297,29 @@ def build_pdf(out_path: Path = _OUT_PDF) -> Path:
             "schedule is expanding-window so the per-spread sample grows over "
             "time. Live inference reads the per-spread Kelly at the latest "
             "refit boundary from <code>sized_blend_summary.kelly_per_spread_latest</code>.",
+            body,
+        ),
+
+        Paragraph("10. Phase 2.8 &mdash; real model + real features", h2),
+        Paragraph(
+            "Phase 2.8.1 adds <b>XGBoost / LightGBM / CatBoost</b> to the per-cell "
+            "competition so cells with non-linear interactions aren't forced to "
+            "fit a linear model. Boosters fit only on cells with &ge;80 train "
+            "rows (smaller samples can't reliably distinguish trees from linears "
+            "via CV); shallow trees (depth 3-4) and low learning rate (0.05) "
+            "keep them from memorising. Boosters rank below linears in the "
+            "tiebreak so interpretability still wins on ties.",
+            body,
+        ),
+        Paragraph(
+            "Phase 2.8.2 nearly <b>doubles the feature set</b> (11 &rarr; 20 "
+            "Brent features) with the alpha-bearing predictors documented in "
+            "&sect;4: COT crowding, inventory surprise, curvature, refining "
+            "cracks, real rate, OVX/VIX ratio, WTI-Brent arb, days-to-expiry. "
+            "The aim is to give every model family &mdash; linear and tree "
+            "&mdash; a richer set of predictors so the gated-blend Sharpe lifts "
+            "by tightening the pooled BACK fair-value estimates the gate rule "
+            "relies on.",
             body,
         ),
 
