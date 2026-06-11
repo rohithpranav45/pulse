@@ -109,7 +109,14 @@ REFIT_DATES  = [
 # regime-unaware 252d rolling z-score baseline. Surfaces both in the walk-forward
 # (a third leg) and at inference time (live_ranker honours PULSE_GATED_BLEND=1).
 GATED_REGIME       = "BACK"
-GATED_WINNERS      = {"Lasso", "Huber"}
+# Phase 2.8.3 — widened to include the 3 Phase 2.8.1 boosters. The Phase 2.6
+# narrow gate {Lasso, Huber} was correct for the 11-feature Phase 2.5 universe,
+# but the Phase 2.8.1 7-model competition + Phase 2.8.2 22-feature set lets
+# boosters win BACK cells with stronger pooled walk-forward Sharpe (LGBM +1.294
+# / CatBoost +1.248 / XGB +0.853) than gate-eligible Huber +1.107 or Lasso
+# +0.781. Excluding them concentrated surviving fires on a weaker slice and
+# dropped gated Sharpe +0.456 → +0.389 between Phase 2.7 and 2.8.2.
+GATED_WINNERS      = {"Lasso", "Huber", "XGBoost", "LightGBM", "CatBoost"}
 GATED_Z_THRESHOLD  = Z_ENTRY    # |z| ≥ 0.5σ
 
 # Phase 2.7 — position sizing for the regime leg of the gated blend. The brief:

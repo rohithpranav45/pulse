@@ -61,7 +61,11 @@ def _active_mode() -> str:
 # Mirrors backend.research.walkforward._pooled_passes_gate so the rule
 # evaluated in walk-forward is bit-for-bit the rule served live.
 GATED_REGIME      = "BACK"
-GATED_WINNERS     = {"Lasso", "Huber"}
+# Phase 2.8.3 — mirrors walkforward.GATED_WINNERS (kept in lockstep per
+# gotcha 26). Widened from {Lasso, Huber} to include the 3 Phase 2.8.1
+# boosters whose pooled BACK-cell Sharpe beats the linear gate-eligible
+# winners under the Phase 2.8.2 22-feature universe.
+GATED_WINNERS     = {"Lasso", "Huber", "XGBoost", "LightGBM", "CatBoost"}
 GATED_Z_THRESHOLD = 0.5
 ROLLING_WIN       = 252  # baseline z-score window
 
