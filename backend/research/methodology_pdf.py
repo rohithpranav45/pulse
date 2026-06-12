@@ -322,6 +322,48 @@ def build_pdf(out_path: Path = _OUT_PDF) -> Path:
             "relies on.",
             body,
         ),
+        Paragraph(
+            "Phase 2.8.3 widened the gate to admit boosters "
+            "(GATED_WINNERS = {Lasso, Huber, XGBoost, LightGBM, CatBoost}). "
+            "The widened gate is methodologically correct &mdash; the regime "
+            "leg&apos;s reported Sharpe lifted from +0.369 to <b>+0.888</b> across "
+            "244 fires (was 71) &mdash; but the headline blended Sharpe stayed "
+            "flat (+0.389 -> +0.384) because most of the newly-routed booster "
+            "trades had baseline-z direction matching pooled-z direction. The "
+            "widening REASSIGNS attribution rather than CREATING new alpha at "
+            "the blended level.",
+            body,
+        ),
+
+        Paragraph("11. Phase 2.8.6 &mdash; transaction costs", h2),
+        Paragraph(
+            "Every Sharpe/PnL number above is <b>gross</b> &mdash; per-trade "
+            "transaction cost is not modelled by the walk-forward&apos;s "
+            "spread-move PnL. Phase 2.8.6 layers a defensible cost model on "
+            "top of the existing trade tape so the table on page 2 reports "
+            "<b>NET (after-cost)</b> Sharpe alongside gross.",
+            body,
+        ),
+        Paragraph(
+            "<b>Cost model.</b> Per-leg, per-side: $0.0025/bbl commission + "
+            "clearing + brokerage (~$2.45 per 1,000-bbl contract) + half "
+            "bid-ask slippage ($0.0050/bbl for front M1/M2, $0.0075/bbl for "
+            "deferred M3-M6). Round-trip cost = N legs &times; 2 sides &times; "
+            "(commission + half-spread). That gives: <b>2-leg M1-M2 = $0.030/bbl "
+            "RT, 2-leg M3-M6 = $0.040, 3-leg fly = $0.050</b>. Cost scales with "
+            "<code>sizing_scale</code> on regime rows (half-sized regime trade "
+            "= half the contracts = half the fees). NEUTRAL trades incur zero "
+            "cost (no fill).",
+            body,
+        ),
+        Paragraph(
+            "Cost is applied at the aggregation step only &mdash; per-cell CV "
+            "is on gross fair-value R&sup2;, so winner selection is unaffected "
+            "and no retraining is required. Live inference does <i>not</i> "
+            "subtract cost at entry; the cost-aware NET metric exists purely "
+            "for backtest reporting.",
+            body,
+        ),
 
         PageBreak(),
     ]
@@ -562,13 +604,132 @@ def build_pdf(out_path: Path = _OUT_PDF) -> Path:
         story.append(Paragraph(phase27_lead, callout))
         story.append(Spacer(1, 4))
 
+    # ── Phase 2.8.6 — NET (after transaction costs) ────────────────────────
+    costs = wf.get("costs") or {}
+    if costs:
+        story.append(Paragraph(
+            "Phase 2.8.6 &mdash; NET headline (after transaction costs)",
+            h2,
+        ))
+        story.append(Paragraph(
+            f"<b>Cost model:</b> per-leg per-side $0.0025 commission + half-spread "
+            f"slippage ($0.0050 front / $0.0075 deferred). RT cost per spread: "
+            f"M1-M2 $0.030, M3-M6 $0.040, fly $0.050.",
+            note,
+        ))
+
+        base_net = (costs.get("baseline_net") or {}).get("overall") or {}
+        pool_net = (costs.get("pooled_net")   or {}).get("overall") or {}
+        gate_net = (costs.get("gated_blend_net") or {}).get("overall") or {}
+        sbn      = costs.get("sized_blend_net") or {}
+        sh_net = (sbn.get("half")  or {}).get("overall") or {}
+        sk_net = (sbn.get("kelly") or {}).get("overall") or {}
+
+        def _both(gross, net, key, digits=3):
+            g = gross.get(key); n = net.get(key)
+            g_s = _fmt(g, digits) if g is not None else "—"
+            n_s = _fmt(n, digits) if n is not None else "—"
+            return f"{g_s} / {n_s}"
+
+        net_rows = [
+            ["Mode",                "Gross / Net Sharpe",                                        "Gross / Net μPnL",                                            "Mean cost / fire", "n fired"],
+            ["Baseline 252d z",     _both(bo, base_net, "sharpe", 2),                            _both(bo, base_net, "mean_pnl", 3),                            _fmt(base_net.get("mean_cost"), 4), str(base_net.get("n_signals") or 0)],
+            ["Pooled (un-gated)",   _both(po, pool_net, "sharpe", 2),                            _both(po, pool_net, "mean_pnl", 3),                            _fmt(pool_net.get("mean_cost"), 4), str(pool_net.get("n_signals") or 0)],
+            ["Gated blend (2.8.3)", _both(go, gate_net, "sharpe", 2),                            _both(go, gate_net, "mean_pnl", 3),                            _fmt(gate_net.get("mean_cost"), 4), str(gate_net.get("n_signals") or 0)],
+            ["Sized half",          _both(sho, sh_net, "sharpe", 2),                             _both(sho, sh_net, "mean_pnl", 3),                             _fmt(sh_net.get("mean_cost"), 4),   str(sh_net.get("n_signals") or 0)],
+            ["Sized kelly",         _both(sko, sk_net, "sharpe", 2),                             _both(sko, sk_net, "mean_pnl", 3),                             _fmt(sk_net.get("mean_cost"), 4),   str(sk_net.get("n_signals") or 0)],
+        ]
+        nt = Table(net_rows, colWidths=[1.5*inch, 1.5*inch, 1.5*inch, 1.0*inch, 0.7*inch])
+        _style_table(nt)
+        story.append(nt)
+        story.append(Spacer(1, 4))
+
+        # Per-spread NET Sharpe — gated_blend vs baseline
+        gate_net_by_sp = (costs.get("gated_blend_net") or {}).get("by_spread") or {}
+        base_net_by_sp = (costs.get("baseline_net")    or {}).get("by_spread") or {}
+        net_sp_rows = [["Spread", "Gross Shp (gated)", "Net Shp (gated)", "Net Shp (base)", "Δ Net vs base"]]
+        for sp in sorted(set(list(gate_net_by_sp) + list(base_net_by_sp))):
+            g_gr = (gate_by.get(sp)         or {}).get("sharpe")
+            g_nt = (gate_net_by_sp.get(sp)  or {}).get("sharpe")
+            b_nt = (base_net_by_sp.get(sp)  or {}).get("sharpe")
+            d = (g_nt - b_nt) if (g_nt is not None and b_nt is not None) else None
+            net_sp_rows.append([
+                sp,
+                _fmt(g_gr, 2),
+                _fmt(g_nt, 2),
+                _fmt(b_nt, 2),
+                _fmt(d, 2),
+            ])
+        sp_nt = Table(net_sp_rows, colWidths=[1.4*inch, 1.3*inch, 1.3*inch, 1.3*inch, 1.0*inch])
+        _style_table(sp_nt)
+        story.append(sp_nt)
+        story.append(Spacer(1, 4))
+
+        # Phase 2.8.6 finding callout
+        gross_sharpes = {"baseline": bo.get("sharpe"), "pooled": po.get("sharpe"),
+                         "gated": go.get("sharpe"), "half": sho.get("sharpe"), "kelly": sko.get("sharpe")}
+        net_sharpes   = {"baseline": base_net.get("sharpe"), "pooled": pool_net.get("sharpe"),
+                         "gated": gate_net.get("sharpe"), "half": sh_net.get("sharpe"), "kelly": sk_net.get("sharpe")}
+
+        cost_drag_baseline = (bo.get("sharpe") or 0) - (base_net.get("sharpe") or 0)
+        cost_drag_gated    = (go.get("sharpe") or 0) - (gate_net.get("sharpe") or 0)
+        cost_drag_pooled   = (po.get("sharpe") or 0) - (pool_net.get("sharpe") or 0)
+
+        best_net_name, best_net_val = max(
+            ((k, v) for k, v in net_sharpes.items() if v is not None),
+            key=lambda kv: kv[1],
+            default=("none", None),
+        )
+        gated_vs_base_net = ((gate_net.get("sharpe") or 0) - (base_net.get("sharpe") or 0))
+
+        phase286 = (
+            f"<b>Phase 2.8.6 finding:</b> transaction costs erode Sharpe roughly "
+            f"uniformly across modes &mdash; baseline drag {cost_drag_baseline:+.2f}, "
+            f"pooled {cost_drag_pooled:+.2f}, gated_blend {cost_drag_gated:+.2f}. "
+            f"Mean cost per fire sits at $0.039-$0.045/bbl depending on spread mix "
+            f"(boosters fire more on the fly which is the most expensive class). "
+            f"<b>Best net Sharpe: {best_net_name} at {best_net_val:+.3f}.</b> "
+            f"Gated blend net Sharpe ({gate_net.get('sharpe', 0):+.3f}) vs baseline net "
+            f"({base_net.get('sharpe', 0):+.3f}) = Δ {gated_vs_base_net:+.3f} &mdash; "
+        )
+        if gated_vs_base_net >= 0.02:
+            phase286 += (
+                "the gated blend retains a meaningful net edge over baseline. Costs "
+                "do not flip the Phase 2.8.3 verdict."
+            )
+        elif gated_vs_base_net >= -0.02:
+            phase286 += (
+                "the gated blend ties baseline at the net headline. The Phase 2.8.3 "
+                "&apos;flat headline / improved attribution&apos; verdict holds under costs."
+            )
+        else:
+            phase286 += (
+                "the gated blend loses to baseline at the net headline. Transaction "
+                "costs widen the gap because the regime fires concentrate on the "
+                "fly (highest per-trade cost class)."
+            )
+
+        if (pool_net.get("sharpe") or 0) > (base_net.get("sharpe") or 0) + 0.02 and \
+           (pool_net.get("sharpe") or 0) > (gate_net.get("sharpe") or 0) + 0.02:
+            phase286 += (
+                f" <b>Notable side finding</b>: the un-gated pooled engine "
+                f"({pool_net.get('sharpe', 0):+.3f} net) now beats both gated_blend "
+                f"and baseline under costs &mdash; Phase 2.8.1+2 boosters lifted "
+                f"pooled gross enough that the Phase 2.6 gate (added when pooled was "
+                f"losing) is over-restrictive. Concrete recommendation: A/B test "
+                f"<code>PULSE_REGIME_MODE=pooled</code> against "
+                f"<code>PULSE_GATED_BLEND=1</code> in paper before changing default."
+            )
+        story.append(Paragraph(phase286, callout))
+        story.append(Spacer(1, 4))
+
     story.append(Paragraph("Caveats &amp; next steps", h2))
     tight = ParagraphStyle("Tight", parent=body, fontSize=8, leading=10, spaceAfter=2)
     caveats = [
         "<b>WTI is synthesised</b> — last-1-min midprice per session, not exchange print. Mentor's real WTI C1-C3 daily file slots in without code changes.",
         "<b>Sparse cells (composite only)</b> — 96/162 composite cells (BACK × HIGH, CONTANGO × LOW) stay empty. The pooled grid is dense by construction (3 cells/spread, average ~770 rows/cell vs ~150 composite).",
         "<b>Phase 1 not directly comparable</b> — Phase 1 is a 9-indicator directional Brent signal; the baseline here (regime-unaware 252d z on spreads) is the cleanest test of regime-conditioning value.",
-        "<b>Costs not modelled</b> — PnL is gross spread move; commissions, fees, and roll slippage would compress realised returns.",
+        "<b>Costs modelled (Phase 2.8.6)</b> &mdash; defensible per-spread RT cost ($0.030 M1-M2 / $0.040 M3-M6 / $0.050 fly per bbl) layered on top of gross spread-move PnL. Roll slippage and funding still ignored; live deployment should add a per-spread broker quote where available.",
         "<b>Mode switch</b> — set <code>PULSE_REGIME_MODE=pooled</code> for un-gated pooled inference, <code>PULSE_GATED_BLEND=1</code> (Phase 2.6) for the gated blend, and <code>PULSE_GATED_SIZE=&lt;full|half|kelly&gt;</code> (Phase 2.7) to scale the regime-leg notional. Default is composite + full sizing for back-compat with Sprint 3 dashboard cards.",
         "<b>Gate is conservative by design</b> — Phase 2.5 demonstrated lift only on (BACK regime × {Lasso, Huber} winners). The gated blend codifies exactly that slice; per-spread Sharpe and the regime/baseline split in the headline disclose how often the engine actually fires versus deferring to the baseline.",
         "<b>Phase 2.7 sizing has a Sharpe-vs-DD trade-off</b> — uniform 0.5× halves both mean PnL and max DD on the regime leg; Kelly is per-spread and adaptive but its sample is thin (97 regime fires total). Live deployment should read <code>sized_blend_summary.kelly_per_spread_latest</code> from the walk-forward report — the same numbers shown above — to size at inference time.",

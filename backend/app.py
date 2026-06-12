@@ -37,7 +37,7 @@ import sys
 import threading
 import time
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 # ── ensure backend/ and project root are on sys.path ─────────────────────────
 _BACKEND = os.path.abspath(os.path.dirname(__file__))          # pulse/backend/
@@ -1052,6 +1052,33 @@ def _paper_mtm():
 
 _scheduler.add_job(_paper_mtm, "interval", seconds=60, id="_paper_mtm")
 
+# Phase 2.8.6-followup A/B harness — dual-push pooled + gated arms once per day.
+# Idempotent: ab_test.tick() dedups on open (asset, direction, ab_mode), so
+# multiple firings within a session are safe.
+def _ab_tick():
+    if os.environ.get("PULSE_AB_TEST_DISABLED") == "1":
+        return
+    try:
+        from research.ab_test import tick
+        s = tick()
+        log.info(
+            "A/B tick: pushed pooled=%d gated=%d",
+            len(s.get("pushed", {}).get("pooled", []) or []),
+            len(s.get("pushed", {}).get("gated", []) or []),
+        )
+    except Exception as exc:
+        log.warning("A/B tick failed: %s", exc)
+
+# Once per 24 hours, kicked off five minutes after boot so the data lake +
+# regime models have warmed up before we generate signals.
+_scheduler.add_job(
+    _ab_tick,
+    "interval",
+    seconds=86_400,
+    next_run_time=_dt.now() + timedelta(minutes=5),
+    id="_ab_tick",
+)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Flask routes
@@ -1150,6 +1177,50 @@ def regime_walkforward_route():
         return rpt
     return jsonify({"data": safe_fetch(_wf, {"available": False}),
                     "timestamp": _now()})
+
+
+@app.route("/api/regime/ab")
+def regime_ab_route():
+    """
+    Phase 2.8.6-followup A/B paper-test report.
+
+    Compares two parallel paper books — Arm A (pooled, un-gated) vs Arm B
+    (gated_blend, current default) — pushed daily via research.ab_test.tick.
+    Returns per-arm headline metrics, Welch + paired t-tests on per-trade
+    NET PnL (Phase 2.8.6 cost-aware), stop-criteria progress and a verdict.
+    """
+    from schemas import ABReportResponse
+    def _ab():
+        from research.ab_test import get_report
+        return get_report()
+    return respond(ABReportResponse, safe_fetch(_ab, {"available": False, "verdict": "no_data"}), _now())
+
+
+@app.route("/api/regime/ab/tick", methods=["POST"])
+def regime_ab_tick_route():
+    """
+    Manually fire one A/B generation step (dual-push of pooled + gated arms).
+    Idempotent: dedup on open (asset, direction, ab_mode). Used for smoke
+    tests + when the operator wants to backfill a missed daily tick. The
+    APScheduler job fires this automatically once per day.
+    """
+    body = request.get_json(silent=True) or {}
+    session = body.get("session")
+    from research.ab_test import tick
+    out = tick(ab_session=session)
+    return jsonify({"data": out, "timestamp": _now()})
+
+
+@app.route("/api/regime/ab/reset", methods=["POST"])
+def regime_ab_reset_route():
+    """
+    Wipe A/B-tagged paper trades. scope='all'|'closed'. Does NOT touch
+    non-A/B paper rows (the dashboard's regular paper book is preserved).
+    """
+    body = request.get_json(silent=True) or {}
+    from research.ab_test import reset as ab_reset
+    n = ab_reset(scope=body.get("scope", "all"))
+    return jsonify({"data": {"removed": n}, "timestamp": _now()})
 
 
 # ─────────────────────────────────────────────────────────────────────────────

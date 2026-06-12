@@ -262,7 +262,7 @@ def get_current_regime() -> dict:
     }
 
 
-def get_recommendation() -> dict:
+def get_recommendation(*, force_mode: str | None = None, force_gated: bool | None = None) -> dict:
     """
     Run inference on all 6 spreads under the current regime, rank by composite
     confidence, return #1 opportunity + every spread.
@@ -272,15 +272,25 @@ def get_recommendation() -> dict:
     signal (source='regime'); spreads that fail it fall through to a 252-day
     rolling-z baseline signal (source='baseline'). The mix shows up in the
     response as `recommendation_source` per spread + a top-level summary.
+
+    Phase 2.8.6-followup (A/B harness): pass force_mode='pooled' / force_gated=True
+    to override env vars at call-time without process-wide side effects. The A/B
+    harness uses this to generate both arms in one tick.
     """
     from research.features        import build_features, predictors_for
     from research.spread_universe import build_spread_series, INSTRUMENTS, LABELS, DESCRIPTIONS
     from research.models          import load_models, load_report
 
-    gated    = _gated_blend_enabled()
+    gated    = _gated_blend_enabled() if force_gated is None else bool(force_gated)
     size_mode = _gated_size_mode() if gated else "full"
     kelly_map = _kelly_lookup_from_report() if (gated and size_mode == "kelly") else {}
-    mode     = _active_mode()  # honours gated → pooled
+    if force_mode is not None:
+        mode = force_mode if force_mode in ("composite", "pooled") else _active_mode()
+        # Gated rule is defined on pooled labels — overrides any composite forcing.
+        if gated:
+            mode = "pooled"
+    else:
+        mode = _active_mode()  # honours gated → pooled
     regime_col = "regime_pooled" if mode == "pooled" else "regime"
     df       = build_features()
     spreads  = build_spread_series()
