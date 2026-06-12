@@ -210,6 +210,167 @@ keeping the gated default (if gated wins or undecided).
 
 ---
 
+### ✅ EVENT-TO-DISTRIBUTION ASSIGNMENT — SHIPPED 2026-06-12
+
+**Mentor's class assignment (2026-06-12):** convert the headline *"Israel
+launches strikes on Iranian energy infrastructure. Iran threatens closure of
+the Strait of Hormuz."* into 1-week probability distributions for Brent
+M1-M2, M2-M4, M1-M6 — EV, 50 % range, 90 % range, scenario probabilities.
+Deliverable: ≤10 slides + supporting code. Presented end of day.
+
+**Framework (4 steps):**
+
+1. **Event study** — 13 Middle-East / supply-threat events 2018-2025, 5-trading-day
+   spread deltas from last close before each event, severity-tiered (1 = verbal/proxy,
+   2 = shipping, 3 = energy infrastructure, 4 = supply war). **The June 2025
+   Israel-Iran 12-day war is in our settle data and is the direct analog**:
+   D+5 deltas +0.61 / +1.19 / +2.48, with the spike→ceasefire-collapse path
+   visible daily (M1-M2 gave back 0.57 in one session on the ceasefire).
+2. **Scenario tree** — 4 exhaustive outcomes with arguable priors:
+   de-escalation 30 % (mean tilted NEGATIVE — base is stretched, M1-M2 2.91 vs
+   10-yr p99 5.22) · sustained-conflict-Hormuz-open 40 % (= June-2025 D+5
+   verbatim) · partial disruption 22 % (2.5× Abqaiq — note Abqaiq's M1-M2
+   barely moved (+0.07) because SPR-release expectations cap the prompt; the
+   belly carries infra shocks) · closure attempt 8 % (1.2× Russia-2022 +
+   lognormal right tail; never observed in 40 yrs, Iran self-deterred — its own
+   1.5-1.7 mb/d transits Hormuz).
+3. **Conditional (μ, σ) per scenario per spread** — σ floored at BACK-regime
+   weekly vol (1.02 / 1.23 / 2.71 — current regime BACK/LOW/STRESSED, ~2×
+   unconditional vol; PULSE classifier reused).
+4. **Monte Carlo mixture** — 200k draws, one-factor correlation ρ=0.84
+   (measured from 5-day spread-change co-movement).
+
+**The answer (as of 2026-05-26 data):**
+
+| spread | now | EV (1 wk) | 50 % range | 90 % range | P(widen) |
+|---|---|---|---|---|---|
+| M1-M2 | 2.91 | **3.24** (+0.33) | 2.15-4.13 | 0.78-6.04 | 55 % |
+| M2-M4 | 5.77 | **6.85** (+1.08) | 5.26-8.01 | 3.66-11.05 | 65 % |
+| M1-M6 | 12.98 | **15.09** (+2.11) | 11.73-17.54 | 8.22-23.91 | 64 % |
+
+Headline insight: the front spread is the coin-flip (stretched base unwinds
+hardest on de-escalation); the belly carries the cleanest widening signal
+(the Abqaiq lesson — no SPR offset 2-4 months out).
+
+**Files:**
+
+| File | What |
+|---|---|
+| `backend/research/event_study.py` | Full pipeline: event study → scenario params → MC mixture → 6 dark-theme charts + results.json + event_deltas.csv. `python -m backend.research.event_study` (~20 s, needs `PYTHONIOENCODING=utf-8` per gotcha 19). |
+| `backend/data/research/event_study/` | results.json, event_deltas.csv, 6 chart PNGs (gitignored dir). |
+| `scripts/deck/build_event_deck.js` | pptxgenjs deck builder (`node scripts/deck/build_event_deck.js`). Local npm install in scripts/deck/. |
+| `docs/PULSE_event_to_distribution.pptx` | **The deliverable** — 10 slides, PULSE dark theme, QA'd via PowerPoint COM export. |
+
+**Verification:** MC seed=42 reproducible; slides exported to PNG via
+PowerPoint COM and visually inspected (footer collision + label overlap
+fixed in one QA cycle); all scenario means traceable to event_deltas.csv rows.
+
+---
+
+### 🟡 DEPLOYMENT — Cloudflare Tunnel (mentor demo, 2026-06-12)
+
+Dashboard exposed to the public internet via Cloudflare Tunnel so the
+mentor can hit it from her phone / home without a VPN. Decision rationale
+documented up-front so a future session doesn't redo the comparison:
+
+| Option | Why rejected / picked |
+|---|---|
+| Oracle Cloud free tier | 1 week to provision + ATO friction; mentor demo is today |
+| Hetzner / Render | Real money, real infra setup, real DNS hassle |
+| **Cloudflare Tunnel (quick)** | **PICKED for today** — zero infra, working in 10 min, URL is `*.trycloudflare.com` |
+| Cloudflare Tunnel (named) + Access | Picked for after admin access lands — stable URL + email-gated auth |
+
+**Current state (2026-06-12) — quick tunnel.**
+
+- **URL**: `https://jacket-army-appointed-racing.trycloudflare.com` (changes if cloudflared restarts)
+- **Architecture**: cloudflared (foreground PowerShell on the office desk) → tunnel → http://localhost:5000 → Flask + React build
+- **No auth in front yet** — quick tunnel has no Access integration. Acceptable risk for a 1-day demo with a non-guessable URL the mentor was sent directly. **Do NOT post this URL publicly.**
+- **Why no Windows service install**: needs admin password (Windows 11 Enterprise office machine). User has filed an IT request; until granted, cloudflared runs in a foreground PowerShell window.
+- **Sleep prevention**: `powercfg /change standby-timeout-ac 0 / monitor-timeout-ac 0 / disk-timeout-ac 0 / hibernate-timeout-ac 0` — desk never sleeps while plugged in. Screen lock auto-suspend may still kick in via office GPO; not blocking the tunnel.
+- **Binary**: `cloudflared.exe` lives at the repo root (gitignored). Downloaded from `https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe`, version 2026.6.0 verified.
+
+**How to start the tunnel from a cold desk (~3 commands):**
+
+```powershell
+# 1. Make sure Flask is running
+cd C:\Users\peruka.pranav\Downloads\pulse
+.\.venv\Scripts\python.exe start.py
+# (wait ~15s for boot, http://127.0.0.1:5000/api/health → status: ok)
+
+# 2. New PowerShell window — start the tunnel
+cd C:\Users\peruka.pranav\Downloads\pulse
+.\cloudflared.exe tunnel --url http://localhost:5000
+
+# 3. Copy the *.trycloudflare.com URL from the cloudflared output
+#    Mentor URL goes stale on every restart — update memo + PPT slide 10
+```
+
+**How to restart Flask cleanly** (if it crashes or you need a fresh boot):
+
+```powershell
+# Find the python process owning port 5000
+netstat -ano | findstr ":5000"
+Stop-Process -Id <PID> -Force
+# Then start.py again as above
+```
+
+**Pre-flight gotchas that bit this session — DO NOT REPEAT:**
+
+1. **`.env` vs `env`** — `load_dotenv()` (in `backend/app.py`) looks for the file named `.env`. If the file was copied from another machine as `env` (no dot), API keys silently don't load and `cot_history` / `external_history` / `inventory_history` all fall back to empty caches and `build_features()` returns shape `(0, 0)`. **Always verify `Test-Path .env`** before troubleshooting empty regime data.
+2. **`xlrd` missing** — `cot_history._build_history()` downloads CFTC `.xls` (legacy format, not `.xlsx`). Without `xlrd>=2.0.1` installed, every year fails silently with `Missing optional dependency 'xlrd'`. `requirements.txt` should pin it; if a fresh venv ever skips installing it, `pip install xlrd` and re-run `python -m backend.research.cot_history`.
+3. **Stale `external_history.parquet`** — pre-Phase-2.8.2 caches only have yfinance columns (`crack_321`, `wti_brent_spread`). Phase 2.8.2 added FRED-sourced `real_rate` and `ovx_vix_ratio`. If those columns are missing, `build_features().dropna(subset=BRENT_FEATURES)` wipes every row. **Fix**: `python -m backend.research.external_history` to force-rebuild from FRED API. (Detect: count `external_history.parquet` columns — should be ≥ 14, not 9.)
+4. **Model PKLs are gitignored** — `backend/data/research/models/`, `models_pooled/`, `*.json`, `*.parquet` are all in the gitignore. When migrating to a new machine, either copy them from the old machine OR rebuild: `python -m backend.research.models --mode composite && python -m backend.research.models --mode pooled` (~2 min total on a modern desk).
+5. **Background `&` in PS5.1** — PowerShell 5.1 (Windows default) does NOT support bash-style `command &` for backgrounding. Use `Start-Process` or the harness's `run_in_background: true`. Trying to write a one-liner with `& python ... &` is a parse error.
+
+**Upgrade path — once admin access lands:**
+
+| Step | Command | Notes |
+|---|---|---|
+| 1. Cloudflare account login | `cloudflared tunnel login` | Opens browser; pick `peruka.pranav@...` zone. No admin needed yet. |
+| 2. Pick domain | Either own a domain (cheapest: ~$10/yr Namecheap → set NS to Cloudflare) OR use Cloudflare Workers `*.workers.dev` proxying OR use free `*.duckdns.org` (won't get Cloudflare Access; would need a third-party gate) | Cloudflare Access needs a real domain on Cloudflare DNS. |
+| 3. Create named tunnel | `cloudflared tunnel create pulse` | Outputs `<UUID>` + writes credentials JSON to `%USERPROFILE%\.cloudflared\<UUID>.json` |
+| 4. Config | Write `%USERPROFILE%\.cloudflared\config.yml`: `tunnel: <UUID>` + `credentials-file: ...` + `ingress: [{hostname: pulse.<domain>, service: http://localhost:5000}, {service: http_status:404}]` | |
+| 5. DNS route | `cloudflared tunnel route dns <UUID> pulse.<domain>` | Creates a CNAME at Cloudflare DNS |
+| 6. Install as Windows service | `cloudflared service install` (admin PowerShell) → starts on boot, survives logoff | **This is the step that needs admin.** Until then run `cloudflared tunnel run pulse` in a foreground window. |
+| 7. Cloudflare Access | Zero Trust dashboard → Access → Applications → Add → self-hosted → app domain `pulse.<domain>` → policy "Emails: mentor@..., owner@..." | Free tier covers up to 50 users. Mentor gets a one-time email code on first visit; session stickies for 24 h. |
+
+After upgrade, update slide 10 + the memo with the stable URL and re-run the phone smoke test (must hit Cloudflare Access login wall, then dashboard).
+
+**Files touched (Deployment, 2026-06-12):**
+
+| File | Change |
+|---|---|
+| `cloudflared.exe` | **NEW (gitignored)** — Cloudflare tunnel binary v2026.6.0 at repo root. Run as `.\cloudflared.exe tunnel --url http://localhost:5000`. |
+| `.gitignore` | + `cloudflared.exe` |
+| `.env` | **NEW (gitignored)** — copy of pre-existing `env` (no dot) so `load_dotenv()` finds the API keys. `env` is kept on disk for backward compat but `.env` is authoritative. |
+| `backend/data/research/external_history.parquet` | Rebuilt with Phase 2.8.2 FRED columns (`dgs10`, `t5yie`, `real_rate`, `ovx`, `vix`, `ovx_vix_ratio`) — 9 cols → 15 cols. Old cache was from pre-2.8.2 desk. |
+| `backend/data/research/cot_history.parquet` | **NEW** — rebuilt from CFTC zips (`xlrd` was missing on this venv). 636 weekly rows. |
+| `backend/data/research/crude_stocks_history.parquet` | **NEW** — built from EIA v2 API. 600 weekly rows. |
+| `backend/data/research/models/*.pkl` | **NEW** — 264 composite-mode pkls. Retrained on this desk. |
+| `backend/data/research/models_pooled/*.pkl` | **NEW** — 60 pooled-mode pkls. |
+| `backend/data/research/backtest_report.json` + `backtest_report_pooled.json` | **NEW** — regenerated as side effects of the retrain. |
+| `docs/PULSE_demo_slides.md` | **NEW** — 10-slide outline for the mentor walkthrough. Copy/paste into PowerPoint. |
+| `docs/mentor_memo_draft.md` | **NEW** — draft message to send the mentor pointing at the demo URL + A/B panel. Not sent yet. |
+
+**Verification (all 2026-06-12):**
+
+- `GET https://jacket-army-appointed-racing.trycloudflare.com/api/health` returns `status: ok`.
+- Mentor-phone smoke test: dashboard loads on mobile data (off office WiFi), Regime tab renders `BACK/LOW/STRESSED`, top-pick `BUY Brent front fly (XGBoost, conf 0.96)`, A/B panel shows verdict `UNDECIDED` with `4/4 trades opened, 0 closed`.
+- `powercfg /query SCHEME_CURRENT SUB_SLEEP` confirms STANDBYIDLE=0, hibernate=0, monitor=0 on AC.
+- All 6 spreads eligible in `/api/regime/recommendation`; competition grid shows all 7 candidates per cell.
+
+**What this section did NOT do (intentionally):**
+
+- Did not run a walk-forward on this desk. The previous walk-forward report on the laptop is the authoritative `walkforward_report.json` for the mentor demo. Re-running here would take ~3 h with no expected change in numbers (same data, same code).
+- Did not set up named tunnel + Access. Waiting on admin access.
+- Did not migrate any paper trade history. `pulse_cache.db` is fresh on this desk — A/B harness has its first session as 2026-06-11 (4 + 4 trades open, none closed). Mentor will see this honest "harness running, awaiting data" state, which is the correct mentor-facing message anyway.
+
+**Next session — once admin access lands:**
+
+Follow the "Upgrade path" table above. Estimated 20 min including DNS propagation. After that, update slide 10 + memo with the stable URL and re-run the phone smoke test.
+
+---
+
 ### ✅ PHASE 2.8.6 · Transaction costs in the walk-forward — SHIPPED 2026-06-11
 
 **Brief:** Phase 2.8.3 widened the gate but the gated_blend headline stayed
