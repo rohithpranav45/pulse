@@ -11,6 +11,14 @@ the original pooled_trades + baseline_trades from gated_trades.json, then
 re-run the post-train aggregation. Result is identical to a fresh
 walk-forward — minus the ~3h of model refitting.
 
+Phase 2.8.6 — also rebuilds the regime-unaware baseline tape from the
+spreads dataframe (deterministic) so we can compute NET (after transaction
+costs) metrics for baseline + pooled + gated_blend + sized_blend without
+re-training. Composite NET is skipped here because the composite trade tape
+wasn't persisted by pre-2.8.6 walk-forward runs; a fresh
+`python -m backend.research.walkforward` will populate composite_trades.json
+and full composite_net thereafter.
+
 Usage:
     python -m backend.research.reroute_gated
 """
@@ -18,10 +26,18 @@ Usage:
 from __future__ import annotations
 
 import json
+import os
 import sys
 import numpy as np
 import pandas as pd
 from pathlib import Path
+
+# Mirror walkforward.py's sys.path bootstrap so `from research import walkforward`
+# works whether the module is launched as `python -m backend.research.reroute_gated`
+# (project root on path) or `python -m research.reroute_gated` (backend on path).
+_BACKEND = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _BACKEND not in sys.path:
+    sys.path.insert(0, _BACKEND)
 
 # Reuse walkforward helpers — they will pick up the widened GATED_WINNERS
 # automatically from the module's module-level constants.
@@ -219,6 +235,70 @@ def main() -> int:
     composite_block = report["composite"]
     pooled_block    = report["pooled"]
 
+    # --- Phase 2.8.6 — NET (after transaction costs) ------------------------
+    # Rebuild the regime-unaware baseline tape from spreads so we can apply
+    # costs to it; gated/pooled tapes already exist or can be reconstructed.
+    print("\nPhase 2.8.6 — rebuilding baseline tape + applying transaction costs...")
+    try:
+        from research.features        import build_features  # noqa: F401
+        from research.spread_universe import build_spread_series
+        spreads_df = build_spread_series()
+    except Exception as exc:
+        print(f"  WARNING: failed to rebuild spreads ({exc}); falling back to "
+              f"baseline trades reconstructed from gated_trades only.", file=sys.stderr)
+        spreads_df = None
+
+    if spreads_df is not None and not spreads_df.empty:
+        # Same window the walk-forward used: first refit through (and including)
+        # everything after the last refit.
+        bs_start = refit_ts[0]
+        bs_end   = max(refit_ts[-1] if len(refit_ts) > 1 else spreads_df.index.max(),
+                       spreads_df.index.max())
+        baseline_rebuilt = wf._baseline_trades(spreads_df, bs_start, bs_end)
+        print(f"  rebuilt baseline tape: {len(baseline_rebuilt)} rows over "
+              f"({bs_start.date()}, {bs_end.date()}]")
+    else:
+        baseline_rebuilt = baseline_trades
+        print(f"  using reconstructed baseline tape from gated_trades: "
+              f"{len(baseline_rebuilt)} rows (may exclude regime-overridden dates)")
+
+    costs_block = {
+        "model_doc":      (
+            "Per-leg per-side: $0.0025 commission/clearing/brokerage + "
+            "half-spread slippage ($0.0050/bbl front / $0.0075/bbl deferred). "
+            "Round-trip cost = N legs x 2 sides x (commission + half-spread). "
+            "2-leg M1-M2 = $0.030/bbl RT; 2-leg M3-M6 = $0.040; 3-leg fly = $0.050. "
+            "Cost scales with sizing_scale on regime rows. NEUTRAL trades cost zero."
+        ),
+        "per_spread_rt":  dict(wf.COST_PER_SPREAD_RT),
+        "default_rt":     wf.COST_DEFAULT_RT,
+        "baseline_net":   wf._net_block(baseline_rebuilt),
+        "pooled_net":     wf._net_block(pooled_trades),
+        "gated_blend_net":wf._net_block(gated_new, include_source=True),
+        "sized_blend_net":{
+            mode: wf._net_block(wf._apply_sizing(gated_new, mode, refit_ts, kelly_lookup),
+                                include_source=True)
+            for mode in wf.SIZING_MODES
+        },
+        # Composite tape wasn't persisted by pre-2.8.6 walk-forward runs.
+        # A fresh `python -m backend.research.walkforward` will populate
+        # composite_trades.json and report["costs"]["composite_net"] will land
+        # in the report at that point.
+        "composite_net":  {"unavailable": "needs fresh walk-forward to persist composite_trades.json"},
+    }
+    costs_block["lift_gated_vs_baseline_net"] = wf._lift(
+        costs_block["gated_blend_net"],
+        costs_block["baseline_net"]["by_spread"],
+        costs_block["baseline_net"]["overall"],
+    )
+    for mode in wf.SIZING_MODES:
+        costs_block[f"lift_sized_{mode}_vs_baseline_net"] = wf._lift(
+            costs_block["sized_blend_net"][mode],
+            costs_block["baseline_net"]["by_spread"],
+            costs_block["baseline_net"]["overall"],
+        )
+    report["costs"] = costs_block
+
     report["gated_blend"]         = gated_block
     report["sized_blend"]         = sized_blocks
     report["sized_blend_summary"] = sized_summary
@@ -281,7 +361,47 @@ def main() -> int:
         b_str = f"{b:+.4f}" if b is not None else "  None"
         d_str = f"{d:+.4f}" if d is not None else "  None"
         n_new = new_g["by_spread"][sp].get("n_signals")
-        print(f"  {sp:14s}  old={a_str}  new={b_str}  Δ={d_str}  n_new={n_new}")
+        print(f"  {sp:14s}  old={a_str}  new={b_str}  d={d_str}  n_new={n_new}")
+
+    # --- Phase 2.8.6 NET headline ------------------------------------------
+    print("\n=== Phase 2.8.6 NET (after transaction costs) ===")
+    print(f"  cost per spread RT $/bbl: {dict(wf.COST_PER_SPREAD_RT)}")
+    print()
+    print(f"  {'mode':<24} {'gross_Shp':>10} {'net_Shp':>10} {'gross_mPnL':>11} {'net_mPnL':>11} {'mean_cost':>10} {'n_sig':>7}")
+    pairs = [
+        ("baseline 252d z", report["baseline_overall"],          costs_block["baseline_net"]["overall"]),
+        ("pooled (un-gated)", report["pooled"]["overall"],        costs_block["pooled_net"]["overall"]),
+        ("gated_blend",      report["gated_blend"]["overall"],    costs_block["gated_blend_net"]["overall"]),
+        ("sized_full",       report["sized_blend"]["full"]["overall"],
+                                                                  costs_block["sized_blend_net"]["full"]["overall"]),
+        ("sized_half",       report["sized_blend"]["half"]["overall"],
+                                                                  costs_block["sized_blend_net"]["half"]["overall"]),
+        ("sized_kelly",      report["sized_blend"]["kelly"]["overall"],
+                                                                  costs_block["sized_blend_net"]["kelly"]["overall"]),
+    ]
+    for name, gross, net in pairs:
+        gs = gross.get("sharpe");   ns = net.get("sharpe")
+        gm = gross.get("mean_pnl"); nm = net.get("mean_pnl")
+        mc = net.get("mean_cost")
+        n  = net.get("n_signals")
+        print(f"  {name:<24} "
+              f"{(gs if gs is not None else 0.0):>+10.3f} "
+              f"{(ns if ns is not None else 0.0):>+10.3f} "
+              f"{(gm if gm is not None else 0.0):>+11.4f} "
+              f"{(nm if nm is not None else 0.0):>+11.4f} "
+              f"{(mc if mc is not None else 0.0):>+10.4f} "
+              f"{(n  if n  is not None else 0):>7}")
+
+    print("\n=== per-spread NET Sharpe (gated_blend) ===")
+    for sp in sorted(costs_block["gated_blend_net"]["by_spread"]):
+        gs = new_g["by_spread"].get(sp, {}).get("sharpe")
+        ns = costs_block["gated_blend_net"]["by_spread"][sp].get("sharpe")
+        bs = costs_block["baseline_net"]["by_spread"].get(sp, {}).get("sharpe")
+        n  = costs_block["gated_blend_net"]["by_spread"][sp].get("n_signals")
+        gs_s = f"{gs:+.3f}" if gs is not None else "  None"
+        ns_s = f"{ns:+.3f}" if ns is not None else "  None"
+        bs_s = f"{bs:+.3f}" if bs is not None else "  None"
+        print(f"  {sp:14s}  gross={gs_s}  net={ns_s}  base_net={bs_s}  n={n}")
 
     return 0
 

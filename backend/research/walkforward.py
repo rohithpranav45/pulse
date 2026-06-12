@@ -90,8 +90,11 @@ if _BACKEND not in sys.path:
 
 log = logging.getLogger("pulse.research.walkforward")
 
-_REPORT_FILE        = Path(__file__).parent.parent / "data" / "research" / "walkforward_report.json"
-_GATED_TRADES_FILE  = Path(__file__).parent.parent / "data" / "research" / "gated_trades.json"
+_REPORT_FILE          = Path(__file__).parent.parent / "data" / "research" / "walkforward_report.json"
+_GATED_TRADES_FILE    = Path(__file__).parent.parent / "data" / "research" / "gated_trades.json"
+_COMPOSITE_TRADES_FILE = Path(__file__).parent.parent / "data" / "research" / "composite_trades.json"
+_POOLED_TRADES_FILE   = Path(__file__).parent.parent / "data" / "research" / "pooled_trades.json"
+_BASELINE_TRADES_FILE = Path(__file__).parent.parent / "data" / "research" / "baseline_trades.json"
 
 # ── Config ───────────────────────────────────────────────────────────────────
 FORWARD_DAYS = 20
@@ -128,6 +131,60 @@ SIZING_KELLY_FLOOR   = 0.10
 SIZING_KELLY_CAP     = 1.00
 SIZING_KELLY_DEFAULT = 0.50
 SIZING_KELLY_MIN_N   = 5
+
+# ─── Phase 2.8.6 — Transaction costs ────────────────────────────────────────
+# Defensible per-leg, per-side cost model (exchange-published fees + standard
+# liquid-front-month bid-ask):
+#   commission + clearing + brokerage:   $0.0025/bbl per leg per side
+#       (ICE Brent ~$1.45/contract + clearing ~$0.30 + brokerage ~$0.70 = ~$2.45
+#        per 1,000-bbl contract → $0.00245/bbl, rounded to $0.0025)
+#   half bid-ask slippage per leg:       $0.0050/bbl for front (M1/M2),
+#                                        $0.0075/bbl for deferred (M3..M6)
+#       (Liquid Brent front: 1 tick = $0.01/bbl; deferred typically 1-2 ticks.)
+#
+# Round-trip cost in $/bbl on the spread basis:
+#   N legs × 2 sides × (commission + half-spread)
+#
+#   2-leg M1-M2:   2 × 2 × (0.0025 + 0.0050) = $0.030/bbl RT
+#   2-leg M3-M6:   2 × 2 × (0.0025 + 0.0075) = $0.040/bbl RT
+#   3-leg fly:     3 × 2 × (0.0025 + 0.0058) = $0.050/bbl RT
+#       (fly has two front-ish legs + one M3 leg → blended half-spread ~$0.0058)
+#
+# Cost scales with sizing_scale on regime rows (if you trade fewer contracts you
+# pay fewer fees). NEUTRAL trades incur zero cost (no fill). Applied at the
+# AGGREGATION step only — model training/CV is unaffected, so no retraining is
+# required when the cost model changes. Live inference does not subtract cost
+# at trade entry; the cost-aware NET metric exists for backtest reporting.
+COST_PER_SPREAD_RT = {
+    "brent_m1_m2":   0.030,
+    "brent_m3_m6":   0.040,
+    "brent_fly_123": 0.050,
+    "wti_m1_m2":     0.030,
+    "wti_m3_m6":     0.040,
+    "wti_fly_123":   0.050,
+}
+COST_DEFAULT_RT = 0.040  # fallback when spread isn't in the table
+
+
+def _cost_for(t: dict) -> float:
+    """
+    Phase 2.8.6 — round-trip transaction cost (in $/bbl) for one trade row.
+
+    Returns 0.0 for NEUTRAL trades (no fill). For fired trades, returns the
+    spread's RT cost from COST_PER_SPREAD_RT, scaled by the trade's
+    sizing_scale (1.0 if absent — covers un-sized gated_trades).
+    """
+    if t.get("direction") == "NEUTRAL":
+        return 0.0
+    if t.get("fwd_pnl") is None:
+        return 0.0
+    base = COST_PER_SPREAD_RT.get(t.get("spread"), COST_DEFAULT_RT)
+    raw_scale = t.get("sizing_scale", 1.0)
+    try:
+        scale = float(raw_scale) if raw_scale is not None else 1.0
+    except (TypeError, ValueError):
+        scale = 1.0
+    return base * scale
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -355,11 +412,17 @@ def _baseline_trades(
 # ─────────────────────────────────────────────────────────────────────────────
 # Aggregation helpers
 # ─────────────────────────────────────────────────────────────────────────────
-def _metrics(trades: list[dict]) -> dict:
-    """Compute hit rate / mean PnL / Sharpe / max DD on completed (non-NEUTRAL) trades."""
+def _metrics(trades: list[dict], cost_fn=None) -> dict:
+    """
+    Compute hit rate / mean PnL / Sharpe / max DD on completed (non-NEUTRAL) trades.
+
+    Phase 2.8.6: pass cost_fn=_cost_for to compute NET metrics (PnL minus the
+    per-trade round-trip cost). Hit-rate is recomputed on net PnL so a winning
+    trade that costs more than it earns flips to a loss in the net view.
+    """
     fired = [t for t in trades if t.get("direction") != "NEUTRAL" and t.get("fwd_pnl") is not None]
     if not fired:
-        return {
+        empty = {
             "n_signals":       0,
             "n_total":         len(trades),
             "n_neutral":       sum(1 for t in trades if t.get("direction") == "NEUTRAL"),
@@ -372,7 +435,17 @@ def _metrics(trades: list[dict]) -> dict:
             "win_pnl":         None,
             "loss_pnl":        None,
         }
-    pnls = np.array([t["fwd_pnl"] for t in fired], dtype=float)
+        if cost_fn is not None:
+            empty["mean_cost"]  = None
+            empty["total_cost"] = 0.0
+        return empty
+    if cost_fn is not None:
+        gross  = np.array([float(t["fwd_pnl"])         for t in fired], dtype=float)
+        costs  = np.array([float(cost_fn(t))           for t in fired], dtype=float)
+        pnls   = gross - costs
+    else:
+        pnls = np.array([t["fwd_pnl"] for t in fired], dtype=float)
+        costs = None
     wins = pnls[pnls > 0]; losses = pnls[pnls < 0]
     cum  = np.cumsum(pnls)
     peak = np.maximum.accumulate(cum)
@@ -383,7 +456,7 @@ def _metrics(trades: list[dict]) -> dict:
     # Sharpe with 20-trading-day horizon → annualisation factor √(252/20)
     sharpe = (mu / sd) * np.sqrt(252.0 / FORWARD_DAYS) if sd > 0 else None
 
-    return {
+    out = {
         "n_signals":     len(fired),
         "n_total":       len(trades),
         "n_neutral":     sum(1 for t in trades if t.get("direction") == "NEUTRAL"),
@@ -396,25 +469,29 @@ def _metrics(trades: list[dict]) -> dict:
         "win_pnl":       round(float(wins.mean()), 4)   if len(wins)   else None,
         "loss_pnl":      round(float(losses.mean()), 4) if len(losses) else None,
     }
+    if costs is not None:
+        out["mean_cost"]  = round(float(costs.mean()), 4)
+        out["total_cost"] = round(float(costs.sum()), 4)
+    return out
 
 
-def _by(trades: list[dict], key: str) -> dict:
+def _by(trades: list[dict], key: str, cost_fn=None) -> dict:
     """Group trades by a key (spread / regime / winner / direction) and metric each group."""
     groups: dict[str, list] = {}
     for t in trades:
         k = t.get(key) or "UNKNOWN"
         groups.setdefault(k, []).append(t)
-    return {k: _metrics(v) for k, v in groups.items()}
+    return {k: _metrics(v, cost_fn=cost_fn) for k, v in groups.items()}
 
 
-def _by_curve_axis(trades: list[dict]) -> dict:
+def _by_curve_axis(trades: list[dict], cost_fn=None) -> dict:
     """Roll regime label up to its CURVE axis bucket (CONTANGO/NEUTRAL/BACK)."""
     rolled = []
     for t in trades:
         regime = t.get("regime", "")
         curve  = regime.split("/", 1)[0] if "/" in regime else regime
         rolled.append({**t, "curve_axis": curve})
-    return _by(rolled, "curve_axis")
+    return _by(rolled, "curve_axis", cost_fn=cost_fn)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -489,12 +566,12 @@ def _build_gated_blend(
     return blended
 
 
-def _by_source(trades: list[dict]) -> dict:
+def _by_source(trades: list[dict], cost_fn=None) -> dict:
     """Group gated-blend trades by which leg fired ('regime' / 'baseline')."""
-    return _by(trades, "source")
+    return _by(trades, "source", cost_fn=cost_fn)
 
 
-def _by_spread_source(trades: list[dict]) -> dict:
+def _by_spread_source(trades: list[dict], cost_fn=None) -> dict:
     """
     {spread -> {source -> metrics}} breakdown — exposes per-spread regime-leg
     stats (hit rate, win/loss PnL) so live inference can compute per-spread
@@ -505,7 +582,7 @@ def _by_spread_source(trades: list[dict]) -> dict:
         sp  = t.get("spread") or "UNKNOWN"
         src = t.get("source") or "UNKNOWN"
         out.setdefault(sp, {}).setdefault(src, []).append(t)
-    return {sp: {src: _metrics(v) for src, v in by_src.items()} for sp, by_src in out.items()}
+    return {sp: {src: _metrics(v, cost_fn=cost_fn) for src, v in by_src.items()} for sp, by_src in out.items()}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -684,6 +761,22 @@ def _aggregate_mode(trades: list[dict], refit_meta: list[dict], regime_mode: str
     }
 
 
+def _net_block(trades: list[dict], include_source: bool = False) -> dict:
+    """
+    Phase 2.8.6 — NET aggregation for a trade list (gross PnL minus per-trade
+    transaction cost). Mirrors a subset of _aggregate_mode but always uses
+    _cost_for so the caller doesn't have to pass it.
+    """
+    blk = {
+        "overall":   _metrics(trades, cost_fn=_cost_for),
+        "by_spread": _by(trades, "spread", cost_fn=_cost_for),
+    }
+    if include_source:
+        blk["by_source"]        = _by_source(trades, cost_fn=_cost_for)
+        blk["by_spread_source"] = _by_spread_source(trades, cost_fn=_cost_for)
+    return blk
+
+
 def _run_mode(
     joined: pd.DataFrame,
     spreads: pd.DataFrame,
@@ -738,8 +831,8 @@ def run_walkforward() -> dict:
     refit_ts = [pd.Timestamp(d) for d in REFIT_DATES]
     refit_ts = [t for t in refit_ts if t >= joined.index.min() and t <= joined.index.max()]
 
-    composite_block, _composite_trades = _run_mode(joined, spreads, refit_ts, regime_mode="composite")
-    pooled_block,    pooled_trades     = _run_mode(joined, spreads, refit_ts, regime_mode="pooled")
+    composite_block, composite_trades = _run_mode(joined, spreads, refit_ts, regime_mode="composite")
+    pooled_block,    pooled_trades    = _run_mode(joined, spreads, refit_ts, regime_mode="pooled")
 
     # Baseline: regime-UNAWARE 252d rolling z-score on each spread
     if refit_ts:
@@ -813,6 +906,61 @@ def run_walkforward() -> dict:
                  blk["overall"]["sharpe"], blk["overall"]["mean_pnl"],
                  blk["overall"]["max_drawdown"])
 
+    # ── Phase 2.8.6 — Apply transaction costs to every mode ────────────────
+    # Cost model lives in COST_PER_SPREAD_RT; scales with sizing_scale on
+    # regime rows. NEUTRAL trades incur no cost. Net metrics live under
+    # report["costs"] so the gross blocks above stay back-compatible.
+    log.info("Phase 2.8.6 — computing NET metrics under transaction costs...")
+    costs_block = {
+        "model_doc":      (
+            "Per-leg per-side: $0.0025 commission/clearing/brokerage + "
+            "half-spread slippage ($0.0050/bbl front / $0.0075/bbl deferred). "
+            "Round-trip cost = N legs × 2 sides × (commission + half-spread). "
+            "2-leg M1-M2 = $0.030/bbl RT; 2-leg M3-M6 = $0.040; 3-leg fly = $0.050. "
+            "Cost scales with sizing_scale on regime rows. NEUTRAL trades cost zero."
+        ),
+        "per_spread_rt":  dict(COST_PER_SPREAD_RT),
+        "default_rt":     COST_DEFAULT_RT,
+        "composite_net":  _net_block(composite_trades),
+        "pooled_net":     _net_block(pooled_trades),
+        "baseline_net":   _net_block(baseline),
+        "gated_blend_net":_net_block(gated_trades, include_source=True),
+        "sized_blend_net":{
+            mode: _net_block(_apply_sizing(gated_trades, mode, refit_ts, kelly_lookup),
+                             include_source=True)
+            for mode in SIZING_MODES
+        },
+    }
+    # Headline lift NET (gated vs baseline) at the by-spread + overall level
+    costs_block["lift_gated_vs_baseline_net"] = _lift(
+        costs_block["gated_blend_net"],
+        costs_block["baseline_net"]["by_spread"],
+        costs_block["baseline_net"]["overall"],
+    )
+    for mode in SIZING_MODES:
+        costs_block[f"lift_sized_{mode}_vs_baseline_net"] = _lift(
+            costs_block["sized_blend_net"][mode],
+            costs_block["baseline_net"]["by_spread"],
+            costs_block["baseline_net"]["overall"],
+        )
+
+    # Persist raw trade tapes for composite + pooled + baseline so future cost
+    # re-aggregations (different cost model, per-spread overrides, etc.) can
+    # run without retraining the ~3h walk-forward. Gated tape is already saved
+    # above.
+    for path, tape in (
+        (_COMPOSITE_TRADES_FILE, composite_trades),
+        (_POOLED_TRADES_FILE,    pooled_trades),
+        (_BASELINE_TRADES_FILE,  baseline),
+    ):
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with open(path, "w") as f:
+                json.dump(tape, f, default=str)
+            log.info("  saved %s (%d rows)", path.name, len(tape))
+        except Exception as exc:  # pragma: no cover — disk-only failure
+            log.warning("  failed to save %s: %s", path.name, exc)
+
     # Per-spread Kelly fractions at the LAST refit boundary — what live
     # inference would apply going forward.
     last_kelly = kelly_lookup[refit_ts[-1].strftime("%Y-%m-%d")] if refit_ts else {}
@@ -859,6 +1007,8 @@ def run_walkforward() -> dict:
         "baseline_overall":   base_overall,
         "baseline_by_spread": base_by_spread,
         "n_baseline":         len(baseline),
+        # --- Phase 2.8.6 transaction-cost NET aggregates ---
+        "costs":              costs_block,
         "lift_composite_vs_baseline":   _lift(composite_block,       base_by_spread, base_overall),
         "lift_pooled_vs_baseline":      _lift(pooled_block,          base_by_spread, base_overall),
         "lift_gated_vs_baseline":       _lift(gated_block,           base_by_spread, base_overall),
@@ -971,3 +1121,27 @@ if __name__ == "__main__":
         print("=== Latest Kelly fractions (applied to next live regime fires) ===")
         for sp, k in klp.items():
             print(f"  {sp:<14}  kelly={k}")
+
+    costs = rpt.get("costs") or {}
+    if costs:
+        print()
+        print("=== Phase 2.8.6 — NET (after transaction costs) ===")
+        print(f"  cost model: {costs.get('model_doc', '')[:90]}...")
+        print(f"  per-spread RT: {costs.get('per_spread_rt')}")
+        print()
+        print(f"  {'mode':<24} {'gross Shp':>10} {'net Shp':>10} {'gross mPnL':>11} {'net mPnL':>11} {'n_sig':>7}")
+        rows = [
+            ("baseline 252d z", rpt["baseline_overall"], costs["baseline_net"]["overall"]),
+            ("pooled (un-gated)", rpt["pooled"]["overall"], costs["pooled_net"]["overall"]),
+            ("gated_blend",     rpt["gated_blend"]["overall"], costs["gated_blend_net"]["overall"]),
+            ("sized_full",      rpt["sized_blend"]["full"]["overall"],  costs["sized_blend_net"]["full"]["overall"]),
+            ("sized_half",      rpt["sized_blend"]["half"]["overall"],  costs["sized_blend_net"]["half"]["overall"]),
+            ("sized_kelly",     rpt["sized_blend"]["kelly"]["overall"], costs["sized_blend_net"]["kelly"]["overall"]),
+        ]
+        for name, gross, net in rows:
+            print(f"  {name:<24} "
+                  f"{(gross.get('sharpe') if gross.get('sharpe') is not None else 0.0):>+10.3f} "
+                  f"{(net.get('sharpe')   if net.get('sharpe')   is not None else 0.0):>+10.3f} "
+                  f"{(gross.get('mean_pnl') if gross.get('mean_pnl') is not None else 0.0):>+11.4f} "
+                  f"{(net.get('mean_pnl')   if net.get('mean_pnl')   is not None else 0.0):>+11.4f} "
+                  f"{(net.get('n_signals')  or 0):>7}")

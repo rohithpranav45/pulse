@@ -1,5 +1,5 @@
 # PULSE — Project State File
-**Last updated:** 2026-06-11 · Sprint −1 + 0a + 0b + 2a + 2b + 2c + 3 + 4 + 2.5 + 2.6 + 2.7 + 2.8.1 + 2.8.2 + **2.8.3** shipped · Phase 2.8.3 widened `GATED_WINNERS` to {Lasso, Huber, XGBoost, LightGBM, CatBoost}. **Acceptance criterion (gated Sharpe ≥ +0.60) NOT met** — gated_blend headline went +0.389 → **+0.384** (flat). **But the regime leg materially improved** — fires lifted from 71 to 244 trades, regime-leg Sharpe lifted from +0.369 to **+0.888**. Honest interpretation: the booster alpha was already leaking into the baseline-leg attribution under the narrow gate. Widening the gate correctly REASSIGNS credit to the regime engine but doesn't CREATE new alpha because the underlying realized PnL stream barely changes. The methodologically correct gate is now in place; transaction costs (Phase 2.8.6) are the next-credible lever.
+**Last updated:** 2026-06-11 · Sprint −1 + 0a + 0b + 2a + 2b + 2c + 3 + 4 + 2.5 + 2.6 + 2.7 + 2.8.1 + 2.8.2 + 2.8.3 + 2.8.6 + **2.8.6-followup (A/B paper-test harness)** shipped · Phase 2.8.6-followup turns the "pooled un-gated beats gated_blend by +0.05 NET Sharpe" walk-forward side-finding into a live-validation harness. Parallel paper books for `PULSE_REGIME_MODE=pooled` (Arm A) and `PULSE_GATED_BLEND=1` (Arm B, current default) get dual-pushed every signal day, tagged with `ab_mode` on `paper_trades`. New `/api/regime/ab` returns per-arm NET Sharpe / mean PnL / equity curves + Welch + paired t-tests + stop-criteria progress (min 30 closed/arm AND p<0.05 → declare winner; max 14 days hard timeout). Dashboard panel on the Regime tab renders the comparison live, with TICK + RESET controls for ops. Verified end-to-end: first tick pushed 4 pooled + 4 gated paper trades on session 2026-06-11. Phase 2.8.6 layered a defensible transaction-cost model (per-leg per-side $0.0025 commission + half-spread slippage; $0.030/$0.040/$0.050 RT per bbl for M1-M2 / M3-M6 / fly) on top of the existing trade tape. **Headline NET (after costs)** — costs drag every mode by roughly the same ~−0.085 Sharpe (uniform per-trade fee). Gated_blend NET +0.297 vs baseline NET +0.301 (Δ −0.004, ties — same flat verdict as gross). **Notable side finding**: the un-gated **pooled engine wins both gross (+0.437) AND net (+0.351)** — Phase 2.8.1+2 boosters lifted pooled gross enough that the Phase 2.6 gate (added when pooled was losing in Phase 2.5) is now over-restrictive. Concrete next move for the mentor: A/B test `PULSE_REGIME_MODE=pooled` (no gate) against `PULSE_GATED_BLEND=1` in paper before changing the production default. No retraining was required — costs are a post-aggregation arithmetic layer on `gated_trades.json` + a rebuilt baseline tape.
 **Project:** PULSE — Energy Intelligence Terminal (Futures First internship)
 **Stack:** Flask 3 · React 18 + Vite + Tailwind · SQLite (cache + paper book) · /Data desk feed · 35 named data sources · sklearn (Ridge/Lasso/ElasticNet/Huber/Quantile) + XGBoost/LightGBM/CatBoost (Phase 2.8.1)
 **Run:** `python start.py` from `pulse/` root — opens http://127.0.0.1:5000
@@ -87,6 +87,300 @@ sign-off when she replies and the design will be revisited if she pushes back.
 ---
 
 ## Current sprint
+
+### ✅ PHASE 2.8.6-FOLLOWUP · A/B paper-test harness (pooled vs gated) — SHIPPED 2026-06-11
+
+**Brief:** Phase 2.8.6 surfaced that un-gated pooled NET Sharpe (+0.351) beats
+the current default gated_blend (+0.297) and baseline (+0.301) in walk-forward.
+Goal: validate this under live paper execution before flipping the production
+default. Don't ship the change in production blind — let the market run for
+~2 weeks against both arms in parallel and only switch if the data agrees.
+
+**Design decision — parallel paper books, dual-push per signal day.**
+
+Considered three split strategies:
+
+| split          | upside | rejected because |
+|---             |---     |---               |
+| alternate days | simple | confounds market regime with arm; halves the data each arm sees |
+| split by spread | clean attribution per spread | confounds spread-mean-reversion strength with mode effect |
+| **parallel books** | both arms see SAME market → matched-pair statistical power, clean attribution | minor risk of stacking when arms emit same signal — fixed with dedup on `(asset, direction, ab_mode)` |
+
+Chose parallel books. Each tick generates BOTH `pooled` and `gated`
+recommendations via the new `live_ranker.get_recommendation(force_mode=,
+force_gated=)` override path (no env-var swap, no process-wide side
+effect), iterates every spread that emits BUY/SELL, and writes one paper
+trade per arm tagged with `ab_mode ∈ {'pooled', 'gated'}` on
+`paper_trades`. The dedup helper `open_position_exists(asset, direction,
+ab_mode)` prevents the daily tick from stacking multiple positions on a
+persistent signal — matches what a live book would do (it doesn't double
+down on a position it already holds).
+
+**Stop criteria (when to declare a winner):**
+
+1. **Minimum n_closed ≥ 30 per arm** — small-sample t-statistics aren't
+   trustworthy below ~30 observations per group.
+2. **Welch's t-test on per-trade NET PnL with p < 0.05** — Welch
+   (unequal-variance) two-sample t-test is robust to per-arm variance
+   asymmetry. Scipy used when available; normal-approx erfc fallback when
+   not. Side note: we ALSO compute a paired t-test on
+   `(session, asset, direction)`-matched closed trades — usually tighter
+   p-value because matched-pair removes market-day noise.
+3. **Hard timeout at 14 calendar days** — brief says "~2 weeks"; this is
+   the operationalised version.
+
+Verdict logic: if (1) AND (2) → declare winner = arm with higher NET mean
+PnL. If only (3) elapses → `undecided_timeout` with the current numbers.
+Otherwise `undecided` with a per-criterion explainer.
+
+**NET headline (Phase 2.8.6 cost-aware):** per-trade NET PnL subtracts
+the Phase 2.8.6 round-trip cost from the closed-trade realised PnL,
+scaled by trade size. Sharpe annualised √252 on the NET series. Mirrors
+the methodology PDF exactly so paper headline numbers are directly
+comparable to the walk-forward report. `COST_PER_SPREAD_RT` is
+duplicated in `ab_test.py` and kept in sync with `walkforward.py`
+(gotcha 37 / 41 pattern — costs are a reporting layer, not a model
+param, but the two must agree).
+
+**Files touched (Phase 2.8.6-followup):**
+
+| File | Change |
+|---|---|
+| `backend/research/live_ranker.py` | + `force_mode`, `force_gated` kwargs on `get_recommendation()` so callers can override env-var-driven mode resolution at call-time without process-wide side effects (the A/B harness uses this to generate both arms in one tick). Default behaviour unchanged — when both kwargs are None, the existing `_active_mode()` + `_gated_blend_enabled()` paths fire as before. |
+| `backend/paper_trading.py` | + `ab_mode TEXT DEFAULT NULL` and `ab_session TEXT DEFAULT NULL` columns on `paper_trades` (added via `ALTER TABLE` for backward-compat with existing DBs; legacy non-A/B rows have ab_mode=NULL). `push_trade()` accepts `ab_mode` + `ab_session` kwargs. New `open_position_exists(asset, direction, ab_mode)` dedup helper. New `list_ab_trades(ab_mode=, status=)` query helper. |
+| `backend/research/ab_test.py` | **NEW** — full harness. `tick(ab_session=)` runs one daily generation step. `get_report()` builds the per-arm metrics + Welch + paired t-test + stop-criteria progress + verdict. `_arm_metrics()`, `_welch_t()`, `_paired_t()`, `_net_pnl()`, `_cost_for()` helpers. `reset(scope=)` wipes A/B-tagged paper rows only. `COST_PER_SPREAD_RT` mirror of `walkforward.py`. |
+| `backend/app.py` | + `/api/regime/ab` (GET) returns the report via `respond(ABReportResponse, …)`. + `/api/regime/ab/tick` (POST) fires one manual generation step. + `/api/regime/ab/reset` (POST) wipes A/B rows. + APScheduler job `_ab_tick` scheduled every 24h (starts 5 min after boot), gated by `PULSE_AB_TEST_DISABLED=1`. + `timedelta` added to existing `datetime` import. |
+| `backend/schemas/__init__.py` | + `ABReportData` + `ABArms` + `ABArmMetrics` + `ABDiff` + `ABWelch` + `ABPaired` + `ABStopCriteria` + `ABArmEquityPoint` + `ABReportResponse`. Registered `/api/regime/ab` → `ABReportResponse` in `RESPONSE_MODELS`. |
+| `frontend/src/lib/api-types.ts` | Regenerated by `python scripts/generate_ts_types.py` — 38 interfaces (was 29 after Phase 2.7). |
+| `frontend/src/lib/api.ts` | Re-exports the new AB types. + `api.regimeAB()`, `api.regimeABTick(body)`, `api.regimeABReset(scope)`. |
+| `frontend/src/components/panels/ABComparePanel.tsx` | **NEW** — verdict ribbon, two ARM cards (pooled gold / gated blue) with per-arm KPIs (n_closed, n_open, hit, sharpe NET, mean PnL NET, max DD NET, sharpe gross, total NET, mean cost), inline-SVG cumulative-NET equity chart with two-line legend, difference panel (Δ Sharpe / Δ mean PnL / Welch t / Welch p / paired n / paired p), stop-criteria progress with TrendingUp/Down icons. Manual TICK + RESET buttons with confirm. Polls `/api/regime/ab` every 30 s. |
+| `frontend/src/views/RegimeView.tsx` | Mounts `<ABComparePanel />` below `<RegimePickCard />`. |
+| `backend/db/pulse_cache.db` | Schema migrated in-place — `paper_trades.ab_mode`/`ab_session` columns added by `_ensure_table()` on first import after the change. Existing paper rows unaffected (ab_mode=NULL). |
+
+**Verification (all 2026-06-11):**
+
+- Smoke test `python -c "from research.ab_test import tick, get_report; print(tick(), get_report())"` from backend/: first tick pushed **4 pooled + 4 gated** paper trades on session 2026-06-11, 2 each skipped (NEUTRAL spreads), 0 errors. `get_report()` returns `verdict='undecided'` with `verdict_note` explaining `need >=30 closed/arm`.
+- `python scripts/generate_ts_types.py` regenerated `api-types.ts` cleanly (9,567 bytes / 38 interfaces).
+- `npx tsc --noEmit` clean (only pre-existing `baseUrl` deprecation).
+- `npx vite build` clean — 6.92 s, 1.18 MB bundle (was 1.07 MB; +110 KB for the AB types + panel).
+- Backend imports clean: `from research import ab_test, live_ranker; from paper_trading import push_trade, open_position_exists, list_ab_trades; print('OK')`.
+- Dedup verified: a second `tick()` call within the same session re-fires every arm but every spread is skipped with reason `already_open` (because the first tick's positions are still OPEN). Matches design.
+- Dashboard verified live (preview server): RegimeView shows the existing RegimePickCard with the new ABComparePanel mounted below. Verdict ribbon shows `UNDECIDED` with `need >=30 closed/arm (have 4/4); p_value unavailable (n too small)`. Both arm cards render with 4 opened / 0 closed and equity chart shows placeholder text ("equity curve appears once trades close"). TICK + RESET buttons functional.
+
+**Operational guidance for the mentor:**
+
+1. **Run for ≥ 14 calendar days** OR until 30 closed trades land per arm
+   (whichever comes first). The TICK button on the dashboard lets her fire
+   manually; the APScheduler will also run it once per 24 h.
+2. **The verdict ribbon is the headline**. `pooled_wins` or `gated_wins`
+   with `verdict_note` quoting `n_closed` + Welch `p_value` is the
+   trigger to switch. `undecided_timeout` means run was inconclusive at
+   14 days — extend the window or accept that the walk-forward signal
+   was a sampling artifact.
+3. **Don't conflate this with the regular paper book.** The legacy paper
+   trades the trader manually pushes from the RegimePickCard still flow
+   into the original Paper tab analytics; they have `ab_mode=NULL` and
+   are excluded from the A/B aggregation. RESET on the AB panel only
+   wipes `ab_mode IS NOT NULL` rows.
+4. **Costs are subtracted, sizing is honoured.** Pooled arm uses
+   `notional_scale=1.0` always (un-gated, no Phase 2.7 sizing applies).
+   Gated arm respects whatever `PULSE_GATED_SIZE` is set (default `full`
+   = 1.0). Cost scales with size on both arms.
+
+**What this sprint did NOT do** (intentionally):
+
+- Did not change the default production mode. `PULSE_GATED_BLEND=1`
+  stays the default; the A/B harness pushes BOTH arms in parallel and
+  observes. The default flip is a separate one-line change pending the
+  A/B verdict.
+- Did not modify the walk-forward report. Phase 2.8.6 NET numbers are
+  unchanged; they're what the A/B is trying to live-validate.
+- Did not retrain anything. Both arms use the same Phase 2.8.1+2 pooled
+  models on disk; only the routing rule differs.
+- Did not write a methodology PDF section yet. After the A/B verdict
+  lands we'll regenerate the PDF with whichever arm won.
+
+**Next session — followup to the followup:**
+
+The harness needs ≥14 calendar days OR 30 closed trades/arm to declare
+a verdict. Until then this CLAUDE.md current-sprint section stays open
+as "live A/B in progress." The next mentor-facing milestone is reading
+the verdict and writing the production-mode-flip PR (if pooled wins) or
+keeping the gated default (if gated wins or undecided).
+
+---
+
+### ✅ PHASE 2.8.6 · Transaction costs in the walk-forward — SHIPPED 2026-06-11
+
+**Brief:** Phase 2.8.3 widened the gate but the gated_blend headline stayed
+flat at +0.384 because the booster alpha was already leaking into baseline
+attribution. The honest next-credible lever for a credibility lift was
+**modelling per-trade transaction cost** so the gated/sized NET Sharpe
+reflects what a live book would actually experience. Phase 2.8.6 layers a
+defensible cost model on top of the existing trade tapes; no retraining
+needed because cost-aware Sharpe is a post-aggregation arithmetic operation.
+
+**Cost model (defensible, exchange-published-fee anchored):**
+
+Per leg, per side:
+- Commission + clearing + brokerage: **$0.0025/bbl** (~$2.45 per 1,000-bbl
+  contract; ICE Brent ~$1.45/side + clearing ~$0.30 + brokerage ~$0.70)
+- Half bid-ask slippage: **$0.0050/bbl** front (M1/M2), **$0.0075/bbl** deferred (M3-M6)
+
+Round-trip cost = N legs × 2 sides × (commission + half-spread). Yields:
+
+| spread | RT cost $/bbl |
+|---|---|
+| brent_m1_m2 / wti_m1_m2     | **$0.030** |
+| brent_m3_m6 / wti_m3_m6     | **$0.040** |
+| brent_fly_123 / wti_fly_123 | **$0.050** |
+
+Cost scales with `sizing_scale` on regime rows (half-sized regime trade =
+half the contracts = half the fees). NEUTRAL trades incur zero cost (no
+fill). Applied at the AGGREGATION step only — model training/CV is
+unaffected, so no retraining required when the cost model changes.
+
+**Headline (gross vs net Sharpe, 2026-06-11):**
+
+| Mode             | Gross Sharpe | Net Sharpe | Δ (cost drag) | Mean cost/fire | n fired |
+|---               |---           |---         |---            |---             |---      |
+| baseline 252d z  | +0.385       | **+0.301** | −0.084        | $0.0392        | 2,082   |
+| pooled (un-gated) | +0.437      | **+0.351** | −0.086        | $0.0404        | 1,996   |
+| gated_blend (2.8.3) | +0.384    | **+0.297** | −0.087        | $0.0395        | 2,154   |
+| sized_half       | +0.346       | +0.259     | −0.087        | $0.0370        | 2,154   |
+| sized_kelly      | +0.332       | +0.246     | −0.086        | $0.0365        | 2,154   |
+
+**Per-spread NET (gated_blend, vs baseline NET):**
+
+| spread          | gated gross Shp | gated NET Shp | baseline NET Shp | Δ NET vs base |
+|---              |---              |---            |---               |---            |
+| brent_fly_123   | +1.534          | +1.320        | +1.555           | **−0.235** (baseline wins) |
+| brent_m1_m2     | +0.934          | +0.859        | +0.860           | −0.001 (tie) |
+| brent_m3_m6     | −0.268          | −0.339        | −0.339           | 0.000 (tie, both bad) |
+| wti_fly_123     | +0.884          | +0.744        | +0.762           | −0.018 |
+| wti_m1_m2       | +0.259          | +0.206        | +0.199           | **+0.007** |
+| wti_m3_m6       | +0.298          | +0.207        | +0.195           | **+0.012** |
+
+**Gated_blend NET by source (which leg of the gate carries which slice):**
+
+| source   | n_fired | Net Sharpe | Net mean PnL | Mean cost/fire |
+|---       |---      |---         |---           |---             |
+| regime   | 244     | **+0.806** | +0.4447      | $0.0451 (highest — fly-heavy mix) |
+| baseline | 1,910   | +0.218     | +0.0971      | $0.0388        |
+
+**Findings:**
+
+1. **Costs drag every mode by roughly the same ~−0.085 Sharpe** because the
+   per-trade cost (~$0.040 mean) is mostly determined by spread mix, not by
+   which strategy fires. The relative rankings between modes are preserved.
+
+2. **gated_blend NET (+0.297) is essentially TIED with baseline NET (+0.301)**
+   — Δ −0.004. Costs do NOT flip the Phase 2.8.3 "flat headline" verdict.
+   They erode both modes equally; the engine is no better or worse against
+   baseline under realistic friction.
+
+3. **Pooled (un-gated) is the surprise headline winner under NET costs too.**
+   Pooled gross Sharpe is +0.437 (lifted from +0.195 in Phase 2.5 by the
+   booster + alpha-feature expansion). Under costs it lands at +0.351 NET
+   — **+0.05 above baseline NET, +0.05 above gated_blend NET**. The Phase
+   2.6 gate was added when pooled was losing badly; Phase 2.8.1+2 made
+   pooled strong on its own, and the gate is now over-restrictive (rejects
+   too many fires that would have been profitable).
+
+4. **Regime leg of gated_blend still earns alpha NET** — 244 fires at NET
+   Sharpe **+0.806** (vs gross +0.888). The engine works on the slice it
+   speaks on; it's just that the slice is small and the gated_blend headline
+   is baseline-dominated under the production rule.
+
+5. **The mean cost on regime fires ($0.0451) is higher than baseline fires
+   ($0.0388)** because boosters concentrate on the fly (the most expensive
+   spread class at $0.050/RT). This was the brief's hypothesis — "boosters
+   fire ~3.4× more often, so net Sharpe differential may shift" — and the
+   answer is qualitatively yes (regime mean cost is ~16 % higher) but
+   quantitatively small enough that it doesn't move the headline.
+
+**Concrete production recommendation (updated for Phase 2.8.6):**
+
+- **A/B test `PULSE_REGIME_MODE=pooled` (no gate) against
+  `PULSE_GATED_BLEND=1` in paper trading** for ~2 weeks. The walk-forward
+  says pooled un-gated wins by +0.05 net Sharpe; paper validation will
+  confirm or refute under live execution drag.
+- **Keep `PULSE_GATED_BLEND=1` as today's default** until the A/B has data
+  — the gated blend has been the production rule since Phase 2.6 and the
+  paper book reflects that.
+- **If pooled wins the A/B, switch defaults**; the gated blend can stay
+  available as a defensive mode for traders who want the regime leg
+  attribution badge on the dashboard.
+
+**Files touched (Phase 2.8.6):**
+
+| File | Change |
+|---|---|
+| `backend/research/walkforward.py` | + `COST_PER_SPREAD_RT` dict + `COST_DEFAULT_RT` + `_cost_for(trade)` helper. Extended `_metrics`, `_by`, `_by_curve_axis`, `_by_source`, `_by_spread_source` to accept an optional `cost_fn`. New `_net_block(trades, include_source)` helper. `run_walkforward()` now writes a top-level `costs` block to the report containing per-spread RT table + NET metrics for composite/pooled/baseline/gated_blend/sized_* + lift tables. Also persists `composite_trades.json`, `pooled_trades.json`, `baseline_trades.json` alongside the existing `gated_trades.json` so future cost-model tweaks can re-aggregate without the ~3h walk-forward. CLI summary prints gross vs net Sharpe + mean cost per fire per mode. |
+| `backend/research/reroute_gated.py` | + sys.path bootstrap (so `python -m backend.research.reroute_gated` works without setting `PYTHONPATH`). + Phase 2.8.6 NET section: rebuilds the baseline tape from `build_spread_series()` (deterministic), computes NET blocks for baseline/pooled (reconstructed)/gated_blend/sized_*, writes into `report["costs"]`. Composite NET skipped here because pre-2.8.6 walk-forward didn't persist `composite_trades.json`; a fresh walk-forward will populate it. CLI summary at the end prints the same gross-vs-net headline + per-spread NET breakdown. |
+| `backend/research/methodology_pdf.py` | + §11 on page 1 documenting the cost model (per-leg per-side breakdown + RT cost per spread). + Phase 2.8.6 NET headline table on page 2 (gross / net Sharpe + mean cost + n fired per mode) + per-spread NET Sharpe table (gross gated / net gated / net baseline / Δ) + Phase 2.8.6 finding callout (adapts text based on measured Δ between gated NET and baseline NET; surfaces the "pooled wins" side finding when warranted). Caveats updated — "costs not modelled" replaced with the Phase 2.8.6 cost model description. |
+| `backend/data/research/walkforward_report.json` | Regenerated via reroute. New top-level `costs` block (~50 KB). Report size 111 KB → 164 KB. |
+| `backend/data/research/PULSE_methodology.pdf` | Regenerated. 14.8 KB → 18.3 KB. 2 pages → 5 pages (extra content). |
+| `backend/data/research/composite_trades.json` etc. | **NOT yet on disk** — will be written when next full walk-forward runs. Reroute can't materialise composite trades from `gated_trades.json` alone. |
+
+**Verification (all 2026-06-11):**
+
+- `PYTHONIOENCODING=utf-8 python -m backend.research.reroute_gated` runs in
+  ~12 s end-to-end (includes the ~10 s `build_spread_series()` warmup for
+  the rebuilt baseline tape). Prints OLD-vs-NEW gated headline (unchanged
+  by Phase 2.8.6), the per-spread Δ (unchanged), then the new Phase 2.8.6
+  NET headline + per-spread NET breakdown.
+- `python -m backend.research.methodology_pdf` regenerates the 5-page PDF
+  in <1 s. Verified via `pdfplumber` extraction: §11 cost model on page 2,
+  NET headline table + per-spread NET table on page 4, finding callout
+  with the "pooled un-gated beats both" side finding rendered correctly.
+- `PYTHONIOENCODING=utf-8 python -c "from backend.research import
+  walkforward, reroute_gated, methodology_pdf, live_ranker, models;
+  print('imports OK')"` clean.
+- `_cost_for` smoke test confirms:
+  - Brent fly fired regime trade → $0.050 (full notional)
+  - NEUTRAL trade → $0.000 (no fill)
+  - Half-sized regime fly → $0.025 (sizing-scale applied)
+
+**What this sprint did NOT do** (intentionally — out of scope):
+
+- Did not retrain any models. Cost is a reporting layer, not a CV input.
+- Did not change live inference paths. `live_ranker.py` continues to surface
+  gross fair value + z + bands; cost-awareness lives in the methodology PDF
+  + walk-forward report only. If we A/B test pooled vs gated and pooled
+  wins, the live_ranker change is just flipping the default `PULSE_REGIME_MODE`
+  — already implemented in Phase 2.5.
+- Did not estimate slippage from /Data 1-min mids. The brief mentioned this
+  as an option; chose exchange-published-fee anchored numbers instead because
+  they're more defensible to the mentor and don't require a multi-day
+  microstructure study. The numbers are configurable in `COST_PER_SPREAD_RT`
+  if mentor wants to override.
+- Did not write `composite_trades.json` yet — that requires a full walk-forward
+  run, deferred until a sprint needs to retrain anyway.
+
+**Phase 2.8 remaining tasks — sequencing after 2.8.6:**
+
+| # | Task | Status |
+|---|---|---|
+| **2.8.4** | Pool to one global model with regime-as-feature. | pending |
+| **2.8.5** | Soft regime probabilities — replace hard thresholds. | pending |
+| **2.8.7** | Multi-horizon sweep (5/20/60d) and pick per spread. | pending |
+| **2.8.8** | Extend walk-forward to 2018-2026 (contango coverage). | **promoted to next-credible candidate** — Phase 2.8.6 showed costs don't lift the headline, but extending to 8 years (including 2018-2020 contango) is the largest remaining structural change. Would also need a fresh walk-forward run which persists `composite_trades.json` for full Phase 2.8.6 NET coverage. |
+| **2.8.9** | HMM or change-point regime detection. | pending |
+| **2.8.10** | Portfolio-level vol targeting. | pending |
+| **2.8.11** | Methodology PDF + CLAUDE.md update — done for 2.8.6; will redo end-of-phase. | partial |
+
+**Acceptance for Phase 2.8 as a whole** (revised after 2.8.6): the original
++0.65 gated Sharpe target hasn't moved (gated NET +0.297). But Phase 2.8.6
+surfaced a credible alternative — **un-gated pooled NET +0.351** — that
+beats baseline NET by +0.05 and beats gated_blend NET by +0.05. If the
+A/B paper test confirms this, the mentor recommendation pivots from "ship
+the gate" to "ship pooled un-gated" and the Phase 2.8 acceptance target
+becomes "NET Sharpe ≥ baseline NET + 0.05" which is currently MET on
+pooled. Worth raising with mentor before committing more sprint cycles to
+2.8.4–2.8.10.
+
+---
 
 ### ✅ PHASE 2.8.3 · Widen GATED_WINNERS to admit boosters — SHIPPED 2026-06-11
 
@@ -252,22 +546,23 @@ flag for Brent fly variance reduction, not a default.
 
 | # | Task | Status |
 |---|---|---|
-| **2.8.6** | **Transaction costs in the walk-forward.** Promoted from "pending must-have" to *next sprint*. Boosters fire more often (244 vs 71 regime fires) and net Sharpe per fire could differ materially under costs — this is the live differentiator the headline currently doesn't show. | next session |
+| **2.8.6** | Transaction costs in the walk-forward. | ✅ **shipped 2026-06-11** (see Phase 2.8.6 section above). |
 | **2.8.4** | Pool to one global model with regime-as-feature. | pending |
 | **2.8.5** | Soft regime probabilities — replace hard thresholds. | pending |
 | **2.8.7** | Multi-horizon sweep (5/20/60d) and pick per spread. | pending |
 | **2.8.8** | Extend walk-forward to 2018-2026 (contango coverage). | pending |
 | **2.8.9** | HMM or change-point regime detection. | pending |
 | **2.8.10** | Portfolio-level vol targeting. | pending |
-| **2.8.11** | Methodology PDF + CLAUDE.md update — done for 2.8.3; will redo end-of-phase. | partial |
+| **2.8.11** | Methodology PDF + CLAUDE.md update — done for 2.8.3 and 2.8.6; will redo end-of-phase. | partial |
 
-**Acceptance for Phase 2.8 as a whole** (revised after 2.8.3): the
-original +0.65 target on gated Sharpe is now informed by 2.8.3's
-finding that gate widening alone won't lift the headline. The next
-credible lever is transaction-cost-aware aggregation (2.8.6) — the
-boosters' higher fire frequency may cost or reward them differently
-than the linear winners, and the resulting NET Sharpe is what a live
-book would experience.
+**Acceptance for Phase 2.8 as a whole** (revised after 2.8.6): Phase
+2.8.6 confirmed the gate widening alone (2.8.3) and costs (2.8.6) do
+not lift the gated_blend headline to the original +0.65 target. **But
+Phase 2.8.6 surfaced a credible alternative**: un-gated pooled engine
+NET Sharpe +0.351 (vs baseline NET +0.301, vs gated NET +0.297). If
+mentor accepts "NET Sharpe ≥ baseline NET + 0.05" as the revised
+acceptance bar, pooled un-gated currently MEETS it. Worth raising
+before committing more sprint cycles to 2.8.4–2.8.10.
 
 ---
 
@@ -691,6 +986,7 @@ Sample-size analysis and transition matrix can be regenerated on demand from `fe
 | **2.7** — Position sizing on the regime leg | ✅ **shipped 2026-06-09** | Add `PULSE_GATED_SIZE=<full\|half\|kelly>` to scale the regime-leg notional. Walk-forward fourth leg simulates each mode end-to-end. **Headline disproves the brief's DD hypothesis** — sizing the regime leg can't compress max DD because DD is baseline-dominated (regime-leg DD −6.66 vs baseline −272). Headline Sharpe drops slightly under sizing (0.456 full → 0.434 half → 0.426 kelly). **BUT per-spread, half-sizing LIFTS Brent fly_123 Sharpe from +1.833 to +2.192** — a real, useful improvement. Detail below. |
 | **2.8.1 + 2.8.2** — 7-model competition + alpha features | ✅ **shipped 2026-06-11** | Added XGBoost / LightGBM / CatBoost to per-cell competition (linear preferred on ties via `_TIEBREAK_RANK`). Expanded BRENT_FEATURES 11 → 20 (curvature, inv_surprise, COT 156-week percentile, 3-2-1 + gasoline cracks, WTI-Brent spread, real rate, OVX/VIX, days-to-expiry). New backfill modules `cot_history.py` + `external_history.py`. Walk-forward verdict: **composite Sharpe +0.245 → +0.431 (+76 %)**, **pooled Sharpe +0.195 → +0.437 (+124 %)**, BUT **gated_blend regressed +0.456 → +0.389 (−15 %)** because boosters stole BACK cells the gate's narrow `winner ∈ {Lasso, Huber}` rejects. Detail below. |
 | **2.8.3** — Widen GATED_WINNERS to include boosters | ✅ **shipped 2026-06-11** | Extended `GATED_WINNERS` → `{Lasso, Huber, XGBoost, LightGBM, CatBoost}` in both `walkforward.py` and `live_ranker.py` (per gotcha 26, mirrored bit-for-bit). Re-aggregated via new `reroute_gated.py` (no retraining needed — wider gate is strict superset of narrow). **Acceptance NOT met**: gated_blend headline went +0.389 → +0.384 (flat). **But regime leg lifted dramatically**: Sharpe +0.369 → +0.888 across 244 fires (was 71). Honest finding: the booster trades' alpha was already leaking into the baseline-leg attribution under the narrow gate; widening REASSIGNS credit correctly but doesn't CREATE new alpha at the blended level. Next credible lever: Phase 2.8.6 transaction costs. Detail below. |
+| **2.8.6** — Transaction costs in the walk-forward | ✅ **shipped 2026-06-11** | Defensible per-leg per-side cost model ($0.0025 commission + $0.0050/$0.0075 half-spread front/deferred) → $0.030/$0.040/$0.050 RT $/bbl for 2-leg M1-M2 / 2-leg M3-M6 / 3-leg fly. Cost scales with `sizing_scale` on regime rows. Applied as post-aggregation arithmetic on `gated_trades.json` + a rebuilt baseline tape; no retraining needed. **Headline**: costs drag every mode by ~−0.085 Sharpe (uniform), gated_blend NET +0.297 vs baseline NET +0.301 (tied, same flat verdict as gross). **Side finding**: un-gated pooled NET +0.351 beats baseline NET by +0.05 — Phase 2.8.1+2 boosters lifted pooled enough that the Phase 2.6 gate is now over-restrictive. Mentor recommendation: A/B paper-test `PULSE_REGIME_MODE=pooled` vs `PULSE_GATED_BLEND=1` before changing default. Detail above. |
 
 ---
 
@@ -1553,8 +1849,9 @@ pulse/
 │       ├── models.py                 # 4-model competition + Quantile bands; `regime_mode={composite,pooled}` (Phase 2.5)
 │       ├── live_ranker.py            # classify → predict → rank; reads `PULSE_REGIME_MODE` env var
 │       ├── drill.py                  # Sprint 2c: scatter + 3 nearest analogs per pick (mode-aware)
-│       ├── walkforward.py            # Sprint 4 + Phase 2.5 / 2.6 / 2.7: composite + pooled + gated_blend + sized_blend{full,half,kelly} + baseline in one report; also writes gated_trades.json
-│       └── methodology_pdf.py        # 2-page mentor PDF — composite/pooled/gated/baseline + Phase 2.7 sized headline
+│       ├── walkforward.py            # Sprint 4 + Phase 2.5 / 2.6 / 2.7 / 2.8.6: composite + pooled + gated_blend + sized_blend{full,half,kelly} + baseline + NET (after costs) blocks in one report; writes gated_trades.json + composite_trades.json + pooled_trades.json + baseline_trades.json for future cost recomputes
+│       ├── reroute_gated.py          # Phase 2.8.3 + 2.8.6: re-aggregate gated/sized + compute NET blocks from gated_trades.json (+ rebuilt baseline) without retraining
+│       └── methodology_pdf.py        # 5-page mentor PDF — composite/pooled/gated/baseline + Phase 2.7 sized headline + Phase 2.8.6 NET section
 │
 └── frontend/
     ├── index.html · vite.config.ts · package.json
@@ -1622,6 +1919,8 @@ BETTER_STACK_TOKEN=...    # log aggregation
 PULSE_REGIME_MODE=pooled  # un-gated pooled inference (3-cell curve-axis grid)
 PULSE_GATED_BLEND=1       # Phase 2.6 production rule: pooled on BACK + {Lasso, Huber} + |z|≥0.5σ, else 252d baseline. Forces pooled internally.
 PULSE_GATED_SIZE=half     # Phase 2.7 position sizing on the regime leg of the gated blend. Values: full (default; no sizing) | half (0.5× notional) | kelly (per-spread Kelly from prior closed regime-leg PnLs, read from sized_blend_summary in walkforward_report.json). Baseline leg always 1.0.
+# Phase 2.8.6-followup A/B paper-test harness:
+PULSE_AB_TEST_DISABLED=1  # opt-out flag — when set, the daily A/B tick scheduler job is skipped. The API routes still work for manual ticks. Unset / 0 = harness active (default).
 ```
 
 ---
@@ -1830,6 +2129,15 @@ These bite a fresh session if not flagged:
 34. **`_BOOSTER_MIN_ROWS=80` gates booster competition on small samples (Phase 2.8.1)** — in both `models.py:train_all()` and `walkforward.py:_train_cells_through()`, cells with fewer than 80 train rows skip the booster fitters entirely. Small samples can't reliably distinguish trees from linear via CV, and the booster fits dominate refit wall-time. If you tune this lower, expect walk-forward to slow proportionally. The threshold lives once in `models.py`; walkforward imports it.
 35. **Phase 2.8.1 broke the Phase 2.6 gate; Phase 2.8.3 is the fix** — Phase 2.6 hard-coded `GATED_WINNERS = {"Lasso", "Huber"}` based on the Phase 2.5 finding that those were the strong winners under the BACK regime. Phase 2.8.1 boosters now legitimately win cells the gate rejects (LightGBM +1.294 / CatBoost +1.248 / XGBoost +0.853 in pooled walk-forward). Net: 85 gate fires post-2.8 vs 97 pre-2.8, with the surviving fires sharing the slice with weaker patterns → gated Sharpe dropped from +0.456 to +0.389. The fix is one line — extend `GATED_WINNERS` in `walkforward.py` AND mirror in `live_ranker.py:GATED_WINNERS` (the two MUST stay in sync per gotcha 26).
 36. **Phase 2.8.2 features need their parquet caches** — `cot_history.parquet` (CFTC backfill, refreshed ≥14 days old) and `external_history.parquet` (FRED + yfinance backfill, refreshed ≥7 days old). On a fresh clone with EIA_API_KEY + FRED_API_KEY set, the first `build_features()` call triggers `cot_history._build_history(years)` (downloads ~12 zips, ~5 min) and `external_history._assemble()` (~1 min). Both fall back to a stale cache if the API fails. If you want to force a refresh, call `get_cot_history(force_refresh=True)` / `get_external_history(force_refresh=True)`. If neither key is set, those features become NaN and the `dropna(BRENT_FEATURES)` at the end of `features.build_features()` wipes the matrix — fail-loud-on-import is intentional so the operator notices.
+37. **Phase 2.8.6 cost model is reporting-only — live inference does NOT subtract cost** — `walkforward.COST_PER_SPREAD_RT` and `_cost_for(t)` are consumed by `_metrics(trades, cost_fn=_cost_for)` to compute NET aggregates for the methodology PDF + walkforward report. `live_ranker.get_recommendation()` returns fair value / z / bands as gross spread prices because (i) the trader is the one paying commissions and knows the broker rate, and (ii) the cost-aware threshold for "fire vs hold" is a trading-rule decision that should live in the trading rule, not the model. If you want a NET-aware live signal in the future, add the cost subtraction at the `direction` decision step in `live_ranker.py` (would need a mirror in `walkforward._evaluate_window` to keep gotcha-26-style parity).
+38. **Phase 2.8.6 cost scales with `sizing_scale` on regime rows** — `_cost_for` returns `base × t.get('sizing_scale', 1.0)`. So a half-sized regime fly trade costs $0.025/bbl (half of $0.050), matching the half-notional reality. Baseline rows always have `sizing_scale=1.0` after `_apply_sizing`, so their cost is unscaled. If you write a new sizing mode, set `sizing_scale` on the trade record and `_cost_for` picks it up automatically.
+39. **Phase 2.8.6 NET aggregation works on the trade-tape level only** — `_metrics(trades, cost_fn=_cost_for)` computes per-trade gross−cost and then aggregates Sharpe/hit/DD on the net series. So the NET Sharpe uses the EXACT post-cost trade distribution (incl. correct variance). Don't try to derive NET Sharpe from gross by `gross_sharpe × net_mean / gross_mean` — that's a first-order approximation that misses second-order effects on variance. If a future report needs NET for a mode whose trade tape isn't persisted, run the full walk-forward to write the missing tape (`composite_trades.json` etc.) — reroute only handles modes whose tapes are reconstructible from `gated_trades.json` (pooled + baseline + sized).
+40. **Phase 2.8.6 persists 4 trade-tape JSONs** — `gated_trades.json` (Phase 2.7, always written), `composite_trades.json`, `pooled_trades.json`, `baseline_trades.json` (all three new). These let any future cost-model change (different per-spread cost, per-broker overrides, roll slippage layer) re-aggregate in seconds via a reroute-style script. Aggregate size ~5 MB — gitignored by virtue of `backend/data/research/` exclusion. Re-aggregating without re-running the ~3h walk-forward only works if these tapes are present; pre-2.8.6 reports have only `gated_trades.json` so composite NET is unavailable until next walk-forward run.
+41. **Phase 2.8.6-followup A/B harness uses force_mode/force_gated kwargs, NOT env-var swap** — `live_ranker.get_recommendation(force_mode='pooled', force_gated=True)` overrides `_active_mode()` and `_gated_blend_enabled()` at the call site so the A/B harness can generate both arms within one process tick without `os.environ[...] = ...` mutation (which would race with other request handlers in Flask + APScheduler). If you add a third "arm" to the harness later (e.g. composite-only un-gated), extend the `arms` tuple in `ab_test.tick()` with another `(name, kwargs)` entry — both the dedup and reporting paths key off `ab_mode` which is whatever string you pass to `push_trade`. If you forget to pass `force_gated=False` for the pooled arm and `PULSE_GATED_BLEND=1` is set in the env, the pooled arm WILL silently become a gated push (env-var wins when `force_gated is None`), nullifying the A/B. Always pass both kwargs explicitly when calling for an arm.
+42. **Phase 2.8.6-followup A/B cost table is a MIRROR — keep in sync with walkforward.COST_PER_SPREAD_RT** — `ab_test.COST_PER_SPREAD_RT` duplicates `walkforward.COST_PER_SPREAD_RT`. If you change the per-spread cost (different broker rate, roll-slippage layer) in walkforward, mirror it in ab_test or the paper-headline NET Sharpe will drift from the methodology PDF NET Sharpe. Both currently use the same exchange-published-fee anchored numbers ($0.030/$0.040/$0.050 RT for M1-M2 / M3-M6 / fly). Test coverage: smoke test `from research.ab_test import COST_PER_SPREAD_RT as A; from research.walkforward import COST_PER_SPREAD_RT as B; assert A == B`.
+43. **Phase 2.8.6-followup paper_trades.ab_mode is sparse and BACKWARD-COMPAT** — legacy paper rows (from before this sprint) have `ab_mode=NULL`. `list_positions()`, `get_performance()`, and the regular Paper tab analytics do NOT filter on ab_mode, so they continue to surface ALL paper trades (including the A/B-tagged ones). That's intentional: the trader-pushed paper book and the A/B paper books live in one table. If the regular Paper analytics should EXCLUDE A/B rows in the future (so the trader's manual book is judged independently), add `AND ab_mode IS NULL` to the SQL in `get_performance()` and `list_positions()`. Don't do this prematurely — currently it's useful that the equity curve in the regular Paper tab reflects the harness contributions too.
+44. **Phase 2.8.6-followup A/B dedup is per (asset, direction, ab_mode), NOT per session** — `open_position_exists()` looks at OPEN status with no ab_session filter. If a position closes on day N (TP/SL hit, or manual close), the next day's tick CAN reopen the same (asset, direction, ab_mode) — that's correct, the previous position closed and the signal is still firing. But if a position stays open for 14 days because TP/SL never hit, the daily tick will SKIP it every day with reason `already_open`. This matches what a live book does (it doesn't double down) but it means the n_closed counter for stop criteria can grow slower than n_opened might suggest. Look at the `n_closed` metric, not `n_opened`, when judging stop-criteria progress.
+45. **Phase 2.8.6-followup A/B scheduler job runs once per 24h, NOT on next_run_time=_NOW** — `_ab_tick` is scheduled with `next_run_time = _dt.now() + timedelta(minutes=5)` deliberately. The data lake + regime model loads take ~60 s; firing the first tick at boot risks a `features matrix empty` error if the warm-up hasn't completed. The 5-minute buffer is conservative. If you change the cadence (e.g. 4-hourly during a fast A/B), `next_run_time` should still have at least a 2-minute buffer past boot.
 
 ---
 
@@ -1850,6 +2158,7 @@ These bite a fresh session if not flagged:
 | 2026-06-09 | **Phase 2.7 shipped + honest finding**: position sizing on the regime leg behind `PULSE_GATED_SIZE=<full\|half\|kelly>`. Walk-forward fourth leg simulates each mode end-to-end. **The brief's DD-compression hypothesis is DISPROVED** — sized blend headline max DD barely moves (−271 → −271.6 half → −271.4 kelly) because the DD lives on the baseline leg (−272), not the regime leg (only −6.66). Sharpe slightly drops under sizing (0.456 full → 0.434 half → 0.426 kelly) because halving the regime leg's mean PnL drops its contribution proportionally. **Unexpected positive**: half-sizing lifts Brent fly_123 Sharpe from **+1.833 to +2.192** — a clean +0.43 lift via variance reduction. Concrete production recommendation: keep `PULSE_GATED_BLEND=1` as default; add `PULSE_GATED_SIZE=half` as opt-in for traders who want a lower-variance regime-leg contribution on Brent fly. Don't ship Kelly in its current form (97-trade sample too thin; brent_fly fraction 0.1445 is over-cautious). |
 | 2026-06-11 | **Phase 2.8.1 + 2.8.2 shipped + honest finding**: per-cell competition widened to 7 candidates (added XGBoost / LightGBM / CatBoost); feature set expanded 11 → 22 (COT 156-week percentile, inventory surprise, curvature, refining cracks, real rate, OVX/VIX ratio, WTI-Brent spread, days-to-expiry; new `cot_history.py` + `external_history.py` parquet caches). **Composite Sharpe +0.245 → +0.431 (+76 %)**, **pooled Sharpe +0.195 → +0.437 (+124 %)**. **Headline catch**: **gated_blend regressed +0.456 → +0.389 (−15 %)** because the Phase 2.6 gate is hard-coded to `winner_model ∈ {Lasso, Huber}` and the new boosters stole BACK cells — LightGBM (+1.294 Sharpe on 113 fires) and CatBoost (+1.248 on 147 fires) now win cells the gate locks them out of. Pooled by-winner table proves the lift is *there*; the gate just needs widening. **Phase 2.8.3 is now the one-line fix**: extend `GATED_WINNERS` to include the three boosters and re-run walk-forward; predicted gated Sharpe ≥ +0.60. Live dashboard already serves the new models (top pick = BUY Brent front fly, XGBoost winner, 19/19 active features). Methodology PDF + walkforward_report.json regenerated; backtest_report.json shows 15/66 composite + 3/15 pooled cells now won by boosters. |
 | 2026-06-11 | **Phase 2.8.3 shipped + honest finding** — the +0.20 Sharpe lift predicted from Phase 2.8.2 by-cohort booster Sharpe **did NOT materialise at the gated_blend headline**. Measured: +0.389 → **+0.384** (flat). Acceptance criterion (≥ +0.60) NOT met. **However the regime leg's individual Sharpe lifted dramatically**: +0.369 → **+0.888** across 244 fires (was 71) — the boosters genuinely contribute alpha when treated as regime signals (wti_fly +1.499, wti_m3_m6 +1.610, brent_fly +0.956). Mechanism: the booster trades' alpha was already leaking into the baseline-leg attribution under the narrow gate; widening REASSIGNS credit correctly to the engine but doesn't CREATE new alpha because the underlying realized PnL stream barely changes (most re-routed trades had baseline-z direction matching pooled-z direction). The widened gate is still methodologically more correct — the engine now reports its honest +0.888 regime Sharpe rather than understated +0.369 — and the live dashboard now badges those trades as REGIME rather than mis-attributing them to BASELINE. No retraining required: new `reroute_gated.py` script invertes `gated_trades.json` back into pooled+baseline candidates and re-runs `_build_gated_blend` + `_apply_sizing` + `_aggregate_mode` under the new gate in <2 s. The full ~3h walk-forward started at 06:56 but died at 08:22 mid-pooled-refit-3 (Windows sleep). **Concrete next move for the mentor**: Phase 2.8.6 transaction costs — boosters fire ~3.4× more often than the narrow gate; net Sharpe under realistic per-trade cost may differ materially. That's the next-credible headline lift. |
+| 2026-06-11 | **Phase 2.8.6 shipped + honest finding** — defensible per-leg per-side cost model ($0.0025 commission + $0.0050/$0.0075 half-spread front/deferred) → $0.030/$0.040/$0.050 RT $/bbl for M1-M2 / M3-M6 / fly. Applied as post-aggregation arithmetic; no retraining needed. **Headline: costs drag every mode by roughly the same ~−0.085 Sharpe**, gated_blend NET +0.297 vs baseline NET +0.301 (tied, same flat verdict as gross). The brief's hypothesis "boosters fire more often so net Sharpe differential may shift materially" is qualitatively confirmed (regime fires have higher mean cost $0.0451 vs baseline $0.0388 because boosters concentrate on the fly) but quantitatively small — doesn't move the headline. **Notable side finding worth raising with mentor**: the un-gated pooled engine wins both gross (+0.437) AND net (+0.351). Phase 2.8.1+2 boosters lifted pooled enough that the Phase 2.6 gate (added when pooled was losing in Phase 2.5) is now over-restrictive. Concrete recommendation: A/B paper-test `PULSE_REGIME_MODE=pooled` against current default `PULSE_GATED_BLEND=1` for ~2 weeks; if pooled wins, switch defaults. Files: `walkforward.py` (+ COST_PER_SPREAD_RT + _cost_for + _net_block + costs report block + persists all raw trade tapes for future cost recomputes), `reroute_gated.py` (+ baseline rebuild from spreads + NET section + CLI summary), `methodology_pdf.py` (+ §11 cost model on page 1 + NET headline table + per-spread NET table + finding callout on page 2; PDF grew 2 → 5 pages). |
 
 ### Draft mentor message — WTI deferred-settlement file (Q5)
 

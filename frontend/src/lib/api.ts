@@ -7,6 +7,7 @@ import type {
   PaperPosition,
   PaperPerformanceData,
   HealthDetailData,
+  ABReportData,
 } from './api-types';
 
 // Re-export the generated types so views can import them from a single place.
@@ -30,6 +31,14 @@ export type {
   HealthDetailData,
   HealthStream,
   HealthCounts,
+  ABReportData,
+  ABArmMetrics,
+  ABArms,
+  ABDiff,
+  ABWelch,
+  ABPaired,
+  ABStopCriteria,
+  ABArmEquityPoint,
 } from './api-types';
 
 // Thin fetch wrapper that unwraps the Flask `{data, timestamp}` envelope.
@@ -149,6 +158,9 @@ export const api = {
   regimeRecommendation:   () => getJSON('/api/regime/recommendation'),
   regimeBacktest:         () => getJSON('/api/regime/backtest'),
   regimeDrill:            (spread: string) => getJSON(`/api/regime/drill/${spread}`),
+  regimeAB:               () => getJSON<ABReportData>('/api/regime/ab'),
+  regimeABTick:           (body: any = {}) => postJSON('/api/regime/ab/tick', body),
+  regimeABReset:          (scope: 'all' | 'closed' = 'all') => postJSON('/api/regime/ab/reset', { scope }),
   // Paper trading
   paperPositions:  () => getJSON<PaperPosition[]>('/api/paper/positions'),
   paperPerformance:() => getJSON<PaperPerformanceData>('/api/paper/performance'),
