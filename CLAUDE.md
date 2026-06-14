@@ -9,9 +9,10 @@ spread engine), and serves a React dashboard with a paper-trading book.
 - **Run (local):** `python start.py` from the repo root → http://127.0.0.1:5000
 - **Last updated:** 2026-06-14
 
-> 📚 **The full sprint-by-sprint history lives in [`docs/PHASE_HISTORY.md`](docs/PHASE_HISTORY.md).**
-> This file is the lean source of truth: *current state, how to run, architecture, gotchas.*
-> When you need "what exactly did Phase 2.7 do," read the history file.
+> 🧭 **Three docs, one per tense:**
+> **this file = present** (current state · how to run · architecture · gotchas) ·
+> [`docs/ROADMAP.md`](docs/ROADMAP.md) **= future** (pending tasks · timeline · copy-paste session prompts) ·
+> [`docs/PHASE_HISTORY.md`](docs/PHASE_HISTORY.md) **= past** (full sprint-by-sprint log).
 
 ---
 
@@ -41,6 +42,7 @@ Startup-folder launcher, 90s loop; logs to `~/.oci/pulse_launch.log`). On succes
 open 80/443 (security list + iptables), `docker compose up -d --build`, hand over the link.
 
 ### ⬜ Next / backlog
+> **Full backlog + timeline + per-task copy-paste prompts → [`docs/ROADMAP.md`](docs/ROADMAP.md).** Highlights:
 - **Phase 3.0** — `tests/test_invariants.py`: assert the cross-module mirrors in §5 stay in sync.
 - **Read the A/B verdict** once ≥30 closed trades/arm (or 14 days) → keep gated default or flip to pooled.
 - **Phase 2.8 model backlog** (optional): 2.8.4 global model w/ regime-as-feature · 2.8.5 soft regime
@@ -158,6 +160,7 @@ Converted to `Data/parquet/` for DuckDB. Research caches (COT, FRED/external, cr
 ## 6. Conventions
 
 - **One sprint per session** — read this file, do the sprint, update §1, stop. Don't multitask sprints.
+  *(Full session rules + a copy-paste prompt for every pending task live in [`docs/ROADMAP.md`](docs/ROADMAP.md).)*
 - **Honesty over polish** — every number traces to a named source; stale data shown as stale; report
   failures plainly (the walk-forward & robustness verdicts are deliberately graded, not spun).
 - **Interpretability over R²** (mentor mandate) · **type safety on the backend↔frontend seam**
