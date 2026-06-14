@@ -42,12 +42,11 @@ paste the live URL into `CLAUDE.md` §1.
 
 ## 🟡 TIER 1 — Next sessions (high value, mostly small)
 
-**T1.1 — Phase 3.0: invariants test.** `[S]`
-Add `tests/test_invariants.py` (pytest) asserting the cross-module mirrors so they can't silently drift:
-gate (`live_ranker` ↔ `walkforward`: `GATED_WINNERS`, `GATED_Z_THRESHOLD`, `ROLLING_WIN`),
-tuned exit rule (`live_ranker.TUNED_MAX_HOLD_DAYS` == `paper_trading.TUNED_MAX_HOLD_TRADING_DAYS`,
-plus TP frac / SL mult / excluded spreads), and A/B cost table (`ab_test` ↔ `walkforward`). Pin `pytest`.
-> ▶ **Prompt:** `Read CLAUDE.md in pulse/, then do Phase 3.0 — add tests/test_invariants.py (pytest) asserting the §5 mirror invariants: gate winners/z-threshold/rolling-window (live_ranker vs walkforward), the tuned exit-rule mirror (live_ranker.TUNED_MAX_HOLD_DAYS == paper_trading.TUNED_MAX_HOLD_TRADING_DAYS plus TP/SL/excluded-spreads), and ab_test.COST_PER_SPREAD_RT == walkforward.COST_PER_SPREAD_RT. Pin pytest in requirements.txt and run it green. Don't multi-task. When it ships, update CLAUDE.md + docs/ROADMAP.md and stop.`
+**T1.1 — Phase 3.0: invariants test.** `[S]` ✅ **DONE 2026-06-14**
+`tests/test_invariants.py` (pytest, **9 tests green**) asserts the gate mirror (`live_ranker` ↔
+`walkforward`), the tuned exit-rule mirror (`live_ranker.TUNED_MAX_HOLD_DAYS` ==
+`paper_trading.TUNED_MAX_HOLD_TRADING_DAYS` + TP/SL/excluded-spreads), and the A/B cost table
+(`ab_test` ↔ `walkforward`). `pytest==9.1.0` pinned. Run: `python -m pytest tests/ -v`.
 
 **T1.2 — Read the A/B verdict, decide the production mode.** `[S · time-gated: needs ≥30 closed trades/arm OR ~14 days of accumulation]`
 Once the book has data, read `/api/regime/ab`. If `pooled_wins` → write the one-line production-default

@@ -32,6 +32,8 @@ spread engine), and serves a React dashboard with a paper-trading book.
   reports per-arm NET win rate + Welch/paired t-tests + a verdict. This is the live forward-validation.
 - **Phase 3.D deploy artifacts:** multi-stage `Dockerfile`, `docker-compose.yml` (app + Caddy reverse
   proxy w/ basic-auth + auto-HTTPS), `backend/wsgi.py` (gunicorn entry, single worker), SQLite WAL.
+- **Phase 3.0 — invariants test:** `tests/test_invariants.py` (pytest, 9 tests green) asserts the gate /
+  tuned-exit / A/B-cost mirrors stay in sync (§5 gotchas 7-9). Run `python -m pytest tests/`.
 
 ### 🔄 In progress — **always-on deployment** (details in memory `pulse-deployment-pending`)
 Goal: a public link so the A/B book accumulates 24/7. Host = **Oracle Cloud Always Free (ARM)**,
@@ -43,7 +45,6 @@ open 80/443 (security list + iptables), `docker compose up -d --build`, hand ove
 
 ### ⬜ Next / backlog
 > **Full backlog + timeline + per-task copy-paste prompts → [`docs/ROADMAP.md`](docs/ROADMAP.md).** Highlights:
-- **Phase 3.0** — `tests/test_invariants.py`: assert the cross-module mirrors in §5 stay in sync.
 - **Read the A/B verdict** once ≥30 closed trades/arm (or 14 days) → keep gated default or flip to pooled.
 - **Phase 2.8 model backlog** (optional): 2.8.4 global model w/ regime-as-feature · 2.8.5 soft regime
   probabilities · 2.8.7 multi-horizon sweep · 2.8.8 extend walk-forward to 2018-2026 · 2.8.9 HMM/
@@ -139,7 +140,7 @@ Converted to `Data/parquet/` for DuckDB. Research caches (COT, FRED/external, cr
 6. Model pkls (`backend/data/research/models*/`) — copy from another machine or rebuild via
    `python -m backend.research.models --mode composite|pooled`.
 
-**Regime-engine invariants** (the mirrors `test_invariants.py` should assert)
+**Regime-engine invariants** (asserted by `tests/test_invariants.py` — run `python -m pytest tests/`)
 7. **Gate rule** is mirrored: `live_ranker._pooled_passes_gate` ↔ `walkforward._pooled_passes_gate`
    (`GATED_WINNERS`, `GATED_Z_THRESHOLD`, `ROLLING_WIN` must match bit-for-bit).
 8. **Tuned exit rule** lives in `live_ranker.py` (TP/SL frac + excluded spreads) **and** `paper_trading.py`
