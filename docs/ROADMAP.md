@@ -54,12 +54,12 @@ flip PR (`PULSE_REGIME_MODE=pooled`). If `gated_wins`/`undecided` → keep the g
 the methodology PDF with the winning arm.
 > ▶ **Prompt:** `Read CLAUDE.md in pulse/, then read the A/B verdict at /api/regime/ab (start the app first if needed). If a winner is declared (>=30 closed/arm AND p<0.05), make the production-mode decision: if pooled wins, flip the default and write a short PR; if gated/undecided, keep the gated default and say why. Regenerate the methodology PDF for the winning arm. Don't multi-task; update CLAUDE.md + docs/ROADMAP.md and stop.`
 
-**T1.3 — Mentor: send the WTI ask + chase the 7 sign-offs.** `[S · external/owner action]`
-A draft message asking for the real WTI C1-C3 *daily settlement* file is in `PHASE_HISTORY.md`
-("Draft mentor message"). Also still pending her sign-off: the 7 alignment questions (instrument scope,
-regime axes, time horizon, auto-push behaviour, Phase-1 coexistence). This is an owner action — I can
-prep/send drafts, you relay.
-> ▶ **Prompt:** `Read CLAUDE.md in pulse/ (and the "Draft mentor message" + "Pending decisions" in docs/PHASE_HISTORY.md), then help me finalize and send the mentor the WTI daily-settlement-file request and a chase on the 7 alignment-question sign-offs. Draft them cleanly; ask me anything you need. Don't multi-task; update the docs and stop.`
+**T1.3 — Mentor: send the WTI ask + chase the 7 sign-offs.** `[S · owner action]` ✏️ **DRAFTED — ready to send**
+Both messages are written and ready in **[`docs/mentor_followups.md`](mentor_followups.md)**: (1) the
+real WTI *daily settlement* file request (the synth is ESTIMATE, capping WTI history at 2021+), and
+(2) a Phase-2 status + sign-off chase on the 7 alignment questions (instrument scope, regime axes,
+horizon, auto-push, Phase-1 coexistence). **Your move:** review, send, then log it in
+`PHASE_HISTORY.md`'s mentor communication log.
 
 ---
 
