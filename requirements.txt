@@ -64,3 +64,8 @@ APScheduler==3.11.2        # background data refresh jobs
 
 # ── AIS / Tanker Watch ────────────────────────────────────────────────────────
 websocket-client==1.9.0    # aisstream.io WebSocket — live ship positions (needs AISSTREAM_API_KEY)
+
+# ── Testing (Phase 3.0) ───────────────────────────────────────────────────────
+# Cross-module invariant tests (tests/test_invariants.py) guard the duplicated
+# constants in CLAUDE.md §5 gotchas 7-9. Run: python -m pytest tests/ -v
+pytest==9.1.0
