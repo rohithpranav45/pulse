@@ -347,6 +347,10 @@ def _evaluate_window(
                 "p10":       round(p10, 4),
                 "p50":       round(p50, 4),
                 "p90":       round(p90, 4),
+                # Phase 2.9.0 — resid_std carried so the TP/SL exit simulator
+                # (exit_sim.py) can rebuild the stop level (entry ± 1.5σ)
+                # without back-solving from z. Additive; no metric reads it.
+                "resid_std": round(float(sigma), 6),
                 "z":         round(z, 3),
                 "direction": direction,
                 "winner":    cell["winner"],
@@ -397,6 +401,13 @@ def _baseline_trades(
             fwd_move = float(future.iloc[FORWARD_DAYS - 1]) - actual
             fwd_pnl  = sign * fwd_move
 
+            # Phase 2.9.0 — carry the rolling mean (= baseline TP target, the
+            # p50 analog) + rolling std (= baseline SL sigma) so the TP/SL exit
+            # simulator can close baseline-leg trades at entry±1.5σ / revert-to-
+            # mean exactly as live_ranker's baseline candidate does.
+            rm = roll_mu.loc[d]
+            rs = roll_sig.loc[d]
+
             trades.append({
                 "date":      d.strftime("%Y-%m-%d"),
                 "spread":    spread,
@@ -405,6 +416,8 @@ def _baseline_trades(
                 "direction": direction,
                 "fwd_move":  round(fwd_move, 4),
                 "fwd_pnl":   round(fwd_pnl, 4),
+                "roll_mu":   round(float(rm), 6) if np.isfinite(rm) else None,
+                "roll_sigma":round(float(rs), 6) if np.isfinite(rs) else None,
             })
     return trades
 
@@ -555,6 +568,11 @@ def _build_gated_blend(
                 "direction": b["direction"],
                 "fwd_move":  b.get("fwd_move"),
                 "fwd_pnl":   b.get("fwd_pnl"),
+                # Phase 2.9.0 — baseline TP/SL inputs (rolling mean + std) so
+                # the exit simulator can close baseline-leg rows of the gated
+                # blend. Regime rows keep p50/resid_std via the **p spread above.
+                "roll_mu":   b.get("roll_mu"),
+                "roll_sigma":b.get("roll_sigma"),
                 # diagnostic context from the pooled candidate (if it existed)
                 "regime":    (p or {}).get("regime")    if p else None,
                 "winner":    (p or {}).get("winner")    if p else None,
