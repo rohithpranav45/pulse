@@ -69,6 +69,20 @@ GATED_WINNERS     = {"Lasso", "Huber", "XGBoost", "LightGBM", "CatBoost"}
 GATED_Z_THRESHOLD = 0.5
 ROLLING_WIN       = 252  # baseline z-score window
 
+# ─── Phase 2.9.1 tuned exit rule (chosen by exit_tuning.py constrained sweep) ──
+# The 288-config sweep on the gated tape maximised realised TP/SL win rate
+# (64.2% → 82.9%) SUBJECT TO NET profit-factor > 1 and NET Sharpe ≥ the prior
+# default — and the winner improves every metric (NET PF 1.26→1.99, NET Sharpe
+# 0.211→0.475). live_ranker computes target/stop from these; paper_trading
+# mirrors TUNED_MAX_HOLD_DAYS as a live time-stop (NEW INVARIANT — keep the two
+# in sync; assert parity in test_invariants.py in Phase 3.0). The entry trigger
+# is UNCHANGED at |z| ≥ GATED_Z_THRESHOLD (0.5), so the gate stays bit-for-bit
+# identical to walk-forward (gotcha 26) — no gate-sync needed.
+TUNED_TP_FRAC          = 0.5    # take-profit halfway from entry to fair value (p50 / rolling mean)
+TUNED_SL_MULT          = 2.5    # stop at entry ± 2.5 × sigma (resid_std / rolling std); was 1.5
+TUNED_MAX_HOLD_DAYS    = 30     # time-stop in trading days (enforced live by paper_trading.mark_to_market)
+TUNED_EXCLUDED_SPREADS = {"brent_m3_m6", "wti_m3_m6"}  # PF<1 under TP/SL — dropped from the tradeable universe
+
 # Phase 2.7 — sizing on the regime leg of the gated blend. Mirrors
 # backend.research.walkforward.SIZING_*.
 SIZING_MODES         = ("full", "half", "kelly")
@@ -321,6 +335,8 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
 
     ranked = []
     for spread in INSTRUMENTS:
+        if spread in TUNED_EXCLUDED_SPREADS:
+            continue  # Phase 2.9.1 — PF<1 under TP/SL; dropped from the tradeable universe
         feat_cols = predictors_for(spread)
 
         feat_vals = latest_features[feat_cols]
@@ -364,12 +380,12 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
             )
             if z_score > GATED_Z_THRESHOLD:
                 direction = "SELL"
-                target    = round(p50, 3)
-                stop      = round(actual + 1.5 * resid_std, 3)
+                target    = round(actual + TUNED_TP_FRAC * (p50 - actual), 3)  # halfway to fair
+                stop      = round(actual + TUNED_SL_MULT * resid_std, 3)
             elif z_score < -GATED_Z_THRESHOLD:
                 direction = "BUY"
-                target    = round(p50, 3)
-                stop      = round(actual - 1.5 * resid_std, 3)
+                target    = round(actual + TUNED_TP_FRAC * (p50 - actual), 3)  # halfway to fair
+                stop      = round(actual - TUNED_SL_MULT * resid_std, 3)
             else:
                 direction = "NEUTRAL"
                 target = stop = None
@@ -412,11 +428,11 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
             if base is not None:
                 b_actual = base["actual"]
                 if base["direction"] == "SELL":
-                    b_target = round(base["p50"], 3)
-                    b_stop   = round(b_actual + 1.5 * base["sigma"], 3)
+                    b_target = round(b_actual + TUNED_TP_FRAC * (base["p50"] - b_actual), 3)  # halfway to mean
+                    b_stop   = round(b_actual + TUNED_SL_MULT * base["sigma"], 3)
                 elif base["direction"] == "BUY":
-                    b_target = round(base["p50"], 3)
-                    b_stop   = round(b_actual - 1.5 * base["sigma"], 3)
+                    b_target = round(b_actual + TUNED_TP_FRAC * (base["p50"] - b_actual), 3)  # halfway to mean
+                    b_stop   = round(b_actual - TUNED_SL_MULT * base["sigma"], 3)
                 else:
                     b_target = b_stop = None
                 # Confidence scaling that mirrors the regime path: |z|/3 ×
@@ -547,7 +563,18 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
         "recommendation_source": (top.get("recommendation_source") if top else None),
         "as_of":                 as_of,
         "n_eligible":            len(ranked),
-        "n_universe":            len(INSTRUMENTS),
+        "n_universe":            len(INSTRUMENTS) - len(TUNED_EXCLUDED_SPREADS),
+        "excluded_spreads":      sorted(TUNED_EXCLUDED_SPREADS),
+        # Phase 2.9.1 tuned exit rule — surfaced so the RegimePickCard shows the
+        # EXIT logic (TP/SL/time-stop/dropped spreads), not just the entry signal.
+        "tuned_rule": {
+            "entry_z":          GATED_Z_THRESHOLD,
+            "tp_frac":          TUNED_TP_FRAC,
+            "sl_mult":          TUNED_SL_MULT,
+            "max_hold_days":    TUNED_MAX_HOLD_DAYS,
+            "excluded_spreads": sorted(TUNED_EXCLUDED_SPREADS),
+            "note":             "TP halfway to fair · SL 2.5σ · 30d time-stop · M3-M6 dropped (Phase 2.9.1)",
+        },
         "top":                   top,
         "ranked":                ranked,
         "method":                f"Per-(spread, regime) winner from 7-model competition (Ridge/Lasso/ElasticNet/Huber/XGBoost/LightGBM/CatBoost — Phase 2.8.1); Quantile p10/p90 bands; trained ≤ 2026-03-31; {method_blurb}.",
