@@ -1,0 +1,63 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Docker build-context excludes — Phase 3.D
+# Keep the context small + never bake secrets, the 3.5 GB data lake, the SQLite
+# book, or the model pkls into an image layer. Runtime-mounted dirs (see
+# docker-compose.yml) are provided by bind mounts, not the image.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Secrets — NEVER copy into an image layer ─────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Institutional data lake (3.5 GB) — bind-mounted at runtime ───────────────
+Data/
+
+# ── Runtime-mounted state — provided by bind mounts, not the image ───────────
+backend/db/
+backend/data/research/
+backend/data/cache/
+backend/cache/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# ── Frontend: rebuilt fresh in the node stage ────────────────────────────────
+frontend/node_modules/
+frontend/dist/
+# Host's committed static bundle — the node build stage regenerates it.
+backend/static/
+
+# ── Python artefacts ─────────────────────────────────────────────────────────
+**/__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+.venv/
+venv/
+env/
+ENV/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ── Heavy local-only files ───────────────────────────────────────────────────
+cloudflared.exe
+docs/
+*.pkl
+*.parquet
+*.feather
+
+# ── VCS / tooling / docs / editors ───────────────────────────────────────────
+.git/
+.github/
+.gitignore
+.claude/
+.vscode/
+.idea/
+*.md
+*.log
+logs/
+.DS_Store
+Thumbs.db

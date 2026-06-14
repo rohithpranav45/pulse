@@ -1,0 +1,37 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# PULSE reverse proxy — Phase 3.D
+#
+# Site address {$PULSE_DOMAIN::80}:
+#   • a real domain (e.g. pulse.example.com) → Caddy provisions + renews a
+#     Let's Encrypt certificate automatically (auto-HTTPS, port 443).
+#   • unset → default ":80" serves plain HTTP only (no certificate). Use this
+#     only for an IP-only / behind-another-proxy setup.
+#
+# Auth: basic_auth gates every route EXCEPT /api/health (so an uptime monitor
+# can probe liveness without credentials; /api/health returns only status +
+# timestamp, no market data). The pulse app container is internal-only
+# (compose `expose`, not `ports`), so there is no unauthenticated path to the
+# data — the proxy is the single front door.
+#
+# Credentials come from the root .env via the caddy service's env_file:
+#   BASIC_AUTH_USER  (default "mentor")
+#   BASIC_AUTH_HASH  (required — bcrypt; container won't start the site without it)
+#     docker run --rm caddy:2.8-alpine caddy hash-password --plaintext 'yourpw'
+# ─────────────────────────────────────────────────────────────────────────────
+
+{$PULSE_DOMAIN::80} {
+	encode zstd gzip
+
+	# Everything except the liveness probe requires login.
+	@protected not path /api/health
+	basic_auth @protected {
+		{$BASIC_AUTH_USER:mentor} {$BASIC_AUTH_HASH}
+	}
+
+	reverse_proxy pulse:5000
+
+	log {
+		output stdout
+		format console
+	}
+}

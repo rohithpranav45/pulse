@@ -1,0 +1,75 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# PULSE — Phase 3.D always-on deployment
+#
+#   pulse  — Flask + gunicorn API (the regime engine + A/B paper book), internal
+#   caddy  — reverse proxy: basic auth + automatic HTTPS, the only thing exposed
+#
+# Start:    docker compose up -d --build
+# Logs:     docker compose logs -f pulse
+# Restart:  docker compose restart pulse
+# See deploy/README.md for the full runbook (host provisioning, DNS, chown).
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  pulse:
+    build: .
+    image: pulse:latest
+    container_name: pulse
+    restart: unless-stopped
+
+    # Runs non-root. Default uid/gid 10001 matches the image; for zero-friction
+    # bind-mount writes set PULSE_UID=$(id -u) / PULSE_GID=$(id -g) in .env so the
+    # container runs as your host user and owns backend/db without a chown.
+    user: "${PULSE_UID:-10001}:${PULSE_GID:-10001}"
+
+    # All API keys + mode flags (SENTRY_DSN, EIA/FRED/GROQ, PULSE_GATED_*, etc.).
+    env_file: .env
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "5000"
+
+    volumes:
+      # 3.5 GB institutional lake — read + occasional parquet-cache regeneration.
+      - ./Data:/app/Data
+      # The SQLite paper book (pulse_cache.db) — MUST be writable: this is where
+      # the daily A/B tick + 60 s MTM accumulate the tuned-rule trades.
+      - ./backend/db:/app/backend/db
+      # Trained model pkls + walk-forward reports — read-only at serve time
+      # (retraining is a host-side job, not something the serving container does).
+      - ./backend/data/research:/app/backend/data/research:ro
+
+    # Internal only — Caddy is the sole public entry point, so the basic-auth
+    # gate can't be bypassed by hitting the app port directly.
+    expose:
+      - "5000"
+
+    # HEALTHCHECK is inherited from the image (curl /api/health). Caddy waits on it.
+
+  caddy:
+    image: caddy:2.8-alpine
+    container_name: pulse-caddy
+    restart: unless-stopped
+    depends_on:
+      pulse:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    # Reads PULSE_DOMAIN / BASIC_AUTH_USER / BASIC_AUTH_HASH from the root .env.
+    # env_file passes values LITERALLY (no compose ${} interpolation), so the
+    # bcrypt hash's '$' chars need no escaping. The Caddyfile supplies defaults
+    # via {$VAR:default}, so only BASIC_AUTH_HASH is strictly required in .env.
+    #   PULSE_DOMAIN     — bare domain (pulse.example.com) → auto Let's Encrypt TLS;
+    #                      unset → ":80" (HTTP only, no certificate)
+    #   BASIC_AUTH_USER  — login user (default "mentor")
+    #   BASIC_AUTH_HASH  — bcrypt hash from:
+    #     docker run --rm caddy:2.8-alpine caddy hash-password --plaintext 'yourpw'
+    env_file: .env
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data      # persists issued certificates across restarts
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:
