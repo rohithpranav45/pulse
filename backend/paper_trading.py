@@ -48,6 +48,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import numpy as np
 import os
 import sqlite3
 import sys
@@ -63,11 +64,25 @@ log = logging.getLogger("pulse.paper")
 
 _DB_PATH = os.path.join(_BACKEND, "db", "pulse_cache.db")
 
+# Phase 2.9.1 — time-stop in TRADING days for the tuned exit rule. MIRROR of
+# research.live_ranker.TUNED_MAX_HOLD_DAYS — keep the two in sync (a position the
+# ranker opened under the tuned rule must close on the same horizon the backtest
+# used). Parity to be asserted in test_invariants.py in Phase 3.0.
+TUNED_MAX_HOLD_TRADING_DAYS = 30
+
 
 # ── Schema bootstrap ─────────────────────────────────────────────────────────
 
 def _conn() -> sqlite3.Connection:
     c = sqlite3.connect(_DB_PATH, check_same_thread=False)
+    # Phase 3.D — WAL + busy_timeout + synchronous=NORMAL so the always-on
+    # APScheduler writer (daily A/B tick + 60 s MTM sweep) and concurrent
+    # dashboard reads don't deadlock the book. WAL is db-level (idempotent);
+    # busy_timeout + synchronous are per-connection, so set on every open.
+    # MIRRORS db/cache.py:_apply_pragmas — same pulse_cache.db file.
+    c.execute("PRAGMA journal_mode=WAL")
+    c.execute("PRAGMA busy_timeout=5000")
+    c.execute("PRAGMA synchronous=NORMAL")
     c.row_factory = sqlite3.Row
     return c
 
@@ -396,6 +411,18 @@ def mark_to_market() -> dict:
             if sl is not None and px >= sl:
                 c.close(); close_trade(r["id"], reason="stop_hit"); c = _conn()
                 summary["auto_closed"] += 1; continue
+        # Phase 2.9.1 time-stop: if neither TP nor SL was hit, close once the
+        # position has been held TUNED_MAX_HOLD_TRADING_DAYS trading days — the
+        # same horizon the tuned backtest used (mirrors live_ranker.TUNED_MAX_HOLD_DAYS).
+        try:
+            opened = datetime.fromisoformat(r["opened_at"])
+            held_bdays = int(np.busday_count(opened.date(),
+                                             datetime.now(timezone.utc).date()))
+            if held_bdays >= TUNED_MAX_HOLD_TRADING_DAYS:
+                c.close(); close_trade(r["id"], reason="time_stop"); c = _conn()
+                summary["auto_closed"] += 1; continue
+        except (ValueError, TypeError):
+            pass
         # Otherwise update unrealised PnL
         unreal = _pnl(direction, entry, px, size)
         c.execute("UPDATE paper_trades SET mtm_price=?, mtm_at=?, unrealised=? WHERE id=?",
