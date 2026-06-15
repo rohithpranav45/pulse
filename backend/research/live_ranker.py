@@ -169,10 +169,15 @@ def _pooled_passes_gate(regime_pooled: str, winner: str | None, z: float) -> boo
     return True
 
 
-def _baseline_rolling_signal(series: pd.Series, n: int = ROLLING_WIN) -> dict | None:
+def _baseline_rolling_signal(series: pd.Series, n: int = ROLLING_WIN,
+                             live_actual: float | None = None) -> dict | None:
     """
     Compute the regime-unaware rolling-z signal for one spread on the most
     recent observation. Returns None if insufficient history.
+
+    Phase 3.1: pass `live_actual` to score the live spread level against the
+    historical rolling mean/σ (so a gated baseline-fallback leg uses the same
+    current price as the regime leg, not the stale daily settle).
     """
     s = series.dropna()
     if len(s) < n + 1:
@@ -182,7 +187,7 @@ def _baseline_rolling_signal(series: pd.Series, n: int = ROLLING_WIN) -> dict | 
     sigma  = float(window.std(ddof=1))
     if not np.isfinite(sigma) or sigma <= 0:
         return None
-    actual = float(s.iloc[-1])
+    actual = float(live_actual) if (live_actual is not None and np.isfinite(live_actual)) else float(s.iloc[-1])
     z      = (actual - mu) / sigma
     if z > GATED_Z_THRESHOLD:
         direction = "SELL"
@@ -276,7 +281,9 @@ def get_current_regime() -> dict:
     }
 
 
-def get_recommendation(*, force_mode: str | None = None, force_gated: bool | None = None) -> dict:
+def get_recommendation(*, force_mode: str | None = None, force_gated: bool | None = None,
+                       live_actuals: dict | None = None,
+                       live_curve_m1m12: float | None = None) -> dict:
     """
     Run inference on all 6 spreads under the current regime, rank by composite
     confidence, return #1 opportunity + every spread.
@@ -290,6 +297,15 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
     Phase 2.8.6-followup (A/B harness): pass force_mode='pooled' / force_gated=True
     to override env vars at call-time without process-wide side effects. The A/B
     harness uses this to generate both arms in one tick.
+
+    Phase 3.1 (live engine): pass `live_actuals` (a {spread: current_value} map
+    from the live intraday feed) and/or `live_curve_m1m12` (today's Brent M1-M12
+    from live prices) to evaluate the framework against the CURRENT market
+    instead of the latest daily settle. Both are additive and default to None —
+    when omitted, behaviour is bit-for-bit the historical daily path, so the
+    A/B harness + dashboard cards are unaffected. The slow regime features
+    (inventory / COT / vol / macro) still come from the latest historical row;
+    only the fast state (spread level + curve-axis regime) is overlaid live.
     """
     from research.features        import build_features, predictors_for
     from research.spread_universe import build_spread_series, INSTRUMENTS, LABELS, DESCRIPTIONS
@@ -333,6 +349,23 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
     regime = str(latest_features[regime_col])
     as_of  = df.index[-1].strftime("%Y-%m-%d")
 
+    # Phase 3.1 — live overlay: recompute today's regime from the live curve.
+    # The curve axis is defined on Brent M1-M12 (regimes.classify_curve), so a
+    # single live curve value re-buckets the regime; inventory + vol carry from
+    # the latest historical row (slow features). Pooled regime == curve bucket.
+    live_overlay = (live_actuals is not None) or (live_curve_m1m12 is not None)
+    if live_curve_m1m12 is not None and np.isfinite(live_curve_m1m12):
+        from research.regimes import classify_curve, classify_inv, classify_vol
+        curve_b = classify_curve(float(live_curve_m1m12))
+        if mode == "pooled":
+            regime = curve_b
+        else:
+            inv_v = latest_features.get("inv_vs_5yr_pct")
+            vol_v = latest_features.get("realised_vol_20d")
+            inv_b = classify_inv(float(inv_v)) if pd.notna(inv_v) else "UNKNOWN"
+            vol_b = classify_vol(float(vol_v)) if pd.notna(vol_v) else "UNKNOWN"
+            regime = f"{curve_b}/{inv_b}/{vol_b}"
+
     ranked = []
     for spread in INSTRUMENTS:
         if spread in TUNED_EXCLUDED_SPREADS:
@@ -342,7 +375,12 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
         feat_vals = latest_features[feat_cols]
         feats_ok  = not feat_vals.isnull().any()
 
-        actual_raw = latest_spreads.get(spread) if latest_spreads is not None else None
+        # Phase 3.1 — prefer the live spread value when supplied; else daily settle.
+        actual_raw = None
+        if live_actuals is not None and spread in live_actuals:
+            actual_raw = live_actuals.get(spread)
+        if actual_raw is None and latest_spreads is not None:
+            actual_raw = latest_spreads.get(spread)
         if actual_raw is None or (isinstance(actual_raw, float) and not np.isfinite(actual_raw)):
             continue
         actual = float(actual_raw)
@@ -424,7 +462,8 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
         # ── 2. Compute the rolling-z baseline candidate (always, for gated mode)
         baseline_candidate: dict | None = None
         if gated:
-            base = _baseline_rolling_signal(spreads[spread])
+            live_base = live_actuals.get(spread) if live_actuals is not None else None
+            base = _baseline_rolling_signal(spreads[spread], live_actual=live_base)
             if base is not None:
                 b_actual = base["actual"]
                 if base["direction"] == "SELL":
@@ -557,6 +596,7 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
         "available":             True,
         "regime":                regime,
         "regime_mode":           mode,
+        "live":                  bool(live_overlay),  # Phase 3.1 — ran on live feed vs daily settle
         "gated_blend":           bool(gated),
         "gated_summary":         gated_summary,
         "size_mode":             size_mode if gated else None,  # Phase 2.7

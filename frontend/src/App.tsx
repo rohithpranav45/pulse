@@ -14,6 +14,7 @@ import { SpreadsView } from '@/views/SpreadsView';
 import { PlaybookView } from '@/views/PlaybookView';
 import { PaperView } from '@/views/PaperView';
 import { RegimeView } from '@/views/RegimeView';
+import { SignalLogView } from '@/views/SignalLogView';
 import { ChatDock } from '@/components/chat/ChatDock';
 import { OnboardingTour } from '@/components/onboarding/OnboardingTour';
 import { DailySheet } from '@/components/panels/DailySheet';
@@ -47,7 +48,7 @@ export default function App() {
       const k = e.key;
       const map: Record<string, ViewKey> = {
         '1':'signal','2':'charts','3':'fundamentals','4':'intelligence',
-        '5':'spreads','6':'playbook','7':'paper','8':'regime',
+        '5':'spreads','6':'playbook','7':'paper','8':'regime','9':'signals',
       };
       if (map[k]) setView(map[k]);
       if (k === 'r' || k === 'R') { setRefreshing(true); refetch().finally(() => setTimeout(() => setRefreshing(false), 600)); }
@@ -123,6 +124,7 @@ export default function App() {
                 {view === 'playbook'      && <PlaybookView />}
                 {view === 'paper'         && <PaperView tradeIdea={tradeIdea} />}
                 {view === 'regime'        && <RegimeView />}
+                {view === 'signals'       && <SignalLogView />}
               </motion.div>
             </ErrorBoundary>
           </div>
