@@ -43,16 +43,16 @@ def main() -> int:
 
     api = HfApi(token=args.token)
 
-    print(f"• ensuring dataset {args.repo} exists (private)…")
+    print(f"- ensuring dataset {args.repo} exists (private)...")
     api.create_repo(args.repo, repo_type="dataset", private=True, exist_ok=True)
 
     parquet = _REPO_ROOT / "Data" / "parquet"
     if not parquet.is_dir():
-        sys.exit(f"error: {parquet} not found — is the /Data lake present on this machine?")
+        sys.exit(f"error: {parquet} not found - is the /Data lake present on this machine?")
 
     n = len(list(parquet.glob("*.parquet")))
     size_mb = sum(f.stat().st_size for f in parquet.rglob("*")) / 1_048_576
-    print(f"• uploading {n} parquet files ({size_mb:.0f} MB) → {args.repo}/parquet …")
+    print(f"- uploading {n} parquet files ({size_mb:.0f} MB) -> {args.repo}/parquet ...")
     api.upload_folder(
         folder_path=str(parquet),
         path_in_repo="parquet",
@@ -64,7 +64,7 @@ def main() -> int:
     if not args.skip_db:
         db = _REPO_ROOT / "backend" / "db" / "pulse_cache.db"
         if db.exists():
-            print(f"• seeding paper book → {args.repo}/db/pulse_cache.db …")
+            print(f"- seeding paper book -> {args.repo}/db/pulse_cache.db ...")
             api.upload_file(
                 path_or_fileobj=str(db),
                 path_in_repo="db/pulse_cache.db",
@@ -73,9 +73,9 @@ def main() -> int:
                 commit_message="seed paper book",
             )
         else:
-            print("• (no local paper book to seed — the Space will start a fresh one)")
+            print("- (no local paper book to seed - the Space will start a fresh one)")
 
-    print(f"\n✓ done. Dataset ready: https://huggingface.co/datasets/{args.repo}")
+    print(f"\n[done] Dataset ready: https://huggingface.co/datasets/{args.repo}")
     return 0
 
 

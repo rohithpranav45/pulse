@@ -1,0 +1,29 @@
+name: keepalive
+
+# Free HF Spaces sleep after ~48h with no HTTP traffic, and the Space's own
+# internal scheduler does NOT count as traffic. This pings the public health
+# endpoint every 6h so the A/B paper book keeps accumulating 24/7.
+#   - cron is UTC; 6h cadence is far inside the 48h idle window (and tolerates
+#     GitHub's usual schedule delay).
+#   - hitting *.hf.space wakes a sleeping Space even if the first request times
+#     out during cold start, so the job never fails the build on a slow wake.
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping PULSE health endpoint (wakes the Space)
+        run: |
+          URL="https://rohithpranav45-pulse.hf.space/api/health"
+          for i in 1 2 3 4 5; do
+            code=$(curl -sS --max-time 60 -o /dev/null -w '%{http_code}' "$URL" || echo 000)
+            echo "attempt $i -> HTTP $code"
+            if [ "$code" = "200" ]; then echo "Space awake."; exit 0; fi
+            sleep 30
+          done
+          echo "Did not get 200 (Space may still be cold-starting). Wake was triggered; not failing."
