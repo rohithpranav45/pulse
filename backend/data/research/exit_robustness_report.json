@@ -1,0 +1,497 @@
+{
+  "generated_at": "2026-06-13T19:08:00Z",
+  "chosen_config": {
+    "z": 0.5,
+    "tp": 0.5,
+    "sl": 2.5,
+    "hold": 30,
+    "subset": "no_m3m6"
+  },
+  "in_sample_headline_ref": {
+    "gross_win_rate": 0.8288,
+    "net_pf": 1.9871,
+    "net_sharpe20": 0.4751,
+    "n": 1297,
+    "note": "Phase 2.9.1 winner on the full gated tape"
+  },
+  "method": "No model retraining. Reuses exit_sim.simulate_tape (2.9.0) + exit_tuning._metrics (2.9.1 NET, ann sqrt(252/20)). Leg A: deterministic baseline leg rebuilt over 2017..Nov-2023 (unseen era), chosen rule. Leg B: re-sweep on the early 2/3 of the tape, validate chosen on the late 1/3. Leg C: one-knob perturbations incl. off-grid values.",
+  "leg_a_oos_different_era": {
+    "window": {
+      "entry_start": "2016-01-01",
+      "entry_end": "2023-11-15",
+      "exit_dates_min": "2016-12-21",
+      "exit_dates_max": "2023-11-14"
+    },
+    "in_sample_full_blend": {
+      "n": 1297,
+      "gross_win_rate": 0.8288,
+      "net_win_rate": 0.7571,
+      "gross_pf": 2.686,
+      "net_pf": 1.9871,
+      "net_sharpe20": 0.4751,
+      "net_exp": 0.0745,
+      "mean_hold": 7.86,
+      "reason_mix": {
+        "TP": 1058,
+        "SL": 149,
+        "TIME": 58,
+        "SCRATCH": 32
+      }
+    },
+    "in_sample_baseline_leg": {
+      "n": 1071,
+      "gross_win_rate": 0.8861,
+      "net_win_rate": 0.8273,
+      "gross_pf": 2.9921,
+      "net_pf": 2.2962,
+      "net_sharpe20": 0.5325,
+      "net_exp": 0.0878,
+      "mean_hold": 8.66,
+      "reason_mix": {
+        "TP": 932,
+        "SL": 82,
+        "TIME": 57,
+        "SCRATCH": 0
+      }
+    },
+    "oos_baseline_leg": {
+      "n": 2760,
+      "gross_win_rate": 0.7435,
+      "net_win_rate": 0.7178,
+      "gross_pf": 1.3971,
+      "net_pf": 1.156,
+      "net_sharpe20": 0.1652,
+      "net_exp": 0.0269,
+      "mean_hold": 12.85,
+      "reason_mix": {
+        "TP": 1845,
+        "SL": 383,
+        "TIME": 532,
+        "SCRATCH": 0
+      }
+    },
+    "oos_by_spread": {
+      "brent_fly_123": {
+        "n": 831,
+        "gross_win_rate": 0.793,
+        "net_win_rate": 0.7437,
+        "gross_pf": 1.0897,
+        "net_pf": 0.7382,
+        "net_sharpe20": -0.332,
+        "net_exp": -0.038,
+        "mean_hold": 6.96,
+        "reason_mix": {
+          "TP": 655,
+          "SL": 166,
+          "TIME": 10,
+          "SCRATCH": 0
+        }
+      },
+      "brent_m1_m2": {
+        "n": 1276,
+        "gross_win_rate": 0.7092,
+        "net_win_rate": 0.7038,
+        "gross_pf": 1.3676,
+        "net_pf": 1.2096,
+        "net_sharpe20": 0.2231,
+        "net_exp": 0.0441,
+        "mean_hold": 16.05,
+        "reason_mix": {
+          "TP": 785,
+          "SL": 141,
+          "TIME": 350,
+          "SCRATCH": 0
+        }
+      },
+      "wti_fly_123": {
+        "n": 244,
+        "gross_win_rate": 0.8484,
+        "net_win_rate": 0.7828,
+        "gross_pf": 2.1586,
+        "net_pf": 1.1691,
+        "net_sharpe20": 0.1861,
+        "net_exp": 0.0102,
+        "mean_hold": 5.45,
+        "reason_mix": {
+          "TP": 207,
+          "SL": 37,
+          "TIME": 0,
+          "SCRATCH": 0
+        }
+      },
+      "wti_m1_m2": {
+        "n": 409,
+        "gross_win_rate": 0.687,
+        "net_win_rate": 0.6699,
+        "gross_pf": 1.87,
+        "net_pf": 1.652,
+        "net_sharpe20": 0.6962,
+        "net_exp": 0.1149,
+        "mean_hold": 19.24,
+        "reason_mix": {
+          "TP": 198,
+          "SL": 39,
+          "TIME": 172,
+          "SCRATCH": 0
+        }
+      }
+    }
+  },
+  "leg_b_selection_generalisation": {
+    "split_date": "2025-08-31",
+    "n_early": 2598,
+    "n_late": 1040,
+    "early_sweep_winner": {
+      "config": {
+        "z": 1.5,
+        "tp": 0.25,
+        "sl": 2.5,
+        "hold": 30,
+        "subset": "all6"
+      },
+      "n": 225,
+      "gross_win_rate": 0.8667,
+      "net_win_rate": 0.8178,
+      "gross_pf": 3.6937,
+      "net_pf": 2.4409,
+      "gross_exp": 0.1121,
+      "net_exp": 0.0705,
+      "net_sharpe20": 1.1187,
+      "net_sharpe_turnover": 2.5863,
+      "mean_hold": 3.74,
+      "reason_mix": {
+        "TP": 195,
+        "SL": 26,
+        "TIME": 0,
+        "SCRATCH": 4
+      }
+    },
+    "early_sweep_n_feasible": 148,
+    "early_sweep_floor": 0.9155,
+    "early_winner_is_chosen": false,
+    "early_winner_matches_subset": false,
+    "chosen_on_early": {
+      "n": 884,
+      "gross_win_rate": 0.8665,
+      "net_win_rate": 0.7862,
+      "gross_pf": 3.2296,
+      "net_pf": 2.0924,
+      "net_sharpe20": 0.8744,
+      "net_exp": 0.0527,
+      "mean_hold": 7.86,
+      "reason_mix": {
+        "TP": 762,
+        "SL": 73,
+        "TIME": 26,
+        "SCRATCH": 23
+      }
+    },
+    "chosen_on_late_oos": {
+      "n": 413,
+      "gross_win_rate": 0.7482,
+      "net_win_rate": 0.6949,
+      "gross_pf": 2.2938,
+      "net_pf": 1.9058,
+      "net_sharpe20": 0.4601,
+      "net_exp": 0.1211,
+      "mean_hold": 7.86,
+      "reason_mix": {
+        "TP": 296,
+        "SL": 76,
+        "TIME": 32,
+        "SCRATCH": 9
+      }
+    },
+    "early_winner_on_late_oos": {
+      "n": 227,
+      "gross_win_rate": 0.6432,
+      "net_win_rate": 0.6211,
+      "gross_pf": 1.1324,
+      "net_pf": 1.049,
+      "net_sharpe20": 0.0567,
+      "net_exp": 0.0253,
+      "mean_hold": 3.38,
+      "reason_mix": {
+        "TP": 146,
+        "SL": 78,
+        "TIME": 0,
+        "SCRATCH": 3
+      }
+    }
+  },
+  "leg_c_knob_sensitivity": {
+    "floor_net_sharpe": 0.2111,
+    "chosen": {
+      "n": 1297,
+      "gross_win_rate": 0.8288,
+      "net_win_rate": 0.7571,
+      "gross_pf": 2.686,
+      "net_pf": 1.9871,
+      "net_sharpe20": 0.4751,
+      "net_exp": 0.0745,
+      "mean_hold": 7.86,
+      "reason_mix": {
+        "TP": 1058,
+        "SL": 149,
+        "TIME": 58,
+        "SCRATCH": 32
+      }
+    },
+    "knobs": {
+      "tp": {
+        "values": [
+          {
+            "value": 0.4,
+            "is_chosen": false,
+            "feasible": true,
+            "n": 1297,
+            "gross_win_rate": 0.835,
+            "net_win_rate": 0.7201,
+            "gross_pf": 2.2002,
+            "net_pf": 1.5416,
+            "net_sharpe20": 0.3068,
+            "net_exp": 0.0406,
+            "mean_hold": 6.74,
+            "reason_mix": {
+              "TP": 1076,
+              "SL": 145,
+              "TIME": 44,
+              "SCRATCH": 32
+            }
+          },
+          {
+            "value": 0.5,
+            "is_chosen": true,
+            "feasible": true,
+            "n": 1297,
+            "gross_win_rate": 0.8288,
+            "net_win_rate": 0.7571,
+            "gross_pf": 2.686,
+            "net_pf": 1.9871,
+            "net_sharpe20": 0.4751,
+            "net_exp": 0.0745,
+            "mean_hold": 7.86,
+            "reason_mix": {
+              "TP": 1058,
+              "SL": 149,
+              "TIME": 58,
+              "SCRATCH": 32
+            }
+          },
+          {
+            "value": 0.6,
+            "is_chosen": false,
+            "feasible": true,
+            "n": 1297,
+            "gross_win_rate": 0.8173,
+            "net_win_rate": 0.7779,
+            "gross_pf": 3.0664,
+            "net_pf": 2.3489,
+            "net_sharpe20": 0.5796,
+            "net_exp": 0.1056,
+            "mean_hold": 8.81,
+            "reason_mix": {
+              "TP": 1035,
+              "SL": 161,
+              "TIME": 69,
+              "SCRATCH": 32
+            }
+          }
+        ],
+        "win_rate_range": 0.0177,
+        "all_feasible": true
+      },
+      "sl": {
+        "values": [
+          {
+            "value": 2.0,
+            "is_chosen": false,
+            "feasible": true,
+            "n": 1297,
+            "gross_win_rate": 0.8034,
+            "net_win_rate": 0.7371,
+            "gross_pf": 2.8124,
+            "net_pf": 2.0449,
+            "net_sharpe20": 0.499,
+            "net_exp": 0.076,
+            "mean_hold": 7.65,
+            "reason_mix": {
+              "TP": 1025,
+              "SL": 183,
+              "TIME": 57,
+              "SCRATCH": 32
+            }
+          },
+          {
+            "value": 2.5,
+            "is_chosen": true,
+            "feasible": true,
+            "n": 1297,
+            "gross_win_rate": 0.8288,
+            "net_win_rate": 0.7571,
+            "gross_pf": 2.686,
+            "net_pf": 1.9871,
+            "net_sharpe20": 0.4751,
+            "net_exp": 0.0745,
+            "mean_hold": 7.86,
+            "reason_mix": {
+              "TP": 1058,
+              "SL": 149,
+              "TIME": 58,
+              "SCRATCH": 32
+            }
+          },
+          {
+            "value": 3.0,
+            "is_chosen": false,
+            "feasible": true,
+            "n": 1297,
+            "gross_win_rate": 0.8412,
+            "net_win_rate": 0.7679,
+            "gross_pf": 2.7517,
+            "net_pf": 2.0517,
+            "net_sharpe20": 0.4898,
+            "net_exp": 0.0785,
+            "mean_hold": 8.08,
+            "reason_mix": {
+              "TP": 1074,
+              "SL": 126,
+              "TIME": 65,
+              "SCRATCH": 32
+            }
+          }
+        ],
+        "win_rate_range": 0.0378,
+        "all_feasible": true
+      },
+      "hold": {
+        "values": [
+          {
+            "value": 20,
+            "is_chosen": false,
+            "feasible": true,
+            "n": 1331,
+            "gross_win_rate": 0.8054,
+            "net_win_rate": 0.7325,
+            "gross_pf": 2.5724,
+            "net_pf": 1.9228,
+            "net_sharpe20": 0.468,
+            "net_exp": 0.0753,
+            "mean_hold": 7.16,
+            "reason_mix": {
+              "TP": 1023,
+              "SL": 155,
+              "TIME": 120,
+              "SCRATCH": 33
+            }
+          },
+          {
+            "value": 30,
+            "is_chosen": true,
+            "feasible": true,
+            "n": 1297,
+            "gross_win_rate": 0.8288,
+            "net_win_rate": 0.7571,
+            "gross_pf": 2.686,
+            "net_pf": 1.9871,
+            "net_sharpe20": 0.4751,
+            "net_exp": 0.0745,
+            "mean_hold": 7.86,
+            "reason_mix": {
+              "TP": 1058,
+              "SL": 149,
+              "TIME": 58,
+              "SCRATCH": 32
+            }
+          },
+          {
+            "value": 40,
+            "is_chosen": false,
+            "feasible": true,
+            "n": 1257,
+            "gross_win_rate": 0.8481,
+            "net_win_rate": 0.7749,
+            "gross_pf": 2.4973,
+            "net_pf": 1.7136,
+            "net_sharpe20": 0.5612,
+            "net_exp": 0.0458,
+            "mean_hold": 8.39,
+            "reason_mix": {
+              "TP": 1052,
+              "SL": 138,
+              "TIME": 37,
+              "SCRATCH": 30
+            }
+          }
+        ],
+        "win_rate_range": 0.0427,
+        "all_feasible": true
+      },
+      "z": {
+        "values": [
+          {
+            "value": 0.5,
+            "is_chosen": true,
+            "feasible": true,
+            "n": 1297,
+            "gross_win_rate": 0.8288,
+            "net_win_rate": 0.7571,
+            "gross_pf": 2.686,
+            "net_pf": 1.9871,
+            "net_sharpe20": 0.4751,
+            "net_exp": 0.0745,
+            "mean_hold": 7.86,
+            "reason_mix": {
+              "TP": 1058,
+              "SL": 149,
+              "TIME": 58,
+              "SCRATCH": 32
+            }
+          },
+          {
+            "value": 0.75,
+            "is_chosen": false,
+            "feasible": true,
+            "n": 908,
+            "gross_win_rate": 0.804,
+            "net_win_rate": 0.7797,
+            "gross_pf": 2.7125,
+            "net_pf": 2.109,
+            "net_sharpe20": 0.5472,
+            "net_exp": 0.1008,
+            "mean_hold": 7.64,
+            "reason_mix": {
+              "TP": 715,
+              "SL": 132,
+              "TIME": 39,
+              "SCRATCH": 22
+            }
+          }
+        ],
+        "win_rate_range": 0.0248,
+        "all_feasible": true
+      }
+    }
+  },
+  "verdict": {
+    "grade": "WIN-RATE ROBUST; EDGE IN-SAMPLE-OPTIMISTIC",
+    "win_rate_robust": true,
+    "edge_robust": false,
+    "plateau": true,
+    "oos_gap_baseline": -0.1426,
+    "oos_net_losing_spreads": [
+      "brent_fly_123"
+    ],
+    "oos_sharpe_vs_floor": {
+      "oos_net_sharpe": 0.1652,
+      "in_sample_floor": 0.2111
+    },
+    "headline": "The WIN RATE is robust \u2014 it is NOT a curve-fit spike. It holds ~74-75% in a different era (2017-2023) AND on a temporal hold-out, always above the 64% un-tuned default, and the rule sits on a broad sensitivity plateau (no knob is a spike). What does NOT fully survive is the risk-adjusted EDGE: out-of-sample NET Sharpe thins from ~0.5 to ~0.17 (below the 0.2111 floor) and ['brent_fly_123'] turn net-unprofitable in the 2017-2023 era. VERDICT: keep the tuned rule (the win rate the mentor asked about is trustworthy), but quote NET Sharpe / PF as IN-SAMPLE-OPTIMISTIC, not as a forward guarantee \u2014 they are regime-dependent. The brent_fly OOS weakness is worth watching.",
+    "robust_fallback_config": null,
+    "criteria": [
+      "Leg A (different era 2017-2023, baseline leg): win 74.4% vs in-sample baseline 88.6% (gap -0.1426). NET PF 1.156 (>1 = still profitable), but NET Sharpe 0.1652 vs in-sample floor 0.2111 -> edge THINS. OOS net-losing spreads: ['brent_fly_123'].",
+      "Leg B (selection generalisation): chosen rule on late hold-out = win 74.8%, NET PF 1.9058, NET Sharpe 0.4601. The early-only sweep picked a DIFFERENT config ({'z': 1.5, 'tp': 0.25, 'sl': 2.5, 'hold': 30, 'subset': 'all6'}) that craters on the hold-out (win 64.3%, Sharpe 0.0567) \u2014 the chosen rule generalises BETTER than any single-window peak.",
+      "Leg C (sensitivity): every one-knob neighbour (incl. off-grid TP 0.4/0.6, SL 3.0, hold 40, z 0.75) stays feasible \u2014 a broad PLATEAU, not a spike."
+    ]
+  }
+}

@@ -1,0 +1,30 @@
+Traceback (most recent call last):
+  File "<string>", line 18, in <module>
+    print('gate:', g['gate'])
+    ~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2208' in position 144: character maps to <undefined>
+=== BEFORE Phase 2.8.3 (current report on disk) ===
+gated_blend overall:
+  n_signals: 2092
+  n_total: 3638
+  hit_rate: 0.7165
+  mean_pnl: 0.1809
+  sharpe: 0.389
+  max_drawdown: -257.707
+
+gated_blend by_spread:
+  brent_fly_123       sharpe=+1.7630  n_sig= 221  hit=0.873  mean_pnl=+0.4249
+  brent_m1_m2         sharpe=+0.9340  n_sig= 345  hit=0.809  mean_pnl=+0.3747
+  brent_m3_m6         sharpe=-0.2680  n_sig= 419  hit=0.599  mean_pnl=-0.1509
+  wti_fly_123         sharpe=+0.8950  n_sig= 330  hit=0.812  mean_pnl=+0.3352
+  wti_m1_m2           sharpe=+0.2590  n_sig= 373  hit=0.686  mean_pnl=+0.1481
+  wti_m3_m6           sharpe=+0.2980  n_sig= 404  hit=0.624  mean_pnl=+0.1305
+
+gated_blend by_source:
+  baseline    sharpe=+0.3930  n_sig=2021  hit=0.719
+  regime      sharpe=+0.3690  n_sig=  71  hit=0.662
+
+gate: 
