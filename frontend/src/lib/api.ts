@@ -161,6 +161,11 @@ export const api = {
   regimeAB:               () => getJSON<ABReportData>('/api/regime/ab'),
   regimeABTick:           (body: any = {}) => postJSON('/api/regime/ab/tick', body),
   regimeABReset:          (scope: 'all' | 'closed' = 'all') => postJSON('/api/regime/ab/reset', { scope }),
+  // Phase 3.1 — live analysis engine + signal log
+  regimeLive:             () => getJSON('/api/regime/live'),
+  regimeSignals:          (status: 'all' | 'open' | 'closed' = 'all', limit = 200) =>
+                            getJSON(`/api/regime/signals?status=${status}&limit=${limit}`),
+  regimeSignalsGenerate:  (body: any = {}) => postJSON('/api/regime/signals/generate', body),
   // Paper trading
   paperPositions:  () => getJSON<PaperPosition[]>('/api/paper/positions'),
   paperPerformance:() => getJSON<PaperPerformanceData>('/api/paper/performance'),
