@@ -1,0 +1,497 @@
+{
+  "generated_at": "2026-06-13T12:28:10Z",
+  "method": "Path-aware TP/SL exit simulation on the daily spread series. For each fired signal, walk forward up to MAX_HOLD trading days; close at TP (regime: p50 / baseline: 252d mean), SL (entry \u00b1 1.5\u03c3; regime sigma = resid_std, baseline sigma = 252d std), or a time-stop at the horizon. Fill-at-level. Time-stop PnL reconciles with the directional fwd_pnl.",
+  "config": {
+    "max_hold_days": 20,
+    "sl_mult": 1.5,
+    "z_entry": 0.5,
+    "rolling_win": 252,
+    "fill": "at-level",
+    "gate": {
+      "regime": "BACK",
+      "winners": [
+        "CatBoost",
+        "Huber",
+        "Lasso",
+        "LightGBM",
+        "XGBoost"
+      ],
+      "z_thresh": 0.5
+    },
+    "tapes_generated_at": "2026-06-13T12:23:51Z"
+  },
+  "pooled": {
+    "diagnostics": {
+      "n_rows": 3744,
+      "n_neutral": 1663,
+      "n_no_inputs": 0,
+      "n_incomplete": 89,
+      "n_closed": 1992,
+      "tp_wrong_side": 392
+    },
+    "overall": {
+      "n_closed": 1992,
+      "win_rate": 0.4538,
+      "profit_factor": 1.9651,
+      "avg_win": 0.24,
+      "avg_loss": -0.1551,
+      "expectancy": 0.0535,
+      "total_pnl": 106.5434,
+      "mean_hold_days": 3.36,
+      "n_win": 904,
+      "n_loss": 712,
+      "n_flat": 376,
+      "close_reason_counts": {
+        "TP": 860,
+        "SL": 708,
+        "TIME": 48,
+        "SCRATCH": 376
+      },
+      "close_reason_pct": {
+        "TP": 0.4317,
+        "SL": 0.3554,
+        "TIME": 0.0241,
+        "SCRATCH": 0.1888
+      },
+      "directional_hit_rate": 0.6396,
+      "directional_mean_pnl": 0.202,
+      "win_rate_minus_dir_hit": -0.1858
+    },
+    "by_spread": {
+      "wti_m1_m2": {
+        "n_closed": 344,
+        "win_rate": 0.4215,
+        "profit_factor": 1.9843,
+        "avg_win": 0.248,
+        "avg_loss": -0.1294,
+        "expectancy": 0.0518,
+        "total_pnl": 17.834,
+        "mean_hold_days": 3.02,
+        "n_win": 145,
+        "n_loss": 140,
+        "n_flat": 59,
+        "close_reason_counts": {
+          "TP": 142,
+          "SL": 140,
+          "TIME": 3,
+          "SCRATCH": 59
+        },
+        "close_reason_pct": {
+          "TP": 0.4128,
+          "SL": 0.407,
+          "TIME": 0.0087,
+          "SCRATCH": 0.1715
+        },
+        "directional_hit_rate": 0.5988,
+        "directional_mean_pnl": 0.2633,
+        "win_rate_minus_dir_hit": -0.1773
+      },
+      "wti_m3_m6": {
+        "n_closed": 324,
+        "win_rate": 0.4506,
+        "profit_factor": 1.5981,
+        "avg_win": 0.2435,
+        "avg_loss": -0.1685,
+        "expectancy": 0.0411,
+        "total_pnl": 13.3039,
+        "mean_hold_days": 2.02,
+        "n_win": 146,
+        "n_loss": 132,
+        "n_flat": 46,
+        "close_reason_counts": {
+          "TP": 146,
+          "SL": 132,
+          "TIME": 0,
+          "SCRATCH": 46
+        },
+        "close_reason_pct": {
+          "TP": 0.4506,
+          "SL": 0.4074,
+          "TIME": 0.0,
+          "SCRATCH": 0.142
+        },
+        "directional_hit_rate": 0.5494,
+        "directional_mean_pnl": 0.1421,
+        "win_rate_minus_dir_hit": -0.0988
+      },
+      "wti_fly_123": {
+        "n_closed": 410,
+        "win_rate": 0.4659,
+        "profit_factor": 2.7998,
+        "avg_win": 0.291,
+        "avg_loss": -0.1196,
+        "expectancy": 0.0872,
+        "total_pnl": 35.7335,
+        "mean_hold_days": 6.19,
+        "n_win": 191,
+        "n_loss": 166,
+        "n_flat": 53,
+        "close_reason_counts": {
+          "TP": 154,
+          "SL": 164,
+          "TIME": 39,
+          "SCRATCH": 53
+        },
+        "close_reason_pct": {
+          "TP": 0.3756,
+          "SL": 0.4,
+          "TIME": 0.0951,
+          "SCRATCH": 0.1293
+        },
+        "directional_hit_rate": 0.7268,
+        "directional_mean_pnl": 0.3079,
+        "win_rate_minus_dir_hit": -0.2609
+      },
+      "brent_m1_m2": {
+        "n_closed": 293,
+        "win_rate": 0.5154,
+        "profit_factor": 2.2011,
+        "avg_win": 0.2023,
+        "avg_loss": -0.2203,
+        "expectancy": 0.0569,
+        "total_pnl": 16.6701,
+        "mean_hold_days": 2.42,
+        "n_win": 151,
+        "n_loss": 63,
+        "n_flat": 79,
+        "close_reason_counts": {
+          "TP": 149,
+          "SL": 63,
+          "TIME": 2,
+          "SCRATCH": 79
+        },
+        "close_reason_pct": {
+          "TP": 0.5085,
+          "SL": 0.215,
+          "TIME": 0.0068,
+          "SCRATCH": 0.2696
+        },
+        "directional_hit_rate": 0.6928,
+        "directional_mean_pnl": 0.3865,
+        "win_rate_minus_dir_hit": -0.1774
+      },
+      "brent_fly_123": {
+        "n_closed": 302,
+        "win_rate": 0.447,
+        "profit_factor": 2.9509,
+        "avg_win": 0.2951,
+        "avg_loss": -0.2143,
+        "expectancy": 0.0872,
+        "total_pnl": 26.3338,
+        "mean_hold_days": 3.36,
+        "n_win": 135,
+        "n_loss": 63,
+        "n_flat": 104,
+        "close_reason_counts": {
+          "TP": 133,
+          "SL": 61,
+          "TIME": 4,
+          "SCRATCH": 104
+        },
+        "close_reason_pct": {
+          "TP": 0.4404,
+          "SL": 0.202,
+          "TIME": 0.0132,
+          "SCRATCH": 0.3444
+        },
+        "directional_hit_rate": 0.6987,
+        "directional_mean_pnl": 0.1975,
+        "win_rate_minus_dir_hit": -0.2517
+      },
+      "brent_m3_m6": {
+        "n_closed": 319,
+        "win_rate": 0.4263,
+        "profit_factor": 0.8539,
+        "avg_win": 0.1432,
+        "avg_loss": -0.1541,
+        "expectancy": -0.0104,
+        "total_pnl": -3.3319,
+        "mean_hold_days": 2.33,
+        "n_win": 136,
+        "n_loss": 148,
+        "n_flat": 35,
+        "close_reason_counts": {
+          "TP": 136,
+          "SL": 148,
+          "TIME": 0,
+          "SCRATCH": 35
+        },
+        "close_reason_pct": {
+          "TP": 0.4263,
+          "SL": 0.4639,
+          "TIME": 0.0,
+          "SCRATCH": 0.1097
+        },
+        "directional_hit_rate": 0.558,
+        "directional_mean_pnl": -0.1047,
+        "win_rate_minus_dir_hit": -0.1317
+      }
+    }
+  },
+  "gated_blend": {
+    "diagnostics": {
+      "n_rows": 3638,
+      "n_neutral": 1470,
+      "n_no_inputs": 0,
+      "n_incomplete": 14,
+      "n_closed": 2154,
+      "tp_wrong_side": 36
+    },
+    "overall": {
+      "n_closed": 2154,
+      "win_rate": 0.6416,
+      "profit_factor": 1.4873,
+      "avg_win": 0.4529,
+      "avg_loss": -0.5703,
+      "expectancy": 0.0952,
+      "total_pnl": 205.0597,
+      "mean_hold_days": 12.45,
+      "n_win": 1382,
+      "n_loss": 738,
+      "n_flat": 34,
+      "close_reason_counts": {
+        "TP": 841,
+        "SL": 420,
+        "TIME": 859,
+        "SCRATCH": 34
+      },
+      "close_reason_pct": {
+        "TP": 0.3904,
+        "SL": 0.195,
+        "TIME": 0.3988,
+        "SCRATCH": 0.0158
+      },
+      "directional_hit_rate": 0.7103,
+      "directional_mean_pnl": 0.1759,
+      "win_rate_minus_dir_hit": -0.0687
+    },
+    "by_spread": {
+      "brent_m1_m2": {
+        "n_closed": 345,
+        "win_rate": 0.7768,
+        "profit_factor": 3.2778,
+        "avg_win": 0.3562,
+        "avg_loss": -0.416,
+        "expectancy": 0.1923,
+        "total_pnl": 66.3292,
+        "mean_hold_days": 9.85,
+        "n_win": 268,
+        "n_loss": 70,
+        "n_flat": 7,
+        "close_reason_counts": {
+          "TP": 216,
+          "SL": 57,
+          "TIME": 65,
+          "SCRATCH": 7
+        },
+        "close_reason_pct": {
+          "TP": 0.6261,
+          "SL": 0.1652,
+          "TIME": 0.1884,
+          "SCRATCH": 0.0203
+        },
+        "directional_hit_rate": 0.8087,
+        "directional_mean_pnl": 0.3747,
+        "win_rate_minus_dir_hit": -0.0319
+      },
+      "brent_m3_m6": {
+        "n_closed": 419,
+        "win_rate": 0.5704,
+        "profit_factor": 0.7883,
+        "avg_win": 0.5126,
+        "avg_loss": -0.8634,
+        "expectancy": -0.0785,
+        "total_pnl": -32.8987,
+        "mean_hold_days": 15.69,
+        "n_win": 239,
+        "n_loss": 180,
+        "n_flat": 0,
+        "close_reason_counts": {
+          "TP": 103,
+          "SL": 68,
+          "TIME": 248,
+          "SCRATCH": 0
+        },
+        "close_reason_pct": {
+          "TP": 0.2458,
+          "SL": 0.1623,
+          "TIME": 0.5919,
+          "SCRATCH": 0.0
+        },
+        "directional_hit_rate": 0.599,
+        "directional_mean_pnl": -0.1509,
+        "win_rate_minus_dir_hit": -0.0286
+      },
+      "wti_fly_123": {
+        "n_closed": 360,
+        "win_rate": 0.6639,
+        "profit_factor": 3.6071,
+        "avg_win": 0.2956,
+        "avg_loss": -0.1703,
+        "expectancy": 0.1419,
+        "total_pnl": 51.0682,
+        "mean_hold_days": 10.27,
+        "n_win": 239,
+        "n_loss": 115,
+        "n_flat": 6,
+        "close_reason_counts": {
+          "TP": 154,
+          "SL": 100,
+          "TIME": 100,
+          "SCRATCH": 6
+        },
+        "close_reason_pct": {
+          "TP": 0.4278,
+          "SL": 0.2778,
+          "TIME": 0.2778,
+          "SCRATCH": 0.0167
+        },
+        "directional_hit_rate": 0.7917,
+        "directional_mean_pnl": 0.3173,
+        "win_rate_minus_dir_hit": -0.1278
+      },
+      "wti_m1_m2": {
+        "n_closed": 373,
+        "win_rate": 0.6729,
+        "profit_factor": 2.7752,
+        "avg_win": 0.5144,
+        "avg_loss": -0.3813,
+        "expectancy": 0.2214,
+        "total_pnl": 82.584,
+        "mean_hold_days": 15.75,
+        "n_win": 251,
+        "n_loss": 122,
+        "n_flat": 0,
+        "close_reason_counts": {
+          "TP": 94,
+          "SL": 45,
+          "TIME": 234,
+          "SCRATCH": 0
+        },
+        "close_reason_pct": {
+          "TP": 0.252,
+          "SL": 0.1206,
+          "TIME": 0.6273,
+          "SCRATCH": 0.0
+        },
+        "directional_hit_rate": 0.6863,
+        "directional_mean_pnl": 0.1481,
+        "win_rate_minus_dir_hit": -0.0134
+      },
+      "wti_m3_m6": {
+        "n_closed": 404,
+        "win_rate": 0.5842,
+        "profit_factor": 0.963,
+        "avg_win": 0.6062,
+        "avg_loss": -0.8896,
+        "expectancy": -0.0136,
+        "total_pnl": -5.4966,
+        "mean_hold_days": 14.43,
+        "n_win": 236,
+        "n_loss": 167,
+        "n_flat": 1,
+        "close_reason_counts": {
+          "TP": 127,
+          "SL": 67,
+          "TIME": 209,
+          "SCRATCH": 1
+        },
+        "close_reason_pct": {
+          "TP": 0.3144,
+          "SL": 0.1658,
+          "TIME": 0.5173,
+          "SCRATCH": 0.0025
+        },
+        "directional_hit_rate": 0.6238,
+        "directional_mean_pnl": 0.1305,
+        "win_rate_minus_dir_hit": -0.0396
+      },
+      "brent_fly_123": {
+        "n_closed": 253,
+        "win_rate": 0.5889,
+        "profit_factor": 3.0089,
+        "avg_win": 0.437,
+        "avg_loss": -0.2576,
+        "expectancy": 0.1718,
+        "total_pnl": 43.4736,
+        "mean_hold_days": 5.68,
+        "n_win": 149,
+        "n_loss": 84,
+        "n_flat": 20,
+        "close_reason_counts": {
+          "TP": 147,
+          "SL": 83,
+          "TIME": 3,
+          "SCRATCH": 20
+        },
+        "close_reason_pct": {
+          "TP": 0.581,
+          "SL": 0.3281,
+          "TIME": 0.0119,
+          "SCRATCH": 0.0791
+        },
+        "directional_hit_rate": 0.8182,
+        "directional_mean_pnl": 0.3587,
+        "win_rate_minus_dir_hit": -0.2293
+      }
+    },
+    "by_source": {
+      "baseline": {
+        "n_closed": 1910,
+        "win_rate": 0.6707,
+        "profit_factor": 1.431,
+        "avg_win": 0.4473,
+        "avg_loss": -0.6366,
+        "expectancy": 0.0903,
+        "total_pnl": 172.5486,
+        "mean_hold_days": 13.49,
+        "n_win": 1281,
+        "n_loss": 629,
+        "n_flat": 0,
+        "close_reason_counts": {
+          "TP": 755,
+          "SL": 313,
+          "TIME": 842,
+          "SCRATCH": 0
+        },
+        "close_reason_pct": {
+          "TP": 0.3953,
+          "SL": 0.1639,
+          "TIME": 0.4408,
+          "SCRATCH": 0.0
+        },
+        "directional_hit_rate": 0.7136,
+        "directional_mean_pnl": 0.1358,
+        "win_rate_minus_dir_hit": -0.0429
+      },
+      "regime": {
+        "n_closed": 244,
+        "win_rate": 0.4139,
+        "profit_factor": 2.5894,
+        "avg_win": 0.5244,
+        "avg_loss": -0.1877,
+        "expectancy": 0.1332,
+        "total_pnl": 32.5111,
+        "mean_hold_days": 4.32,
+        "n_win": 101,
+        "n_loss": 109,
+        "n_flat": 34,
+        "close_reason_counts": {
+          "TP": 86,
+          "SL": 107,
+          "TIME": 17,
+          "SCRATCH": 34
+        },
+        "close_reason_pct": {
+          "TP": 0.3525,
+          "SL": 0.4385,
+          "TIME": 0.0697,
+          "SCRATCH": 0.1393
+        },
+        "directional_hit_rate": 0.6844,
+        "directional_mean_pnl": 0.4898,
+        "win_rate_minus_dir_hit": -0.2705
+      }
+    }
+  }
+}
