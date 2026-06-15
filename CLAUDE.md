@@ -7,7 +7,8 @@ spread engine), and serves a React dashboard with a paper-trading book.
 - **Stack:** Flask 3 · React 18 + Vite + Tailwind · SQLite (cache + paper book) ·
   DuckDB/Parquet over a 3.5 GB `/Data` desk feed · sklearn + XGBoost/LightGBM/CatBoost
 - **Run (local):** `python start.py` from the repo root → http://127.0.0.1:5000
-- **Last updated:** 2026-06-15 (Phase 2.8.5 soft regime probabilities)
+- **Last updated:** 2026-06-15 (Phase 3.E — live on Hugging Face Spaces)
+- **Live:** https://rohithpranav45-pulse.hf.space (free HF Space, A/B book accumulating 24/7)
 
 > 🧭 **Three docs, one per tense:**
 > **this file = present** (current state · how to run · architecture · gotchas) ·
@@ -82,6 +83,15 @@ spread engine), and serves a React dashboard with a paper-trading book.
   bar (gated NET ≥ +0.65) still unmet. Methodology PDF regenerated. Raw trades persisted to
   `global_trades.json` (10,587 rows); re-run alone via `python -m backend.research.walkforward --global-only`
   (~8 min) without retraining the per-cell harness.
+- **Phase 3.E — LIVE on Hugging Face Spaces (free, no card, 24/7):** public dashboard at
+  **https://rohithpranav45-pulse.hf.space** — the A/B paper book now accumulates round-the-clock.
+  A Docker Space builds from this repo's `main` (shallow clone) and **bakes the 534 MB parquet lake**
+  from a private HF Dataset (`rohithpranav45/pulse-data`); `backend/hf_persist.py` syncs
+  `pulse_cache.db` to/from that Dataset (pull on boot before the app opens it, push every 2h + atexit)
+  so the book survives HF's **ephemeral** storage. A GitHub Action (`.github/workflows/keepalive.yml`)
+  pings `/api/health` every 6h to beat the 48h idle-sleep. All `.env` keys live as Space secrets.
+  Build files + runbook: `deploy/hf_space/` + `deploy/HF_DEPLOY.md`. (Supersedes the Oracle-ARM plan,
+  which stayed capacity-blocked after 400+ retries.)
 
 ### 🔄 In progress — **Phase 3.1: live analysis engine + signal log** (mentor directive, 2026-06-15)
 Mentor asked everyone past the historical-validation phase to **run the framework on live market
