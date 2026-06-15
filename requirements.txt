@@ -11,7 +11,7 @@ flask-cors==6.0.2
 yfinance==1.2.0
 
 # ── Numerics / data ───────────────────────────────────────────────────────────
-numpy==2.3.1
+numpy==2.2.3
 pandas==2.3.0
 scipy==1.16.0
 requests==2.32.4
@@ -64,3 +64,8 @@ APScheduler==3.11.2        # background data refresh jobs
 
 # ── AIS / Tanker Watch ────────────────────────────────────────────────────────
 websocket-client==1.9.0    # aisstream.io WebSocket — live ship positions (needs AISSTREAM_API_KEY)
+
+# ── Testing (Phase 3.0) ───────────────────────────────────────────────────────
+# Cross-module invariant tests (tests/test_invariants.py) guard the duplicated
+# constants in CLAUDE.md §5 gotchas 7-9. Run: python -m pytest tests/ -v
+pytest==9.1.0

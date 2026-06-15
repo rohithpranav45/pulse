@@ -1,0 +1,244 @@
+{
+  "asof": "2026-05-26",
+  "headline": "Israel launches strikes on Iranian energy infrastructure. Iran threatens closure of the Strait of Hormuz.",
+  "horizon_trading_days": 5,
+  "n_draws": 200000,
+  "rho_one_factor": 0.844,
+  "back_regime_weekly_vol": {
+    "m1_m2": 1.019,
+    "m2_m4": 1.226,
+    "m1_m6": 2.705
+  },
+  "current_levels": {
+    "m1_m2": 2.91,
+    "m2_m4": 5.77,
+    "m1_m6": 12.98
+  },
+  "scenarios": [
+    {
+      "name": "De-escalation / contained",
+      "prob": 0.3,
+      "story": "Iranian response symbolic; backchannel ceasefire talk; risk premium unwinds from a stretched base (June-2025 ceasefire pattern: M1-M2 fell 0.57 in one day)",
+      "mu": {
+        "m1_m2": -0.478,
+        "m2_m4": -0.629,
+        "m1_m6": -1.294
+      },
+      "sigma": {
+        "m1_m2": 1.019,
+        "m2_m4": 1.226,
+        "m1_m6": 2.705
+      }
+    },
+    {
+      "name": "Sustained conflict, Hormuz open",
+      "prob": 0.4,
+      "story": "Strikes continue through the week, shipping unimpeded \u2014 exactly the June-2025 D+5 state; premium holds/builds",
+      "mu": {
+        "m1_m2": 0.61,
+        "m2_m4": 1.19,
+        "m1_m6": 2.48
+      },
+      "sigma": {
+        "m1_m2": 1.223,
+        "m2_m4": 1.472,
+        "m1_m6": 3.246
+      }
+    },
+    {
+      "name": "Partial Hormuz disruption",
+      "prob": 0.22,
+      "story": "Tanker harassment / mining / seizures; insurance spikes, some cargoes deferred \u2014 Abqaiq-style infrastructure shock amplified by flow impairment",
+      "mu": {
+        "m1_m2": 0.175,
+        "m2_m4": 1.725,
+        "m1_m6": 2.925
+      },
+      "sigma": {
+        "m1_m2": 1.835,
+        "m2_m4": 2.208,
+        "m1_m6": 4.869
+      }
+    },
+    {
+      "name": "Closure attempt",
+      "prob": 0.08,
+      "story": "Military attempt to halt transit; 17-20 mb/d at risk vs ~6.5 mb/d pipeline bypass; never observed \u2014 anchored on Russia-2022 as the floor, fat right tail",
+      "mu": {
+        "m1_m2": 1.356,
+        "m2_m4": 3.936,
+        "m1_m6": 7.848
+      },
+      "sigma": {
+        "m1_m2": 2.854,
+        "m2_m4": 3.434,
+        "m1_m6": 7.574
+      }
+    }
+  ],
+  "stats": {
+    "m1_m2": {
+      "current": 2.91,
+      "ev_delta": 0.33,
+      "ev_level": 3.24,
+      "p5": -2.13,
+      "p25": -0.76,
+      "p50": 0.19,
+      "p75": 1.22,
+      "p95": 3.13,
+      "ci50_level": [
+        2.15,
+        4.13
+      ],
+      "ci90_level": [
+        0.78,
+        6.04
+      ],
+      "p_widen": 0.551
+    },
+    "m2_m4": {
+      "current": 5.77,
+      "ev_delta": 1.08,
+      "ev_level": 6.85,
+      "p5": -2.11,
+      "p25": -0.51,
+      "p50": 0.77,
+      "p75": 2.24,
+      "p95": 5.28,
+      "ci50_level": [
+        5.26,
+        8.01
+      ],
+      "ci90_level": [
+        3.66,
+        11.05
+      ],
+      "p_widen": 0.653
+    },
+    "m1_m6": {
+      "current": 12.98,
+      "ev_delta": 2.11,
+      "ev_level": 15.09,
+      "p5": -4.76,
+      "p25": -1.25,
+      "p50": 1.47,
+      "p75": 4.56,
+      "p95": 10.93,
+      "ci50_level": [
+        11.73,
+        17.54
+      ],
+      "ci90_level": [
+        8.22,
+        23.91
+      ],
+      "p_widen": 0.639
+    }
+  },
+  "event_study": [
+    {
+      "date": "2018-05-08",
+      "event": "US exits JCPOA",
+      "tier": 1,
+      "m1_m2_d5": -0.18,
+      "m2_m4_d5": -0.19,
+      "m1_m6_d5": -0.44
+    },
+    {
+      "date": "2019-05-12",
+      "event": "Fujairah tanker sabotage",
+      "tier": 2,
+      "m1_m2_d5": -0.17,
+      "m2_m4_d5": 0.01,
+      "m1_m6_d5": -0.16
+    },
+    {
+      "date": "2019-06-13",
+      "event": "Gulf of Oman tanker attacks",
+      "tier": 2,
+      "m1_m2_d5": -0.09,
+      "m2_m4_d5": 0.01,
+      "m1_m6_d5": 0.09
+    },
+    {
+      "date": "2019-06-20",
+      "event": "Iran downs US drone",
+      "tier": 1,
+      "m1_m2_d5": 0.1,
+      "m2_m4_d5": 0.02,
+      "m1_m6_d5": 0.29
+    },
+    {
+      "date": "2019-09-14",
+      "event": "Abqaiq-Khurais attack",
+      "tier": 3,
+      "m1_m2_d5": 0.07,
+      "m2_m4_d5": 0.69,
+      "m1_m6_d5": 1.17
+    },
+    {
+      "date": "2020-01-03",
+      "event": "Soleimani strike",
+      "tier": 1,
+      "m1_m2_d5": 0.04,
+      "m2_m4_d5": 0.07,
+      "m1_m6_d5": 0.16
+    },
+    {
+      "date": "2022-02-24",
+      "event": "Russia invades Ukraine",
+      "tier": 4,
+      "m1_m2_d5": 1.13,
+      "m2_m4_d5": 3.28,
+      "m1_m6_d5": 6.54
+    },
+    {
+      "date": "2023-10-07",
+      "event": "Hamas attack on Israel",
+      "tier": 1,
+      "m1_m2_d5": -0.07,
+      "m2_m4_d5": 0.14,
+      "m1_m6_d5": 0.15
+    },
+    {
+      "date": "2024-01-12",
+      "event": "US/UK strikes on Houthis",
+      "tier": 2,
+      "m1_m2_d5": 0.18,
+      "m2_m4_d5": 0.17,
+      "m1_m6_d5": 0.46
+    },
+    {
+      "date": "2024-04-13",
+      "event": "Iran direct attack on Israel",
+      "tier": 1,
+      "m1_m2_d5": 0.01,
+      "m2_m4_d5": -0.2,
+      "m1_m6_d5": -0.36
+    },
+    {
+      "date": "2024-10-01",
+      "event": "Iran missile barrage on Israel",
+      "tier": 1,
+      "m1_m2_d5": 0.32,
+      "m2_m4_d5": 0.23,
+      "m1_m6_d5": 0.8
+    },
+    {
+      "date": "2024-10-26",
+      "event": "Israel strikes Iran military",
+      "tier": 1,
+      "m1_m2_d5": 0.0,
+      "m2_m4_d5": -0.18,
+      "m1_m6_d5": -0.19
+    },
+    {
+      "date": "2025-06-13",
+      "event": "Israel-Iran 12-day war",
+      "tier": 3,
+      "m1_m2_d5": 0.61,
+      "m2_m4_d5": 1.19,
+      "m1_m6_d5": 2.48
+    }
+  ]
+}

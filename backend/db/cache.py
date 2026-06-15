@@ -26,10 +26,31 @@ _write_lock = threading.Lock()
 _local = threading.local()
 
 
+def _apply_pragmas(c: sqlite3.Connection) -> None:
+    """
+    Phase 3.D — concurrency hardening for the always-on deployment.
+
+    WAL lets the single APScheduler writer (24/7 A/B tick + 60 s paper MTM) and
+    concurrent dashboard reads proceed without blocking each other; ``busy_timeout``
+    makes a contended write wait rather than raise "database is locked"; and
+    ``synchronous=NORMAL`` is the safe, faster durability pairing for WAL. WAL is a
+    persistent database-level mode (set once, stays set), but the timeout/sync
+    pragmas are per-connection, so they are applied on every fresh connection.
+
+    cache.py and paper_trading.py share the same pulse_cache.db file, so either
+    flips the file into WAL; applying the pragmas in both keeps every connection
+    consistent regardless of which module opens the file first.
+    """
+    c.execute("PRAGMA journal_mode=WAL")
+    c.execute("PRAGMA busy_timeout=5000")
+    c.execute("PRAGMA synchronous=NORMAL")
+
+
 def _conn() -> sqlite3.Connection:
     """Return a thread-local SQLite connection, creating the table on first use."""
     if not hasattr(_local, "conn"):
         c = sqlite3.connect(_DB_PATH, check_same_thread=False)
+        _apply_pragmas(c)
         c.execute("""
             CREATE TABLE IF NOT EXISTS cache (
                 key        TEXT PRIMARY KEY,

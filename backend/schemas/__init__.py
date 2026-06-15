@@ -342,6 +342,82 @@ class HealthDetailResponse(PulseModel):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# /api/regime/ab — Phase 2.8.6-followup A/B paper-test harness
+# ─────────────────────────────────────────────────────────────────────────────
+class ABArmEquityPoint(PulseModel):
+    closed_at: Optional[str] = None
+    cum_pnl_net: Optional[float] = None
+    trade_id: Optional[int] = None
+
+
+class ABArmMetrics(PulseModel):
+    n_opened: int = 0
+    n_closed: int = 0
+    n_open: int = 0
+    hit_rate: Optional[float] = None
+    mean_pnl_gross: Optional[float] = None
+    mean_pnl_net: Optional[float] = None
+    total_pnl_gross: Optional[float] = None
+    total_pnl_net: Optional[float] = None
+    sharpe_gross: Optional[float] = None
+    sharpe_net: Optional[float] = None
+    max_dd_net: Optional[float] = None
+    mean_cost: Optional[float] = None
+    equity_curve: list[ABArmEquityPoint] = Field(default_factory=list)
+
+
+class ABWelch(PulseModel):
+    t_stat: Optional[float] = None
+    df: Optional[float] = None
+    p_value: Optional[float] = None
+
+
+class ABPaired(PulseModel):
+    n_pairs: Optional[int] = None
+    mean_diff: Optional[float] = None
+    t_stat: Optional[float] = None
+    p_value: Optional[float] = None
+
+
+class ABDiff(PulseModel):
+    mean_pnl_net_delta: Optional[float] = None
+    sharpe_net_delta: Optional[float] = None
+    welch: Optional[ABWelch] = None
+    paired: Optional[ABPaired] = None
+
+
+class ABStopCriteria(PulseModel):
+    min_n_closed: int = 30
+    p_value_lt: float = 0.05
+    max_days: int = 14
+    n_closed_ok: bool = False
+    p_value_ok: bool = False
+    timeout: bool = False
+
+
+class ABArms(PulseModel):
+    pooled: ABArmMetrics
+    gated: ABArmMetrics
+
+
+class ABReportData(PulseModel):
+    available: bool
+    as_of: Optional[str] = None
+    sessions: list[str] = Field(default_factory=list)
+    days_elapsed: int = 0
+    arms: Optional[ABArms] = None
+    diff: Optional[ABDiff] = None
+    stop_criteria: Optional[ABStopCriteria] = None
+    verdict: Optional[str] = None       # pooled_wins | gated_wins | undecided | undecided_timeout | no_data
+    verdict_note: Optional[str] = None
+
+
+class ABReportResponse(PulseModel):
+    data: ABReportData
+    timestamp: str
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Public registry — used by both the route helper and the TS codegen
 # ─────────────────────────────────────────────────────────────────────────────
 RESPONSE_MODELS: dict[str, type[PulseModel]] = {
@@ -353,6 +429,7 @@ RESPONSE_MODELS: dict[str, type[PulseModel]] = {
     "/api/paper/positions":   PaperPositionsResponse,
     "/api/paper/performance": PaperPerformanceResponse,
     "/api/health-detail":     HealthDetailResponse,
+    "/api/regime/ab":         ABReportResponse,
 }
 
 

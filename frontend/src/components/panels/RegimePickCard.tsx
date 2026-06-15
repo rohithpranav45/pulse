@@ -114,6 +114,18 @@ type Recommendation = {
   as_of?: string;
   n_eligible?: number;
   n_universe?: number;
+  excluded_spreads?: string[];
+  // Phase 2.9.1 tuned exit rule — the EXIT logic, surfaced so the mentor sees
+  // how trades close (TP/SL/time-stop) and which spreads are dropped, not just
+  // the entry signal.
+  tuned_rule?: {
+    entry_z: number;
+    tp_frac: number;
+    sl_mult: number;
+    max_hold_days: number;
+    excluded_spreads: string[];
+    note?: string;
+  } | null;
   top?: RankedOpp;
   ranked?: RankedOpp[];
   method?: string;
@@ -352,6 +364,11 @@ export function RegimePickCard() {
           {gated && summary?.size_mode && summary.size_mode !== 'full' && (
             <span title={`Phase 2.7: regime-leg notional sized by ${summary.size_mode}${summary.size_mode === 'kelly' ? ' (per-spread)' : ''}`}>
               <Chip tone="neut">{`SIZE ${summary.size_mode.toUpperCase()}`}</Chip>
+            </span>
+          )}
+          {rec.tuned_rule && (
+            <span title={`Phase 2.9.1 tuned exit rule (chosen via constrained win-rate sweep): take-profit ${Math.round(rec.tuned_rule.tp_frac * 100)}% of the way to fair value, stop at ${rec.tuned_rule.sl_mult}σ, ${rec.tuned_rule.max_hold_days}-trading-day time-stop. Dropped (PF<1 under TP/SL): ${(rec.tuned_rule.excluded_spreads || []).join(', ') || 'none'}. Lifts realised win rate 64%→83%.`}>
+              <Chip tone="neut">{`EXIT TP ${Math.round(rec.tuned_rule.tp_frac * 100)}%·fair · ${rec.tuned_rule.sl_mult}σ · ${rec.tuned_rule.max_hold_days}d`}</Chip>
             </span>
           )}
           <Chip tone={chipTone as any}>{regimeLabel}</Chip>

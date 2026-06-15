@@ -1,0 +1,14 @@
+date,event,tier,m1_m2_d5,m2_m4_d5,m1_m6_d5
+2018-05-08,US exits JCPOA,1,-0.18,-0.19,-0.44
+2019-05-12,Fujairah tanker sabotage,2,-0.17,0.01,-0.16
+2019-06-13,Gulf of Oman tanker attacks,2,-0.09,0.01,0.09
+2019-06-20,Iran downs US drone,1,0.1,0.02,0.29
+2019-09-14,Abqaiq-Khurais attack,3,0.07,0.69,1.17
+2020-01-03,Soleimani strike,1,0.04,0.07,0.16
+2022-02-24,Russia invades Ukraine,4,1.13,3.28,6.54
+2023-10-07,Hamas attack on Israel,1,-0.07,0.14,0.15
+2024-01-12,US/UK strikes on Houthis,2,0.18,0.17,0.46
+2024-04-13,Iran direct attack on Israel,1,0.01,-0.2,-0.36
+2024-10-01,Iran missile barrage on Israel,1,0.32,0.23,0.8
+2024-10-26,Israel strikes Iran military,1,0.0,-0.18,-0.19
+2025-06-13,Israel-Iran 12-day war,3,0.61,1.19,2.48

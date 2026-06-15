@@ -1,0 +1,747 @@
+{
+  "trained_at": "2026-06-10T06:19:29Z",
+  "regime_mode": "pooled",
+  "train_end": "2026-03-31",
+  "test_start": "2026-04-01",
+  "test_end": "2026-05-31",
+  "n_train": 2652,
+  "n_test": 40,
+  "method": "Per-cell: Ridge / Lasso / ElasticNet / Huber / XGBoost / LightGBM / CatBoost competed via 5-fold TimeSeriesSplit CV. Winner = max mean CV R\u00b2 (Phase 2.8.1 tiebreak: linear preferred when CV scores tie within 0.005, then boosters by listed order). Quantile p10/p50/p90 fit separately for confidence bands.",
+  "candidates": [
+    "Ridge",
+    "Lasso",
+    "ElasticNet",
+    "Huber",
+    "XGBoost",
+    "LightGBM",
+    "CatBoost"
+  ],
+  "cells": {
+    "brent_m1_m2__CONTANGO": {
+      "spread": "brent_m1_m2",
+      "spread_label": "Brent M1-M2",
+      "regime": "CONTANGO",
+      "n_train": 442,
+      "n_test": 0,
+      "winner": "Huber",
+      "alpha": null,
+      "active_features": 19,
+      "total_features": 19,
+      "competition": {
+        "Ridge": 0.5425,
+        "Lasso": -0.8091,
+        "ElasticNet": -0.8141,
+        "Huber": 0.6293,
+        "XGBoost": 0.454,
+        "LightGBM": 0.159,
+        "CatBoost": 0.3788
+      },
+      "ridge_r2_train": 0.9655,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "m1_m12",
+          "coef": 0.4468
+        },
+        {
+          "feature": "curvature",
+          "coef": 0.4285
+        },
+        {
+          "feature": "m3_m6_lag1",
+          "coef": -0.1784
+        },
+        {
+          "feature": "fly_lag1",
+          "coef": 0.1647
+        },
+        {
+          "feature": "m1_m12_sq",
+          "coef": 0.1125
+        }
+      ],
+      "resid_std": 0.1286,
+      "skipped": false
+    },
+    "brent_m1_m2__NEUTRAL": {
+      "spread": "brent_m1_m2",
+      "spread_label": "Brent M1-M2",
+      "regime": "NEUTRAL",
+      "n_train": 1560,
+      "n_test": 0,
+      "winner": "ElasticNet",
+      "alpha": 0.001482910866256853,
+      "active_features": 14,
+      "total_features": 19,
+      "competition": {
+        "Ridge": 0.6922,
+        "Lasso": 0.8173,
+        "ElasticNet": 0.8173,
+        "Huber": 0.8219,
+        "XGBoost": 0.6993,
+        "LightGBM": 0.6913,
+        "CatBoost": 0.6818
+      },
+      "ridge_r2_train": 0.9334,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "m1_m12",
+          "coef": 0.3004
+        },
+        {
+          "feature": "curvature",
+          "coef": 0.2901
+        },
+        {
+          "feature": "m3_m6_lag1",
+          "coef": -0.1775
+        },
+        {
+          "feature": "fly_lag1",
+          "coef": 0.0585
+        },
+        {
+          "feature": "brent_close",
+          "coef": 0.0207
+        }
+      ],
+      "resid_std": 0.1,
+      "skipped": false
+    },
+    "brent_m1_m2__BACK": {
+      "spread": "brent_m1_m2",
+      "spread_label": "Brent M1-M2",
+      "regime": "BACK",
+      "n_train": 650,
+      "n_test": 40,
+      "winner": "Lasso",
+      "alpha": 0.0018546687907875358,
+      "active_features": 18,
+      "total_features": 19,
+      "competition": {
+        "Ridge": 0.7643,
+        "Lasso": 0.8258,
+        "ElasticNet": 0.7914,
+        "Huber": 0.622,
+        "XGBoost": 0.5732,
+        "LightGBM": 0.5454,
+        "CatBoost": 0.4846
+      },
+      "ridge_r2_train": 0.9618,
+      "ridge_r2_test": 0.8632,
+      "band_hit_rate": 0.625,
+      "top_drivers": [
+        {
+          "feature": "curvature",
+          "coef": 0.995
+        },
+        {
+          "feature": "m1_m12",
+          "coef": 0.4329
+        },
+        {
+          "feature": "m3_m6_lag1",
+          "coef": -0.3755
+        },
+        {
+          "feature": "brent_close",
+          "coef": 0.194
+        },
+        {
+          "feature": "crack_321",
+          "coef": -0.1484
+        }
+      ],
+      "resid_std": 0.2497,
+      "skipped": false
+    },
+    "brent_m3_m6__CONTANGO": {
+      "spread": "brent_m3_m6",
+      "spread_label": "Brent M3-M6",
+      "regime": "CONTANGO",
+      "n_train": 442,
+      "n_test": 0,
+      "winner": "ElasticNet",
+      "alpha": 0.0026901609367201997,
+      "active_features": 15,
+      "total_features": 19,
+      "competition": {
+        "Ridge": 0.6212,
+        "Lasso": 0.8737,
+        "ElasticNet": 0.8703,
+        "Huber": 0.528,
+        "XGBoost": 0.686,
+        "LightGBM": 0.6609,
+        "CatBoost": 0.6373
+      },
+      "ridge_r2_train": 0.9876,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "m1_m12",
+          "coef": 0.6288
+        },
+        {
+          "feature": "m1_m12_sq",
+          "coef": -0.1932
+        },
+        {
+          "feature": "fly_lag1",
+          "coef": -0.0913
+        },
+        {
+          "feature": "m1_m2_lag1",
+          "coef": 0.0574
+        },
+        {
+          "feature": "sin_doy",
+          "coef": 0.0449
+        }
+      ],
+      "resid_std": 0.0913,
+      "skipped": false
+    },
+    "brent_m3_m6__NEUTRAL": {
+      "spread": "brent_m3_m6",
+      "spread_label": "Brent M3-M6",
+      "regime": "NEUTRAL",
+      "n_train": 1560,
+      "n_test": 0,
+      "winner": "ElasticNet",
+      "alpha": 0.0018450063613446462,
+      "active_features": 15,
+      "total_features": 19,
+      "competition": {
+        "Ridge": 0.8764,
+        "Lasso": 0.9247,
+        "ElasticNet": 0.9366,
+        "Huber": 0.8712,
+        "XGBoost": 0.8658,
+        "LightGBM": 0.8778,
+        "CatBoost": 0.8223
+      },
+      "ridge_r2_train": 0.9777,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "m1_m12",
+          "coef": 0.5391
+        },
+        {
+          "feature": "fly_lag1",
+          "coef": -0.0721
+        },
+        {
+          "feature": "m1_m2_lag1",
+          "coef": 0.0499
+        },
+        {
+          "feature": "sin_doy",
+          "coef": 0.0383
+        },
+        {
+          "feature": "curvature",
+          "coef": 0.0354
+        }
+      ],
+      "resid_std": 0.0892,
+      "skipped": false
+    },
+    "brent_m3_m6__BACK": {
+      "spread": "brent_m3_m6",
+      "spread_label": "Brent M3-M6",
+      "regime": "BACK",
+      "n_train": 650,
+      "n_test": 40,
+      "winner": "ElasticNet",
+      "alpha": 0.0020745693982829458,
+      "active_features": 17,
+      "total_features": 19,
+      "competition": {
+        "Ridge": 0.8757,
+        "Lasso": 0.9046,
+        "ElasticNet": 0.9104,
+        "Huber": 0.7482,
+        "XGBoost": 0.1999,
+        "LightGBM": 0.0952,
+        "CatBoost": -0.0642
+      },
+      "ridge_r2_train": 0.9907,
+      "ridge_r2_test": 0.866,
+      "band_hit_rate": 0.6,
+      "top_drivers": [
+        {
+          "feature": "m1_m12",
+          "coef": 1.7195
+        },
+        {
+          "feature": "m1_m2_lag1",
+          "coef": 0.3444
+        },
+        {
+          "feature": "fly_lag1",
+          "coef": -0.2455
+        },
+        {
+          "feature": "crack_321",
+          "coef": 0.1504
+        },
+        {
+          "feature": "brent_close",
+          "coef": -0.1389
+        }
+      ],
+      "resid_std": 0.1819,
+      "skipped": false
+    },
+    "brent_fly_123__CONTANGO": {
+      "spread": "brent_fly_123",
+      "spread_label": "Brent front fly (M1-2\u00d7M2+M3)",
+      "regime": "CONTANGO",
+      "n_train": 442,
+      "n_test": 0,
+      "winner": "CatBoost",
+      "alpha": null,
+      "active_features": 19,
+      "total_features": 19,
+      "competition": {
+        "Ridge": -4.2164,
+        "Lasso": -6.7565,
+        "ElasticNet": -6.783,
+        "Huber": -4.1968,
+        "XGBoost": -0.2073,
+        "LightGBM": -0.3519,
+        "CatBoost": 0.1648
+      },
+      "ridge_r2_train": 0.8954,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "wti_brent_spread",
+          "coef": 27.7257
+        },
+        {
+          "feature": "m1_m2_lag1",
+          "coef": 22.6658
+        },
+        {
+          "feature": "curvature",
+          "coef": 13.9611
+        },
+        {
+          "feature": "days_to_expiry",
+          "coef": 5.2909
+        },
+        {
+          "feature": "sin_doy",
+          "coef": 4.2081
+        }
+      ],
+      "resid_std": 0.1014,
+      "skipped": false
+    },
+    "brent_fly_123__NEUTRAL": {
+      "spread": "brent_fly_123",
+      "spread_label": "Brent front fly (M1-2\u00d7M2+M3)",
+      "regime": "NEUTRAL",
+      "n_train": 1560,
+      "n_test": 0,
+      "winner": "Huber",
+      "alpha": null,
+      "active_features": 19,
+      "total_features": 19,
+      "competition": {
+        "Ridge": -0.0192,
+        "Lasso": 0.1718,
+        "ElasticNet": 0.1336,
+        "Huber": 0.2032,
+        "XGBoost": -0.3374,
+        "LightGBM": -0.131,
+        "CatBoost": -0.1027
+      },
+      "ridge_r2_train": 0.5381,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "m3_m6_lag1",
+          "coef": -0.2258
+        },
+        {
+          "feature": "m1_m2_lag1",
+          "coef": 0.1734
+        },
+        {
+          "feature": "m1_m12",
+          "coef": 0.0741
+        },
+        {
+          "feature": "curvature",
+          "coef": 0.0414
+        },
+        {
+          "feature": "gasoline_crack",
+          "coef": 0.0276
+        }
+      ],
+      "resid_std": 0.1511,
+      "skipped": false
+    },
+    "brent_fly_123__BACK": {
+      "spread": "brent_fly_123",
+      "spread_label": "Brent front fly (M1-2\u00d7M2+M3)",
+      "regime": "BACK",
+      "n_train": 650,
+      "n_test": 40,
+      "winner": "XGBoost",
+      "alpha": null,
+      "active_features": 19,
+      "total_features": 19,
+      "competition": {
+        "Ridge": 0.0836,
+        "Lasso": 0.1816,
+        "ElasticNet": 0.1822,
+        "Huber": -1.8026,
+        "XGBoost": 0.1992,
+        "LightGBM": 0.0822,
+        "CatBoost": 0.2016
+      },
+      "ridge_r2_train": 0.9206,
+      "ridge_r2_test": -0.3377,
+      "band_hit_rate": 0.525,
+      "top_drivers": [
+        {
+          "feature": "curvature",
+          "coef": 0.1489
+        },
+        {
+          "feature": "cos_doy",
+          "coef": 0.1384
+        },
+        {
+          "feature": "m1_m12_sq",
+          "coef": 0.105
+        },
+        {
+          "feature": "m1_m12",
+          "coef": 0.0752
+        },
+        {
+          "feature": "wti_brent_spread",
+          "coef": 0.0707
+        }
+      ],
+      "resid_std": 0.1565,
+      "skipped": false
+    },
+    "wti_m1_m2__CONTANGO": {
+      "spread": "wti_m1_m2",
+      "regime": "CONTANGO",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_m1_m2__NEUTRAL": {
+      "spread": "wti_m1_m2",
+      "spread_label": "WTI M1-M2",
+      "regime": "NEUTRAL",
+      "n_train": 788,
+      "n_test": 0,
+      "winner": "Ridge",
+      "alpha": 1.0,
+      "active_features": 24,
+      "total_features": 24,
+      "competition": {
+        "Ridge": 0.7026,
+        "Lasso": -0.1852,
+        "ElasticNet": 0.2701,
+        "Huber": -0.2337,
+        "XGBoost": -0.2416,
+        "LightGBM": -0.2926,
+        "CatBoost": -0.1332
+      },
+      "ridge_r2_train": 0.9681,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "wti_m1_m12",
+          "coef": 0.3029
+        },
+        {
+          "feature": "wti_fly_lag1",
+          "coef": 0.082
+        },
+        {
+          "feature": "m1_m2_lag1",
+          "coef": 0.0746
+        },
+        {
+          "feature": "gasoline_crack",
+          "coef": -0.0509
+        },
+        {
+          "feature": "fly_lag1",
+          "coef": -0.0505
+        }
+      ],
+      "resid_std": 0.0679,
+      "skipped": false
+    },
+    "wti_m1_m2__BACK": {
+      "spread": "wti_m1_m2",
+      "spread_label": "WTI M1-M2",
+      "regime": "BACK",
+      "n_train": 576,
+      "n_test": 38,
+      "winner": "ElasticNet",
+      "alpha": 0.004296843147889821,
+      "active_features": 21,
+      "total_features": 24,
+      "competition": {
+        "Ridge": 0.8902,
+        "Lasso": 0.9063,
+        "ElasticNet": 0.902,
+        "Huber": 0.6678,
+        "XGBoost": 0.527,
+        "LightGBM": 0.5027,
+        "CatBoost": 0.3654
+      },
+      "ridge_r2_train": 0.9685,
+      "ridge_r2_test": 0.8699,
+      "band_hit_rate": 0.1579,
+      "top_drivers": [
+        {
+          "feature": "wti_m1_m12",
+          "coef": 0.7615
+        },
+        {
+          "feature": "wti_fly_lag1",
+          "coef": 0.3033
+        },
+        {
+          "feature": "m1_m2_lag1",
+          "coef": 0.2115
+        },
+        {
+          "feature": "m1_m12",
+          "coef": -0.1713
+        },
+        {
+          "feature": "curvature",
+          "coef": 0.1268
+        }
+      ],
+      "resid_std": 0.1629,
+      "skipped": false
+    },
+    "wti_m3_m6__CONTANGO": {
+      "spread": "wti_m3_m6",
+      "regime": "CONTANGO",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_m3_m6__NEUTRAL": {
+      "spread": "wti_m3_m6",
+      "spread_label": "WTI M3-M6",
+      "regime": "NEUTRAL",
+      "n_train": 788,
+      "n_test": 0,
+      "winner": "ElasticNet",
+      "alpha": 0.0031249232766059768,
+      "active_features": 17,
+      "total_features": 24,
+      "competition": {
+        "Ridge": 0.8343,
+        "Lasso": 0.8985,
+        "ElasticNet": 0.8983,
+        "Huber": 0.3173,
+        "XGBoost": 0.7208,
+        "LightGBM": 0.7123,
+        "CatBoost": 0.67
+      },
+      "ridge_r2_train": 0.9756,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "wti_m1_m12",
+          "coef": 0.5731
+        },
+        {
+          "feature": "wti_m1_m2_lag1",
+          "coef": -0.1886
+        },
+        {
+          "feature": "m3_m6_lag1",
+          "coef": 0.0734
+        },
+        {
+          "feature": "curvature",
+          "coef": -0.0546
+        },
+        {
+          "feature": "sin_doy",
+          "coef": 0.0427
+        }
+      ],
+      "resid_std": 0.085,
+      "skipped": false
+    },
+    "wti_m3_m6__BACK": {
+      "spread": "wti_m3_m6",
+      "spread_label": "WTI M3-M6",
+      "regime": "BACK",
+      "n_train": 576,
+      "n_test": 38,
+      "winner": "ElasticNet",
+      "alpha": 0.002378596700343146,
+      "active_features": 19,
+      "total_features": 24,
+      "competition": {
+        "Ridge": 0.9419,
+        "Lasso": 0.9674,
+        "ElasticNet": 0.965,
+        "Huber": 0.8006,
+        "XGBoost": 0.7106,
+        "LightGBM": 0.6289,
+        "CatBoost": 0.6146
+      },
+      "ridge_r2_train": 0.9908,
+      "ridge_r2_test": 0.6731,
+      "band_hit_rate": 0.9474,
+      "top_drivers": [
+        {
+          "feature": "wti_m1_m12",
+          "coef": 2.1283
+        },
+        {
+          "feature": "m1_m12",
+          "coef": 0.223
+        },
+        {
+          "feature": "curvature",
+          "coef": -0.1992
+        },
+        {
+          "feature": "wti_fly_lag1",
+          "coef": -0.187
+        },
+        {
+          "feature": "wti_m1_m2_lag1",
+          "coef": -0.1708
+        }
+      ],
+      "resid_std": 0.2084,
+      "skipped": false
+    },
+    "wti_fly_123__CONTANGO": {
+      "spread": "wti_fly_123",
+      "regime": "CONTANGO",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_fly_123__NEUTRAL": {
+      "spread": "wti_fly_123",
+      "spread_label": "WTI front fly (M1-2\u00d7M2+M3)",
+      "regime": "NEUTRAL",
+      "n_train": 788,
+      "n_test": 0,
+      "winner": "ElasticNet",
+      "alpha": 0.0004098430874881618,
+      "active_features": 21,
+      "total_features": 24,
+      "competition": {
+        "Ridge": -0.1156,
+        "Lasso": -0.1086,
+        "ElasticNet": -0.1103,
+        "Huber": -1.95,
+        "XGBoost": -0.8863,
+        "LightGBM": -0.3271,
+        "CatBoost": -0.331
+      },
+      "ridge_r2_train": 0.7429,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "wti_m1_m2_lag1",
+          "coef": 0.178
+        },
+        {
+          "feature": "wti_m3_m6_lag1",
+          "coef": -0.083
+        },
+        {
+          "feature": "wti_brent_spread",
+          "coef": -0.0325
+        },
+        {
+          "feature": "inv_vs_5yr_pct",
+          "coef": 0.0257
+        },
+        {
+          "feature": "curvature",
+          "coef": -0.0239
+        }
+      ],
+      "resid_std": 0.0804,
+      "skipped": false
+    },
+    "wti_fly_123__BACK": {
+      "spread": "wti_fly_123",
+      "spread_label": "WTI front fly (M1-2\u00d7M2+M3)",
+      "regime": "BACK",
+      "n_train": 576,
+      "n_test": 38,
+      "winner": "LightGBM",
+      "alpha": null,
+      "active_features": 24,
+      "total_features": 24,
+      "competition": {
+        "Ridge": -5.0099,
+        "Lasso": -3.1379,
+        "ElasticNet": -3.1554,
+        "Huber": -2.6485,
+        "XGBoost": -1.3726,
+        "LightGBM": -1.1621,
+        "CatBoost": -1.3464
+      },
+      "ridge_r2_train": 0.8979,
+      "ridge_r2_test": -0.6176,
+      "band_hit_rate": 0.3684,
+      "top_drivers": [
+        {
+          "feature": "wti_m1_m2_lag1",
+          "coef": 96.0
+        },
+        {
+          "feature": "m1_m12",
+          "coef": 64.0
+        },
+        {
+          "feature": "realised_vol_20d",
+          "coef": 63.0
+        },
+        {
+          "feature": "ovx_vix_ratio",
+          "coef": 58.0
+        },
+        {
+          "feature": "cos_doy",
+          "coef": 54.0
+        }
+      ],
+      "resid_std": 0.1211,
+      "skipped": false
+    }
+  }
+}
