@@ -64,10 +64,12 @@ RUN uv pip install --system --no-cache -r requirements.txt gunicorn==23.0.0
 # token is mounted as a build secret (never baked into a layer). data_lake.py
 # expects it at /app/Data/parquet.
 ARG HF_DATASET_REPO=USERNAME/pulse-data
+# `hf` is the current CLI (huggingface-cli is deprecated in hub 1.x). It reads
+# the token from the HF_TOKEN env var, set here from the mounted build secret.
 RUN --mount=type=secret,id=HF_TOKEN,required=true \
     HF_TOKEN="$(cat /run/secrets/HF_TOKEN)" \
-    huggingface-cli download "${HF_DATASET_REPO}" --repo-type dataset \
-        --include "parquet/*" --local-dir /app/Data --token "$HF_TOKEN" \
+    hf download "${HF_DATASET_REPO}" --repo-type dataset \
+        --include "parquet/*" --local-dir /app/Data \
     && echo "baked parquet:" && ls -1 /app/Data/parquet | head
 
 # HF Spaces run the container as uid 1000. Make the writable paths owned by it:
