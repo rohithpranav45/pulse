@@ -608,6 +608,30 @@ def get_performance(window: str = "all") -> dict:
             "closed_at": r["closed_at"],
             "cum_pnl":  round(cum, 4),
         })
+    # NAV-based, holding-period-aware Sharpe. Per-trade returns are taken as a
+    # fraction of NAV and annualised by the AVERAGE HOLDING PERIOD — applying the
+    # naive √252 (one-trade-per-day) factor to ~20-trading-day holds overstates
+    # Sharpe by ~4-5×. NAV from PULSE_PAPER_NAV (default $1M).
+    nav = float(os.environ.get("PULSE_PAPER_NAV", "1000000") or 1000000)
+    rets = [p / nav for p in pnls] if nav else []
+    holds = []
+    for r in rows:
+        try:
+            _o = datetime.fromisoformat(r["opened_at"]); _c = datetime.fromisoformat(r["closed_at"])
+            holds.append(max(1, (_c - _o).days))
+        except Exception:
+            pass
+    avg_hold_cal = (sum(holds) / len(holds)) if holds else 28.0
+    avg_hold_td  = max(1.0, avg_hold_cal * 252.0 / 365.0)   # calendar → trading days
+    sharpe_ann = None
+    if len(rets) >= 2:
+        _m = sum(rets) / len(rets)
+        _v = sum((x - _m) ** 2 for x in rets) / (len(rets) - 1)
+        _sd = math.sqrt(_v) if _v > 0 else 0.0
+        if _sd > 0:
+            sharpe_ann = round((_m / _sd) * math.sqrt(252.0 / avg_hold_td), 3)
+    max_dd = _max_drawdown([e["cum_pnl"] for e in equity])
+
     best  = max(rows, key=lambda r: r["realised"])
     worst = min(rows, key=lambda r: r["realised"])
 
@@ -621,8 +645,11 @@ def get_performance(window: str = "all") -> dict:
         "avg_win":           round(sum(wins) / len(wins), 4) if wins else 0.0,
         "avg_loss":          round(sum(losses) / len(losses), 4) if losses else 0.0,
         "profit_factor":     round(gross_w / gross_l, 3) if gross_l > 0 else None,
-        "sharpe_annualised": _sharpe(pcts),
-        "max_drawdown":      _max_drawdown([e["cum_pnl"] for e in equity]),
+        "sharpe_annualised": sharpe_ann,
+        "avg_holding_days":  round(avg_hold_cal, 1),
+        "total_pnl_pct":     round(sum(pnls) / nav * 100, 3) if nav else None,
+        "max_drawdown":      max_dd,
+        "max_drawdown_pct":  round(max_dd / nav * 100, 3) if nav else None,
         "best_trade":        {"id": best["id"],  "pnl": best["realised"],  "asset": best["asset"]},
         "worst_trade":       {"id": worst["id"], "pnl": worst["realised"], "asset": worst["asset"]},
         "equity_curve":      equity,
