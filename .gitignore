@@ -23,6 +23,8 @@ node_modules/
 .env
 .env.*
 !.env.example
+# stray secrets file (must be named .env, not env — gotcha 5). Never commit.
+/env
 
 # ── Rebuildable caches (regenerate on first run — NOT migrated) ────────────────
 # These rebuild automatically, so versioning them only bloats the repo.

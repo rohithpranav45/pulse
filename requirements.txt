@@ -11,7 +11,7 @@ flask-cors==6.0.2
 yfinance==1.2.0
 
 # ── Numerics / data ───────────────────────────────────────────────────────────
-numpy==2.3.1
+numpy==2.2.3
 pandas==2.3.0
 scipy==1.16.0
 requests==2.32.4
