@@ -19,7 +19,9 @@
 
 # ── Stage 1: clone repo + build the React frontend ───────────────────────────
 FROM node:22-slim AS frontend
-RUN apt-get update && apt-get install -y --no-install-recommends git \
+# ca-certificates is required for git to verify GitHub's TLS cert (node:22-slim
+# ships without it, and --no-install-recommends won't pull it in via git).
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /build
 ARG PULSE_REPO=https://github.com/rohithpranav45/pulse
@@ -36,8 +38,9 @@ FROM python:3.13-slim AS runtime
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 # libgomp1 — OpenMP for xgboost/lightgbm/catboost · curl — healthcheck
+# ca-certificates — TLS verification for the runtime parquet/book sync to HF
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libgomp1 curl \
+    && apt-get install -y --no-install-recommends libgomp1 curl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 ENV PYTHONUNBUFFERED=1 \
