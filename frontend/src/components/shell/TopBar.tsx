@@ -1,8 +1,8 @@
-import { useClock } from '@/lib/hooks';
+import { useClock, useTheme } from '@/lib/hooks';
 import { fmt } from '@/lib/fmt';
 import { Chip } from '@/components/ui/Chip';
 import { TICKER_KEYS } from '@/lib/api';
-import { Activity, RefreshCw, Maximize2, Printer, HelpCircle } from 'lucide-react';
+import { Activity, RefreshCw, Maximize2, Printer, HelpCircle, Sun, Moon } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { resetOnboarding } from '@/components/onboarding/OnboardingTour';
 import { ProvenanceLegend } from '@/components/shell/ProvenanceLegend';
@@ -66,6 +66,24 @@ function IconButton({
   );
 }
 
+function ThemeToggle() {
+  const [theme, toggle] = useTheme();
+  const dark = theme === 'dark';
+  return (
+    <IconButton onClick={toggle} title={dark ? 'Switch to light mode' : 'Switch to dark mode'}>
+      <motion.span
+        key={theme}
+        initial={{ rotate: -90, opacity: 0, scale: 0.6 }}
+        animate={{ rotate: 0, opacity: 1, scale: 1 }}
+        transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
+        className="block"
+      >
+        {dark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+      </motion.span>
+    </IconButton>
+  );
+}
+
 export function TopBar({ ticker, onRefresh, refreshing }: { ticker: TickerData | null; onRefresh: () => void; refreshing?: boolean }) {
   return (
     <motion.header
@@ -73,7 +91,7 @@ export function TopBar({ ticker, onRefresh, refreshing }: { ticker: TickerData |
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
       className="h-16 flex-shrink-0 bg-bg-elev/85 backdrop-blur-xl flex items-center px-5 gap-6 relative z-30"
-      style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}
+      style={{ borderBottom: '1px solid var(--hairline)' }}
     >
       {/* hairline gold accent at the bottom edge */}
       <div
@@ -132,6 +150,7 @@ export function TopBar({ ticker, onRefresh, refreshing }: { ticker: TickerData |
           <TimeChip tz="Asia/Singapore" label="SGP" />
         </div>
         <div className="flex items-center gap-1 pl-2 border-l border-border ml-1">
+          <ThemeToggle />
           <IconButton onClick={onRefresh} title="Refresh all data (R)">
             <RefreshCw className={clsx('w-4 h-4', refreshing && 'animate-spin')} />
           </IconButton>

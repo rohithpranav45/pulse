@@ -1,8 +1,22 @@
 <!doctype html>
-<html lang="en" class="dark">
+<html lang="en" class="dark" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Apply the saved theme before first paint so there's no flash of the
+         wrong palette. Mirrors useTheme() in src/lib/hooks.ts. -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('pulse.theme');
+          if (t) t = JSON.parse(t);
+          var theme = t === 'light' ? 'light' : 'dark';
+          var root = document.documentElement;
+          root.setAttribute('data-theme', theme);
+          root.classList.toggle('dark', theme === 'dark');
+        } catch (e) {}
+      })();
+    </script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>PULSE — Energy Intelligence Terminal</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />

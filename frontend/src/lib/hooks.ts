@@ -51,6 +51,27 @@ export function useClock() {
   return now;
 }
 
+export type Theme = 'dark' | 'light';
+
+/** Theme toggle backed by localStorage. Applies `data-theme` (and the legacy
+ *  `dark` class) to <html> so the CSS-variable palette in index.css flips the
+ *  whole app. The initial paint is handled by the inline script in index.html
+ *  (no flash of the wrong theme on load). */
+export function useTheme(): [Theme, () => void] {
+  const [theme, setTheme] = useLocalStorage<Theme>('pulse.theme', 'dark');
+  useEffect(() => {
+    const root = document.documentElement;
+    root.setAttribute('data-theme', theme);
+    root.classList.toggle('dark', theme === 'dark');
+  }, [theme]);
+  const toggle = useCallback(
+    () => setTheme(theme === 'dark' ? 'light' : 'dark'),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [theme],
+  );
+  return [theme, toggle];
+}
+
 export function useLocalStorage<T>(key: string, initial: T): [T, (v: T) => void] {
   const [v, setV] = useState<T>(() => {
     try {
