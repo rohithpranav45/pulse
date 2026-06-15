@@ -27,17 +27,22 @@ we planned, deferred, or owe someone — with a timeline and a copy-paste prompt
 
 ---
 
-## 🔴 ACTIVE NOW — Always-on deployment (waiting on Oracle capacity)
+## ✅ SHIPPED — Always-on deployment (Phase 3.E, Hugging Face Spaces, 2026-06-15)
 
-The auto-retry loop is running on this PC (`~/.oci/pulse_launch.py`, hidden Startup-folder
-launcher, 90s loop). It will grab the free Oracle ARM server the moment capacity frees up and
-write `~/.oci/pulse_instance.txt`. Full context: memory `pulse-deployment-pending` + `deploy/README.md`.
+**Live, free, 24/7:** https://rohithpranav45-pulse.hf.space — the A/B paper book accumulates
+round-the-clock. Docker Space builds from `main` (shallow clone) + bakes the 534 MB parquet from a
+private HF Dataset (`rohithpranav45/pulse-data`); `backend/hf_persist.py` syncs `pulse_cache.db`
+to/from that Dataset so it survives HF's ephemeral storage; a GitHub Action pings `/api/health`
+every 6h to beat the 48h idle-sleep. Build files + runbook: `deploy/hf_space/` + `deploy/HF_DEPLOY.md`.
 
-**D1 — Finish the deployment when the server lands.** `[M · blocked on Oracle capacity]`
-SSH in → open 80/443 (VCN security list + host iptables) → copy `Data/` + model pkls + `.env` up →
-`docker compose up -d --build` → set `BASIC_AUTH_HASH` + `PULSE_UID` → run `deploy/smoke_test.sh` →
-paste the live URL into `CLAUDE.md` §1.
-> ▶ **Prompt:** `Read CLAUDE.md in pulse/, then check Oracle: if ~/.oci/pulse_instance.txt exists, finish the PULSE deployment per deploy/README.md — SSH in with ~/.ssh/oracle_pulse (user 'ubuntu'), open ports 80/443, copy Data + model pkls + .env to the server, docker compose up -d --build, set BASIC_AUTH_HASH + PULSE_UID, run deploy/smoke_test.sh, then paste the live URL into CLAUDE.md §1 and docs/ROADMAP.md. Ask me for anything only I can do. Don't multi-task; update the docs and stop.`
+> **Operate it:** push to `main` → *Factory rebuild* the Space (pulls latest code). Refresh data →
+> re-run `deploy/hf_space/upload_data.py` then rebuild. Secrets live in the Space settings.
+
+**Oracle ARM plan — shelved (capacity-blocked).** The auto-retry loop (`~/.oci/pulse_launch.py`,
+Startup-folder launcher) never landed a free ARM instance after 400+ tries; HF supersedes it. The
+loop can be stopped (remove the Startup-folder `.vbs`) — keep only if you still want a persistent VM
+later. The Docker/Caddy artifacts (`Dockerfile`, `docker-compose.yml`, `deploy/README.md`) remain
+valid for any VPS/Oracle host.
 
 ---
 
