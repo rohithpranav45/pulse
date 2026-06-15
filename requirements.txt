@@ -69,3 +69,12 @@ websocket-client==1.9.0    # aisstream.io WebSocket — live ship positions (nee
 # Cross-module invariant tests (tests/test_invariants.py) guard the duplicated
 # constants in CLAUDE.md §5 gotchas 7-9. Run: python -m pytest tests/ -v
 pytest==9.1.0
+
+# ── Hugging Face Spaces deploy (Phase 3.E) ───────────────────────────────────
+# Free HF Spaces have ephemeral storage, so backend/hf_persist.py syncs the
+# SQLite paper book to a private HF Dataset, and the image build bakes the
+# parquet data lake from that same dataset. No-op unless HF_TOKEN +
+# HF_DATASET_REPO are set, so local / compose / Oracle are unaffected.
+# (also pulled in transitively by transformers; pinned with a floor for the
+#  hf_hub_download / HfApi.upload_file / upload_folder APIs used here.)
+huggingface-hub>=0.24

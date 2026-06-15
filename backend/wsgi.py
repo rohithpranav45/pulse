@@ -38,9 +38,17 @@ import atexit
 import logging
 import threading
 
+# Free-tier HF Spaces have ephemeral disk, so restore the paper book from the HF
+# Dataset BEFORE importing app (which opens pulse_cache.db). No-op unless the
+# HF_TOKEN + HF_DATASET_REPO env vars are set, so local/compose/Oracle are
+# unaffected. See backend/hf_persist.py.
+import hf_persist
+
+hf_persist.pull_db()
+
 # Importing app builds the Flask app, loads .env, inits Sentry/Better Stack, and
 # constructs (but does not start) the BackgroundScheduler + defines warm_cache.
-from app import app, _scheduler, warm_cache  # noqa: F401  (app is the WSGI callable)
+from app import app, _scheduler, warm_cache  # noqa: E402,F401  (app is the WSGI callable)
 
 log = logging.getLogger("pulse.wsgi")
 
@@ -69,6 +77,9 @@ def _boot_once() -> None:
                 "APScheduler started under gunicorn — data refresh + 60s paper MTM "
                 "+ daily A/B tick active (tuned-rule paper book will accumulate)"
             )
+            # Sync the paper book to the HF Dataset on a timer + at exit so it
+            # survives ephemeral-storage restarts. No-op unless HF env is set.
+            hf_persist.register(_scheduler)
             atexit.register(_shutdown)
 
 
