@@ -37,7 +37,7 @@ import sys
 import threading
 import time
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 # ── ensure backend/ and project root are on sys.path ─────────────────────────
 _BACKEND = os.path.abspath(os.path.dirname(__file__))          # pulse/backend/
@@ -1052,6 +1052,77 @@ def _paper_mtm():
 
 _scheduler.add_job(_paper_mtm, "interval", seconds=60, id="_paper_mtm")
 
+# Phase 2.8.6-followup A/B harness — dual-push pooled + gated arms once per day.
+# Idempotent: ab_test.tick() dedups on open (asset, direction, ab_mode), so
+# multiple firings within a session are safe.
+def _ab_tick():
+    if os.environ.get("PULSE_AB_TEST_DISABLED") == "1":
+        return
+    try:
+        from research.ab_test import tick
+        s = tick()
+        log.info(
+            "A/B tick: pushed pooled=%d gated=%d",
+            len(s.get("pushed", {}).get("pooled", []) or []),
+            len(s.get("pushed", {}).get("gated", []) or []),
+        )
+    except Exception as exc:
+        log.warning("A/B tick failed: %s", exc)
+
+# Once per 24 hours, kicked off five minutes after boot so the data lake +
+# regime models have warmed up before we generate signals.
+_scheduler.add_job(
+    _ab_tick,
+    "interval",
+    seconds=86_400,
+    next_run_time=_dt.now() + timedelta(minutes=5),
+    id="_ab_tick",
+)
+
+# Phase 3.1 — live analysis engine. Generate signals off the live intraday feed
+# and track each signal's subsequent performance. Disabled with
+# PULSE_LIVE_SIGNALS_DISABLED=1 (e.g. on the Oracle box, which can't see the
+# office I: share). Cadence "Both": one daily signal + intraday re-evaluations,
+# with a performance sweep that MTMs open signals against the latest bars.
+def _live_signals_disabled() -> bool:
+    return os.environ.get("PULSE_LIVE_SIGNALS_DISABLED") == "1"
+
+def _live_signal_daily():
+    if _live_signals_disabled():
+        return
+    try:
+        from research.signal_log import generate_live_signals
+        s = generate_live_signals(cadence="daily")
+        if s.get("available"):
+            log.info("live signals (daily): logged=%s regime=%s as_of=%s",
+                     s.get("logged"), s.get("regime"), s.get("feed_as_of"))
+    except Exception as exc:
+        log.warning("live signal daily gen failed: %s", exc)
+
+def _live_signal_intraday():
+    if _live_signals_disabled():
+        return
+    try:
+        from research.signal_log import generate_live_signals, update_signal_performance
+        g = generate_live_signals(cadence="intraday")
+        u = update_signal_performance()
+        if g.get("available"):
+            log.info("live signals (intraday): logged=%s | perf checked=%s closed=%s",
+                     g.get("logged"), u.get("checked"), u.get("closed"))
+    except Exception as exc:
+        log.warning("live signal intraday tick failed: %s", exc)
+
+# Daily generation once per 24h (kicked off 6 min after boot, after warm-up).
+_scheduler.add_job(
+    _live_signal_daily, "interval", seconds=86_400,
+    next_run_time=_dt.now() + timedelta(minutes=6), id="_live_signal_daily",
+)
+# Intraday re-evaluation + performance sweep every 15 min (matches bar size).
+_scheduler.add_job(
+    _live_signal_intraday, "interval", seconds=900,
+    next_run_time=_dt.now() + timedelta(minutes=7), id="_live_signal_intraday",
+)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Flask routes
@@ -1150,6 +1221,106 @@ def regime_walkforward_route():
         return rpt
     return jsonify({"data": safe_fetch(_wf, {"available": False}),
                     "timestamp": _now()})
+
+
+@app.route("/api/regime/ab")
+def regime_ab_route():
+    """
+    Phase 2.8.6-followup A/B paper-test report.
+
+    Compares two parallel paper books — Arm A (pooled, un-gated) vs Arm B
+    (gated_blend, current default) — pushed daily via research.ab_test.tick.
+    Returns per-arm headline metrics, Welch + paired t-tests on per-trade
+    NET PnL (Phase 2.8.6 cost-aware), stop-criteria progress and a verdict.
+    """
+    from schemas import ABReportResponse
+    def _ab():
+        from research.ab_test import get_report
+        return get_report()
+    return respond(ABReportResponse, safe_fetch(_ab, {"available": False, "verdict": "no_data"}), _now())
+
+
+@app.route("/api/regime/ab/tick", methods=["POST"])
+def regime_ab_tick_route():
+    """
+    Manually fire one A/B generation step (dual-push of pooled + gated arms).
+    Idempotent: dedup on open (asset, direction, ab_mode). Used for smoke
+    tests + when the operator wants to backfill a missed daily tick. The
+    APScheduler job fires this automatically once per day.
+    """
+    body = request.get_json(silent=True) or {}
+    session = body.get("session")
+    from research.ab_test import tick
+    out = tick(ab_session=session)
+    return jsonify({"data": out, "timestamp": _now()})
+
+
+@app.route("/api/regime/ab/reset", methods=["POST"])
+def regime_ab_reset_route():
+    """
+    Wipe A/B-tagged paper trades. scope='all'|'closed'. Does NOT touch
+    non-A/B paper rows (the dashboard's regular paper book is preserved).
+    """
+    body = request.get_json(silent=True) or {}
+    from research.ab_test import reset as ab_reset
+    n = ab_reset(scope=body.get("scope", "all"))
+    return jsonify({"data": {"removed": n}, "timestamp": _now()})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 3.1 — live analysis engine + signal log
+# ─────────────────────────────────────────────────────────────────────────────
+@app.route("/api/regime/live")
+def regime_live_route():
+    """
+    Run the regime framework against the CURRENT market from the live intraday
+    feed (lightstreamer bars). Returns the same shape as
+    /api/regime/recommendation plus a `live_feed` block. Read-only — does not
+    persist. Set PULSE_LIVE_FEED_DIR to point at the feed directory.
+    """
+    def _live():
+        from research.live_engine import get_live_recommendation
+        return get_live_recommendation(include_wti=request.args.get("wti") == "1")
+    return jsonify({"data": safe_fetch(_live, {"available": False}), "timestamp": _now()})
+
+
+@app.route("/api/regime/signals")
+def regime_signals_route():
+    """
+    The live signal log — every opportunity the model generated, with timestamp,
+    regime, instrument, rationale, confidence, and subsequent performance.
+    Query: ?status=open|closed|all (default all), ?limit=N (default 200).
+    """
+    def _signals():
+        from research.signal_log import list_signals
+        status = (request.args.get("status") or "all").upper()
+        if status not in ("OPEN", "CLOSED"):
+            status = "all"
+        try:
+            limit = int(request.args.get("limit", 200))
+        except (TypeError, ValueError):
+            limit = 200
+        rows = list_signals(status=status, limit=limit)
+        n_open = sum(1 for r in rows if r.get("status") == "OPEN")
+        return {"available": True, "signals": rows, "n": len(rows), "n_open": n_open}
+    return jsonify({"data": safe_fetch(_signals, {"available": False, "signals": []}),
+                    "timestamp": _now()})
+
+
+@app.route("/api/regime/signals/generate", methods=["POST"])
+def regime_signals_generate_route():
+    """
+    Manually fire one live signal-generation step (idempotent — dedups on
+    instrument/direction/feed_as_of/cadence). The scheduler fires daily +
+    intraday automatically; this is for smoke tests / backfilling a tick.
+    """
+    body = request.get_json(silent=True) or {}
+    from research.signal_log import generate_live_signals
+    out = generate_live_signals(
+        cadence=body.get("cadence", "daily"),
+        include_wti=bool(body.get("include_wti", False)),
+    )
+    return jsonify({"data": out, "timestamp": _now()})
 
 
 # ─────────────────────────────────────────────────────────────────────────────

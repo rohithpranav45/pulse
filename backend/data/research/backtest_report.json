@@ -1,0 +1,3732 @@
+{
+  "trained_at": "2026-06-10T06:19:18Z",
+  "regime_mode": "composite",
+  "train_end": "2026-03-31",
+  "test_start": "2026-04-01",
+  "test_end": "2026-05-31",
+  "n_train": 2652,
+  "n_test": 40,
+  "method": "Per-cell: Ridge / Lasso / ElasticNet / Huber / XGBoost / LightGBM / CatBoost competed via 5-fold TimeSeriesSplit CV. Winner = max mean CV R\u00b2 (Phase 2.8.1 tiebreak: linear preferred when CV scores tie within 0.005, then boosters by listed order). Quantile p10/p50/p90 fit separately for confidence bands.",
+  "candidates": [
+    "Ridge",
+    "Lasso",
+    "ElasticNet",
+    "Huber",
+    "XGBoost",
+    "LightGBM",
+    "CatBoost"
+  ],
+  "cells": {
+    "brent_m1_m2__CONTANGO/LOW/CALM": {
+      "spread": "brent_m1_m2",
+      "regime": "CONTANGO/LOW/CALM",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "brent_m1_m2__CONTANGO/LOW/NORMAL": {
+      "spread": "brent_m1_m2",
+      "regime": "CONTANGO/LOW/NORMAL",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "brent_m1_m2__CONTANGO/LOW/STRESSED": {
+      "spread": "brent_m1_m2",
+      "regime": "CONTANGO/LOW/STRESSED",
+      "n_train": 15,
+      "skipped": true,
+      "reason": "only 15 train rows (<30)"
+    },
+    "brent_m1_m2__CONTANGO/AVG/CALM": {
+      "spread": "brent_m1_m2",
+      "regime": "CONTANGO/AVG/CALM",
+      "n_train": 10,
+      "skipped": true,
+      "reason": "only 10 train rows (<30)"
+    },
+    "brent_m1_m2__CONTANGO/AVG/NORMAL": {
+      "spread": "brent_m1_m2",
+      "spread_label": "Brent M1-M2",
+      "regime": "CONTANGO/AVG/NORMAL",
+      "n_train": 73,
+      "n_test": 0,
+      "winner": "ElasticNet",
+      "alpha": 0.039978855694831374,
+      "active_features": 10,
+      "total_features": 19,
+      "competition": {
+        "Ridge": 0.3152,
+        "Lasso": -1.139,
+        "ElasticNet": 0.734,
+        "Huber": -54.4078
+      },
+      "ridge_r2_train": 0.9641,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "curvature",
+          "coef": 0.1582
+        },
+        {
+          "feature": "m1_m12",
+          "coef": 0.0632
+        },
+        {
+          "feature": "wti_brent_spread",
+          "coef": -0.0536
+        },
+        {
+          "feature": "m1_m12_sq",
+          "coef": -0.0519
+        },
+        {
+          "feature": "inv_surprise",
+          "coef": 0.0163
+        }
+      ],
+      "resid_std": 0.0641,
+      "skipped": false
+    },
+    "brent_m1_m2__CONTANGO/AVG/STRESSED": {
+      "spread": "brent_m1_m2",
+      "spread_label": "Brent M1-M2",
+      "regime": "CONTANGO/AVG/STRESSED",
+      "n_train": 122,
+      "n_test": 0,
+      "winner": "Lasso",
+      "alpha": 0.004471512511566357,
+      "active_features": 13,
+      "total_features": 19,
+      "competition": {
+        "Ridge": -1.1197,
+        "Lasso": 0.2464,
+        "ElasticNet": 0.2215,
+        "Huber": -0.4827,
+        "XGBoost": -1.6677,
+        "LightGBM": -3.8554,
+        "CatBoost": -2.7099
+      },
+      "ridge_r2_train": 0.9735,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "curvature",
+          "coef": 0.9726
+        },
+        {
+          "feature": "m1_m12",
+          "coef": 0.257
+        },
+        {
+          "feature": "m1_m12_sq",
+          "coef": 0.2435
+        },
+        {
+          "feature": "fly_lag1",
+          "coef": 0.1352
+        },
+        {
+          "feature": "m3_m6_lag1",
+          "coef": -0.1032
+        }
+      ],
+      "resid_std": 0.174,
+      "skipped": false
+    },
+    "brent_m1_m2__CONTANGO/HIGH/CALM": {
+      "spread": "brent_m1_m2",
+      "regime": "CONTANGO/HIGH/CALM",
+      "n_train": 4,
+      "skipped": true,
+      "reason": "only 4 train rows (<30)"
+    },
+    "brent_m1_m2__CONTANGO/HIGH/NORMAL": {
+      "spread": "brent_m1_m2",
+      "spread_label": "Brent M1-M2",
+      "regime": "CONTANGO/HIGH/NORMAL",
+      "n_train": 66,
+      "n_test": 0,
+      "winner": "ElasticNet",
+      "alpha": 0.037422917009741326,
+      "active_features": 12,
+      "total_features": 19,
+      "competition": {
+        "Ridge": -0.0953,
+        "Lasso": 0.0291,
+        "ElasticNet": 0.1289,
+        "Huber": -0.3873
+      },
+      "ridge_r2_train": 0.9063,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "curvature",
+          "coef": 0.1537
+        },
+        {
+          "feature": "wti_brent_spread",
+          "coef": -0.0281
+        },
+        {
+          "feature": "m1_m12_sq",
+          "coef": -0.0246
+        },
+        {
+          "feature": "fly_lag1",
+          "coef": 0.0212
+        },
+        {
+          "feature": "days_to_expiry",
+          "coef": 0.0165
+        }
+      ],
+      "resid_std": 0.0521,
+      "skipped": false
+    },
+    "brent_m1_m2__CONTANGO/HIGH/STRESSED": {
+      "spread": "brent_m1_m2",
+      "spread_label": "Brent M1-M2",
+      "regime": "CONTANGO/HIGH/STRESSED",
+      "n_train": 152,
+      "n_test": 0,
+      "winner": "Ridge",
+      "alpha": 0.5,
+      "active_features": 19,
+      "total_features": 19,
+      "competition": {
+        "Ridge": 0.3313,
+        "Lasso": -0.5379,
+        "ElasticNet": -0.4837,
+        "Huber": -0.5314,
+        "XGBoost": 0.3281,
+        "LightGBM": 0.1758,
+        "CatBoost": 0.2637
+      },
+      "ridge_r2_train": 0.9369,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "m1_m12",
+          "coef": 0.3561
+        },
+        {
+          "feature": "curvature",
+          "coef": 0.2295
+        },
+        {
+          "feature": "m3_m6_lag1",
+          "coef": -0.1564
+        },
+        {
+          "feature": "m1_m12_sq",
+          "coef": 0.0754
+        },
+        {
+          "feature": "fly_lag1",
+          "coef": 0.0383
+        }
+      ],
+      "resid_std": 0.0624,
+      "skipped": false
+    },
+    "brent_m1_m2__NEUTRAL/LOW/CALM": {
+      "spread": "brent_m1_m2",
+      "spread_label": "Brent M1-M2",
+      "regime": "NEUTRAL/LOW/CALM",
+      "n_train": 149,
+      "n_test": 0,
+      "winner": "ElasticNet",
+      "alpha": 0.00888206281563078,
+      "active_features": 17,
+      "total_features": 19,
+      "competition": {
+        "Ridge": 0.4312,
+        "Lasso": 0.4878,
+        "ElasticNet": 0.5044,
+        "Huber": 0.2911,
+        "XGBoost": 0.011,
+        "LightGBM": -0.3761,
+        "CatBoost": -0.0792
+      },
+      "ridge_r2_train": 0.8679,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "curvature",
+          "coef": 0.1991
+        },
+        {
+          "feature": "m1_m12",
+          "coef": 0.1442
+        },
+        {
+          "feature": "m3_m6_lag1",
+          "coef": -0.0744
+        },
+        {
+          "feature": "brent_close",
+          "coef": 0.0436
+        },
+        {
+          "feature": "realised_vol_20d",
+          "coef": -0.0387
+        }
+      ],
+      "resid_std": 0.0752,
+      "skipped": false
+    },
+    "brent_m1_m2__NEUTRAL/LOW/NORMAL": {
+      "spread": "brent_m1_m2",
+      "spread_label": "Brent M1-M2",
+      "regime": "NEUTRAL/LOW/NORMAL",
+      "n_train": 685,
+      "n_test": 0,
+      "winner": "ElasticNet",
+      "alpha": 0.06962482893919429,
+      "active_features": 11,
+      "total_features": 19,
+      "competition": {
+        "Ridge": 0.393,
+        "Lasso": 0.737,
+        "ElasticNet": 0.7726,
+        "Huber": 0.4647,
+        "XGBoost": 0.6729,
+        "LightGBM": 0.6599,
+        "CatBoost": 0.6786
+      },
+      "ridge_r2_train": 0.8769,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "curvature",
+          "coef": 0.2306
+        },
+        {
+          "feature": "m1_m12",
+          "coef": 0.0985
+        },
+        {
+          "feature": "fly_lag1",
+          "coef": 0.0673
+        },
+        {
+          "feature": "m1_m12_sq",
+          "coef": 0.0394
+        },
+        {
+          "feature": "sin_doy",
+          "coef": -0.0207
+        }
+      ],
+      "resid_std": 0.1199,
+      "skipped": false
+    },
+    "brent_m1_m2__NEUTRAL/LOW/STRESSED": {
+      "spread": "brent_m1_m2",
+      "spread_label": "Brent M1-M2",
+      "regime": "NEUTRAL/LOW/STRESSED",
+      "n_train": 265,
+      "n_test": 0,
+      "winner": "LightGBM",
+      "alpha": null,
+      "active_features": 19,
+      "total_features": 19,
+      "competition": {
+        "Ridge": 0.2749,
+        "Lasso": -0.4296,
+        "ElasticNet": -0.4095,
+        "Huber": -0.8286,
+        "XGBoost": 0.1858,
+        "LightGBM": 0.2894,
+        "CatBoost": 0.1094
+      },
+      "ridge_r2_train": 0.9841,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "curvature",
+          "coef": 276.0
+        },
+        {
+          "feature": "m1_m12",
+          "coef": 157.0
+        },
+        {
+          "feature": "fly_lag1",
+          "coef": 153.0
+        },
+        {
+          "feature": "days_to_expiry",
+          "coef": 105.0
+        },
+        {
+          "feature": "wti_brent_spread",
+          "coef": 91.0
+        }
+      ],
+      "resid_std": 0.0583,
+      "skipped": false
+    },
+    "brent_m1_m2__NEUTRAL/AVG/CALM": {
+      "spread": "brent_m1_m2",
+      "spread_label": "Brent M1-M2",
+      "regime": "NEUTRAL/AVG/CALM",
+      "n_train": 34,
+      "n_test": 0,
+      "winner": "Lasso",
+      "alpha": 0.0034988382348059505,
+      "active_features": 9,
+      "total_features": 19,
+      "competition": {
+        "Ridge": 0.1359,
+        "Lasso": 0.7565,
+        "ElasticNet": 0.7404,
+        "Huber": -18.4684
+      },
+      "ridge_r2_train": 0.9919,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "m1_m12",
+          "coef": 0.1742
+        },
+        {
+          "feature": "curvature",
+          "coef": 0.1306
+        },
+        {
+          "feature": "wti_brent_spread",
+          "coef": -0.0682
+        },
+        {
+          "feature": "cot_mm_pct_156w",
+          "coef": 0.034
+        },
+        {
+          "feature": "m1_m12_sq",
+          "coef": 0.0325
+        }
+      ],
+      "resid_std": 0.0309,
+      "skipped": false
+    },
+    "brent_m1_m2__NEUTRAL/AVG/NORMAL": {
+      "spread": "brent_m1_m2",
+      "spread_label": "Brent M1-M2",
+      "regime": "NEUTRAL/AVG/NORMAL",
+      "n_train": 245,
+      "n_test": 0,
+      "winner": "Lasso",
+      "alpha": 0.006879934869150112,
+      "active_features": 8,
+      "total_features": 19,
+      "competition": {
+        "Ridge": 0.4512,
+        "Lasso": 0.5678,
+        "ElasticNet": 0.5232,
+        "Huber": 0.4614,
+        "XGBoost": -0.4534,
+        "LightGBM": -0.4717,
+        "CatBoost": -0.0857
+      },
+      "ridge_r2_train": 0.9233,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "curvature",
+          "coef": 0.1888
+        },
+        {
+          "feature": "m1_m12",
+          "coef": 0.1546
+        },
+        {
+          "feature": "fly_lag1",
+          "coef": 0.0348
+        },
+        {
+          "feature": "cot_mm_pct_156w",
+          "coef": 0.0334
+        },
+        {
+          "feature": "crack_321",
+          "coef": -0.0254
+        }
+      ],
+      "resid_std": 0.0873,
+      "skipped": false
+    },
+    "brent_m1_m2__NEUTRAL/AVG/STRESSED": {
+      "spread": "brent_m1_m2",
+      "spread_label": "Brent M1-M2",
+      "regime": "NEUTRAL/AVG/STRESSED",
+      "n_train": 95,
+      "n_test": 0,
+      "winner": "CatBoost",
+      "alpha": null,
+      "active_features": 19,
+      "total_features": 19,
+      "competition": {
+        "Ridge": -5.484,
+        "Lasso": -8.1903,
+        "ElasticNet": -8.1502,
+        "Huber": -4.7484,
+        "XGBoost": -1.3816,
+        "LightGBM": -1.3607,
+        "CatBoost": -1.2288
+      },
+      "ridge_r2_train": 0.9792,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "curvature",
+          "coef": 15.9183
+        },
+        {
+          "feature": "cos_doy",
+          "coef": 15.3209
+        },
+        {
+          "feature": "crack_321",
+          "coef": 12.9846
+        },
+        {
+          "feature": "m1_m12",
+          "coef": 10.8198
+        },
+        {
+          "feature": "m1_m12_sq",
+          "coef": 10.6949
+        }
+      ],
+      "resid_std": 0.0603,
+      "skipped": false
+    },
+    "brent_m1_m2__NEUTRAL/HIGH/CALM": {
+      "spread": "brent_m1_m2",
+      "regime": "NEUTRAL/HIGH/CALM",
+      "n_train": 25,
+      "skipped": true,
+      "reason": "only 25 train rows (<30)"
+    },
+    "brent_m1_m2__NEUTRAL/HIGH/NORMAL": {
+      "spread": "brent_m1_m2",
+      "spread_label": "Brent M1-M2",
+      "regime": "NEUTRAL/HIGH/NORMAL",
+      "n_train": 50,
+      "n_test": 0,
+      "winner": "Lasso",
+      "alpha": 0.03140863427998673,
+      "active_features": 4,
+      "total_features": 19,
+      "competition": {
+        "Ridge": -28.3763,
+        "Lasso": -9.2266,
+        "ElasticNet": -9.9123,
+        "Huber": -25.2339
+      },
+      "ridge_r2_train": 0.686,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "curvature",
+          "coef": 0.0915
+        },
+        {
+          "feature": "fly_lag1",
+          "coef": 0.0203
+        },
+        {
+          "feature": "m1_m12_sq",
+          "coef": -0.0165
+        },
+        {
+          "feature": "realised_vol_20d",
+          "coef": 0.0027
+        },
+        {
+          "feature": "m1_m12",
+          "coef": 0.0
+        }
+      ],
+      "resid_std": 0.0952,
+      "skipped": false
+    },
+    "brent_m1_m2__NEUTRAL/HIGH/STRESSED": {
+      "spread": "brent_m1_m2",
+      "regime": "NEUTRAL/HIGH/STRESSED",
+      "n_train": 12,
+      "skipped": true,
+      "reason": "only 12 train rows (<30)"
+    },
+    "brent_m1_m2__BACK/LOW/CALM": {
+      "spread": "brent_m1_m2",
+      "spread_label": "Brent M1-M2",
+      "regime": "BACK/LOW/CALM",
+      "n_train": 127,
+      "n_test": 0,
+      "winner": "Ridge",
+      "alpha": 10.0,
+      "active_features": 19,
+      "total_features": 19,
+      "competition": {
+        "Ridge": 0.513,
+        "Lasso": 0.2721,
+        "ElasticNet": 0.3198,
+        "Huber": -74.6934,
+        "XGBoost": 0.3847,
+        "LightGBM": 0.1092,
+        "CatBoost": 0.1299
+      },
+      "ridge_r2_train": 0.9254,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "curvature",
+          "coef": 0.1985
+        },
+        {
+          "feature": "m1_m12",
+          "coef": 0.0779
+        },
+        {
+          "feature": "m1_m12_sq",
+          "coef": 0.0772
+        },
+        {
+          "feature": "fly_lag1",
+          "coef": 0.0692
+        },
+        {
+          "feature": "wti_brent_spread",
+          "coef": -0.0466
+        }
+      ],
+      "resid_std": 0.0999,
+      "skipped": false
+    },
+    "brent_m1_m2__BACK/LOW/NORMAL": {
+      "spread": "brent_m1_m2",
+      "spread_label": "Brent M1-M2",
+      "regime": "BACK/LOW/NORMAL",
+      "n_train": 244,
+      "n_test": 0,
+      "winner": "Ridge",
+      "alpha": 10.0,
+      "active_features": 19,
+      "total_features": 19,
+      "competition": {
+        "Ridge": 0.6342,
+        "Lasso": 0.5605,
+        "ElasticNet": 0.4349,
+        "Huber": 0.2719,
+        "XGBoost": 0.5118,
+        "LightGBM": 0.4206,
+        "CatBoost": 0.3429
+      },
+      "ridge_r2_train": 0.9649,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "curvature",
+          "coef": 0.4337
+        },
+        {
+          "feature": "m1_m12_sq",
+          "coef": 0.1769
+        },
+        {
+          "feature": "m1_m12",
+          "coef": 0.1731
+        },
+        {
+          "feature": "brent_close",
+          "coef": 0.1261
+        },
+        {
+          "feature": "crack_321",
+          "coef": -0.0777
+        }
+      ],
+      "resid_std": 0.1519,
+      "skipped": false
+    },
+    "brent_m1_m2__BACK/LOW/STRESSED": {
+      "spread": "brent_m1_m2",
+      "spread_label": "Brent M1-M2",
+      "regime": "BACK/LOW/STRESSED",
+      "n_train": 228,
+      "n_test": 40,
+      "winner": "ElasticNet",
+      "alpha": 0.004485288092159749,
+      "active_features": 17,
+      "total_features": 19,
+      "competition": {
+        "Ridge": 0.688,
+        "Lasso": 0.748,
+        "ElasticNet": 0.7475,
+        "Huber": 0.5792,
+        "XGBoost": 0.5062,
+        "LightGBM": 0.4967,
+        "CatBoost": -0.3074
+      },
+      "ridge_r2_train": 0.9551,
+      "ridge_r2_test": 0.8367,
+      "band_hit_rate": 0.575,
+      "top_drivers": [
+        {
+          "feature": "curvature",
+          "coef": 1.4123
+        },
+        {
+          "feature": "m1_m12",
+          "coef": 0.3901
+        },
+        {
+          "feature": "m3_m6_lag1",
+          "coef": -0.3867
+        },
+        {
+          "feature": "gasoline_crack",
+          "coef": 0.2854
+        },
+        {
+          "feature": "crack_321",
+          "coef": -0.2322
+        }
+      ],
+      "resid_std": 0.3642,
+      "skipped": false
+    },
+    "brent_m1_m2__BACK/AVG/CALM": {
+      "spread": "brent_m1_m2",
+      "regime": "BACK/AVG/CALM",
+      "n_train": 13,
+      "skipped": true,
+      "reason": "only 13 train rows (<30)"
+    },
+    "brent_m1_m2__BACK/AVG/NORMAL": {
+      "spread": "brent_m1_m2",
+      "spread_label": "Brent M1-M2",
+      "regime": "BACK/AVG/NORMAL",
+      "n_train": 38,
+      "n_test": 0,
+      "winner": "Lasso",
+      "alpha": 0.06080987772873677,
+      "active_features": 1,
+      "total_features": 19,
+      "competition": {
+        "Ridge": -1.0451,
+        "Lasso": -0.1019,
+        "ElasticNet": -0.2486,
+        "Huber": -7.7738
+      },
+      "ridge_r2_train": 0.8552,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "curvature",
+          "coef": 0.3123
+        },
+        {
+          "feature": "m1_m12",
+          "coef": 0.0
+        },
+        {
+          "feature": "m1_m12_sq",
+          "coef": 0.0
+        },
+        {
+          "feature": "brent_close",
+          "coef": -0.0
+        },
+        {
+          "feature": "brent_ret_5d",
+          "coef": -0.0
+        }
+      ],
+      "resid_std": 0.1515,
+      "skipped": false
+    },
+    "brent_m1_m2__BACK/AVG/STRESSED": {
+      "spread": "brent_m1_m2",
+      "regime": "BACK/AVG/STRESSED",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "brent_m1_m2__BACK/HIGH/CALM": {
+      "spread": "brent_m1_m2",
+      "regime": "BACK/HIGH/CALM",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "brent_m1_m2__BACK/HIGH/NORMAL": {
+      "spread": "brent_m1_m2",
+      "regime": "BACK/HIGH/NORMAL",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "brent_m1_m2__BACK/HIGH/STRESSED": {
+      "spread": "brent_m1_m2",
+      "regime": "BACK/HIGH/STRESSED",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "brent_m3_m6__CONTANGO/LOW/CALM": {
+      "spread": "brent_m3_m6",
+      "regime": "CONTANGO/LOW/CALM",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "brent_m3_m6__CONTANGO/LOW/NORMAL": {
+      "spread": "brent_m3_m6",
+      "regime": "CONTANGO/LOW/NORMAL",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "brent_m3_m6__CONTANGO/LOW/STRESSED": {
+      "spread": "brent_m3_m6",
+      "regime": "CONTANGO/LOW/STRESSED",
+      "n_train": 15,
+      "skipped": true,
+      "reason": "only 15 train rows (<30)"
+    },
+    "brent_m3_m6__CONTANGO/AVG/CALM": {
+      "spread": "brent_m3_m6",
+      "regime": "CONTANGO/AVG/CALM",
+      "n_train": 10,
+      "skipped": true,
+      "reason": "only 10 train rows (<30)"
+    },
+    "brent_m3_m6__CONTANGO/AVG/NORMAL": {
+      "spread": "brent_m3_m6",
+      "spread_label": "Brent M3-M6",
+      "regime": "CONTANGO/AVG/NORMAL",
+      "n_train": 73,
+      "n_test": 0,
+      "winner": "Huber",
+      "alpha": null,
+      "active_features": 19,
+      "total_features": 19,
+      "competition": {
+        "Ridge": -1.9666,
+        "Lasso": -1.113,
+        "ElasticNet": -1.3276,
+        "Huber": 0.3952
+      },
+      "ridge_r2_train": 0.9906,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "m1_m12",
+          "coef": 0.2822
+        },
+        {
+          "feature": "crack_321",
+          "coef": -0.2165
+        },
+        {
+          "feature": "gasoline_crack",
+          "coef": 0.2114
+        },
+        {
+          "feature": "real_rate",
+          "coef": 0.0972
+        },
+        {
+          "feature": "m1_m12_sq",
+          "coef": -0.0951
+        }
+      ],
+      "resid_std": 0.0389,
+      "skipped": false
+    },
+    "brent_m3_m6__CONTANGO/AVG/STRESSED": {
+      "spread": "brent_m3_m6",
+      "spread_label": "Brent M3-M6",
+      "regime": "CONTANGO/AVG/STRESSED",
+      "n_train": 122,
+      "n_test": 0,
+      "winner": "Ridge",
+      "alpha": 10.0,
+      "active_features": 19,
+      "total_features": 19,
+      "competition": {
+        "Ridge": 0.2266,
+        "Lasso": 0.0632,
+        "ElasticNet": 0.0083,
+        "Huber": -0.3054,
+        "XGBoost": 0.2224,
+        "LightGBM": -0.066,
+        "CatBoost": -0.5265
+      },
+      "ridge_r2_train": 0.9862,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "m1_m12_sq",
+          "coef": -0.3617
+        },
+        {
+          "feature": "m1_m12",
+          "coef": 0.3279
+        },
+        {
+          "feature": "curvature",
+          "coef": 0.2023
+        },
+        {
+          "feature": "fly_lag1",
+          "coef": -0.1631
+        },
+        {
+          "feature": "brent_close",
+          "coef": 0.1623
+        }
+      ],
+      "resid_std": 0.1415,
+      "skipped": false
+    },
+    "brent_m3_m6__CONTANGO/HIGH/CALM": {
+      "spread": "brent_m3_m6",
+      "regime": "CONTANGO/HIGH/CALM",
+      "n_train": 4,
+      "skipped": true,
+      "reason": "only 4 train rows (<30)"
+    },
+    "brent_m3_m6__CONTANGO/HIGH/NORMAL": {
+      "spread": "brent_m3_m6",
+      "spread_label": "Brent M3-M6",
+      "regime": "CONTANGO/HIGH/NORMAL",
+      "n_train": 66,
+      "n_test": 0,
+      "winner": "ElasticNet",
+      "alpha": 0.02070385980734956,
+      "active_features": 5,
+      "total_features": 19,
+      "competition": {
+        "Ridge": -1.1943,
+        "Lasso": -0.5571,
+        "ElasticNet": -0.4644,
+        "Huber": -0.8236
+      },
+      "ridge_r2_train": 0.9235,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "m1_m12",
+          "coef": 0.1694
+        },
+        {
+          "feature": "cos_doy",
+          "coef": -0.0556
+        },
+        {
+          "feature": "brent_close",
+          "coef": -0.0193
+        },
+        {
+          "feature": "curvature",
+          "coef": 0.0097
+        },
+        {
+          "feature": "m1_m2_lag1",
+          "coef": 0.0013
+        }
+      ],
+      "resid_std": 0.0542,
+      "skipped": false
+    },
+    "brent_m3_m6__CONTANGO/HIGH/STRESSED": {
+      "spread": "brent_m3_m6",
+      "spread_label": "Brent M3-M6",
+      "regime": "CONTANGO/HIGH/STRESSED",
+      "n_train": 152,
+      "n_test": 0,
+      "winner": "ElasticNet",
+      "alpha": 0.010522572152887604,
+      "active_features": 10,
+      "total_features": 19,
+      "competition": {
+        "Ridge": -1.1321,
+        "Lasso": -0.2382,
+        "ElasticNet": -0.2128,
+        "Huber": -2.9015,
+        "XGBoost": -0.6319,
+        "LightGBM": -1.3495,
+        "CatBoost": -2.4285
+      },
+      "ridge_r2_train": 0.9728,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "m1_m12",
+          "coef": 0.3713
+        },
+        {
+          "feature": "real_rate",
+          "coef": -0.0388
+        },
+        {
+          "feature": "curvature",
+          "coef": 0.0271
+        },
+        {
+          "feature": "gasoline_crack",
+          "coef": 0.0234
+        },
+        {
+          "feature": "sin_doy",
+          "coef": 0.0151
+        }
+      ],
+      "resid_std": 0.0698,
+      "skipped": false
+    },
+    "brent_m3_m6__NEUTRAL/LOW/CALM": {
+      "spread": "brent_m3_m6",
+      "spread_label": "Brent M3-M6",
+      "regime": "NEUTRAL/LOW/CALM",
+      "n_train": 149,
+      "n_test": 0,
+      "winner": "XGBoost",
+      "alpha": null,
+      "active_features": 19,
+      "total_features": 19,
+      "competition": {
+        "Ridge": -2.1951,
+        "Lasso": -0.601,
+        "ElasticNet": -1.2639,
+        "Huber": -1.1595,
+        "XGBoost": -0.2088,
+        "LightGBM": -0.5508,
+        "CatBoost": -0.3345
+      },
+      "ridge_r2_train": 0.9953,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "m1_m12_sq",
+          "coef": 0.4662
+        },
+        {
+          "feature": "m1_m12",
+          "coef": 0.3109
+        },
+        {
+          "feature": "crack_321",
+          "coef": 0.0418
+        },
+        {
+          "feature": "wti_brent_spread",
+          "coef": 0.032
+        },
+        {
+          "feature": "brent_close",
+          "coef": 0.0311
+        }
+      ],
+      "resid_std": 0.0266,
+      "skipped": false
+    },
+    "brent_m3_m6__NEUTRAL/LOW/NORMAL": {
+      "spread": "brent_m3_m6",
+      "spread_label": "Brent M3-M6",
+      "regime": "NEUTRAL/LOW/NORMAL",
+      "n_train": 685,
+      "n_test": 0,
+      "winner": "Lasso",
+      "alpha": 0.011490835905830095,
+      "active_features": 8,
+      "total_features": 19,
+      "competition": {
+        "Ridge": 0.8175,
+        "Lasso": 0.8878,
+        "ElasticNet": 0.8728,
+        "Huber": 0.7341,
+        "XGBoost": 0.8357,
+        "LightGBM": 0.7876,
+        "CatBoost": 0.7559
+      },
+      "ridge_r2_train": 0.9616,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "m1_m12",
+          "coef": 0.4309
+        },
+        {
+          "feature": "curvature",
+          "coef": 0.0431
+        },
+        {
+          "feature": "sin_doy",
+          "coef": 0.0363
+        },
+        {
+          "feature": "fly_lag1",
+          "coef": -0.0281
+        },
+        {
+          "feature": "wti_brent_spread",
+          "coef": 0.0264
+        }
+      ],
+      "resid_std": 0.0946,
+      "skipped": false
+    },
+    "brent_m3_m6__NEUTRAL/LOW/STRESSED": {
+      "spread": "brent_m3_m6",
+      "spread_label": "Brent M3-M6",
+      "regime": "NEUTRAL/LOW/STRESSED",
+      "n_train": 265,
+      "n_test": 0,
+      "winner": "XGBoost",
+      "alpha": null,
+      "active_features": 19,
+      "total_features": 19,
+      "competition": {
+        "Ridge": -0.3917,
+        "Lasso": -0.2318,
+        "ElasticNet": 0.1212,
+        "Huber": -1.4452,
+        "XGBoost": 0.6859,
+        "LightGBM": 0.6666,
+        "CatBoost": 0.3763
+      },
+      "ridge_r2_train": 0.9941,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "m1_m12_sq",
+          "coef": 0.4689
+        },
+        {
+          "feature": "m1_m12",
+          "coef": 0.3533
+        },
+        {
+          "feature": "gasoline_crack",
+          "coef": 0.0331
+        },
+        {
+          "feature": "crack_321",
+          "coef": 0.0257
+        },
+        {
+          "feature": "sin_doy",
+          "coef": 0.0164
+        }
+      ],
+      "resid_std": 0.0369,
+      "skipped": false
+    },
+    "brent_m3_m6__NEUTRAL/AVG/CALM": {
+      "spread": "brent_m3_m6",
+      "spread_label": "Brent M3-M6",
+      "regime": "NEUTRAL/AVG/CALM",
+      "n_train": 34,
+      "n_test": 0,
+      "winner": "Lasso",
+      "alpha": 0.0007261404320359866,
+      "active_features": 14,
+      "total_features": 19,
+      "competition": {
+        "Ridge": -1.6184,
+        "Lasso": -0.2042,
+        "ElasticNet": -0.4971,
+        "Huber": -2.3466
+      },
+      "ridge_r2_train": 0.9993,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "m1_m12",
+          "coef": 0.576
+        },
+        {
+          "feature": "ovx_vix_ratio",
+          "coef": -0.0438
+        },
+        {
+          "feature": "wti_brent_spread",
+          "coef": 0.0408
+        },
+        {
+          "feature": "cot_mm_pct_156w",
+          "coef": -0.039
+        },
+        {
+          "feature": "m1_m2_lag1",
+          "coef": 0.0255
+        }
+      ],
+      "resid_std": 0.0164,
+      "skipped": false
+    },
+    "brent_m3_m6__NEUTRAL/AVG/NORMAL": {
+      "spread": "brent_m3_m6",
+      "spread_label": "Brent M3-M6",
+      "regime": "NEUTRAL/AVG/NORMAL",
+      "n_train": 245,
+      "n_test": 0,
+      "winner": "Ridge",
+      "alpha": 0.1,
+      "active_features": 19,
+      "total_features": 19,
+      "competition": {
+        "Ridge": 0.663,
+        "Lasso": 0.6383,
+        "ElasticNet": 0.6407,
+        "Huber": 0.6232,
+        "XGBoost": -1.0915,
+        "LightGBM": -1.269,
+        "CatBoost": -2.1807
+      },
+      "ridge_r2_train": 0.989,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "m1_m12",
+          "coef": 0.526
+        },
+        {
+          "feature": "crack_321",
+          "coef": 0.349
+        },
+        {
+          "feature": "gasoline_crack",
+          "coef": -0.3309
+        },
+        {
+          "feature": "m1_m2_lag1",
+          "coef": 0.0717
+        },
+        {
+          "feature": "fly_lag1",
+          "coef": -0.0703
+        }
+      ],
+      "resid_std": 0.0605,
+      "skipped": false
+    },
+    "brent_m3_m6__NEUTRAL/AVG/STRESSED": {
+      "spread": "brent_m3_m6",
+      "spread_label": "Brent M3-M6",
+      "regime": "NEUTRAL/AVG/STRESSED",
+      "n_train": 95,
+      "n_test": 0,
+      "winner": "ElasticNet",
+      "alpha": 0.0008009267025355765,
+      "active_features": 15,
+      "total_features": 19,
+      "competition": {
+        "Ridge": -1.0136,
+        "Lasso": -1.1948,
+        "ElasticNet": -0.9944,
+        "Huber": -8.1009,
+        "XGBoost": -3.234,
+        "LightGBM": -4.3144,
+        "CatBoost": -4.9602
+      },
+      "ridge_r2_train": 0.9965,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "m1_m12",
+          "coef": 0.6345
+        },
+        {
+          "feature": "sin_doy",
+          "coef": 0.0992
+        },
+        {
+          "feature": "wti_brent_spread",
+          "coef": 0.0871
+        },
+        {
+          "feature": "m1_m2_lag1",
+          "coef": 0.0513
+        },
+        {
+          "feature": "fly_lag1",
+          "coef": -0.048
+        }
+      ],
+      "resid_std": 0.0432,
+      "skipped": false
+    },
+    "brent_m3_m6__NEUTRAL/HIGH/CALM": {
+      "spread": "brent_m3_m6",
+      "regime": "NEUTRAL/HIGH/CALM",
+      "n_train": 25,
+      "skipped": true,
+      "reason": "only 25 train rows (<30)"
+    },
+    "brent_m3_m6__NEUTRAL/HIGH/NORMAL": {
+      "spread": "brent_m3_m6",
+      "spread_label": "Brent M3-M6",
+      "regime": "NEUTRAL/HIGH/NORMAL",
+      "n_train": 50,
+      "n_test": 0,
+      "winner": "Lasso",
+      "alpha": 0.002648877840903722,
+      "active_features": 13,
+      "total_features": 19,
+      "competition": {
+        "Ridge": -33.0084,
+        "Lasso": -23.0528,
+        "ElasticNet": -23.6933,
+        "Huber": -23.2237
+      },
+      "ridge_r2_train": 0.9488,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "m1_m12",
+          "coef": 0.1751
+        },
+        {
+          "feature": "cos_doy",
+          "coef": -0.061
+        },
+        {
+          "feature": "fly_lag1",
+          "coef": -0.0327
+        },
+        {
+          "feature": "inv_vs_5yr_pct",
+          "coef": 0.0282
+        },
+        {
+          "feature": "crack_321",
+          "coef": 0.0194
+        }
+      ],
+      "resid_std": 0.0505,
+      "skipped": false
+    },
+    "brent_m3_m6__NEUTRAL/HIGH/STRESSED": {
+      "spread": "brent_m3_m6",
+      "regime": "NEUTRAL/HIGH/STRESSED",
+      "n_train": 12,
+      "skipped": true,
+      "reason": "only 12 train rows (<30)"
+    },
+    "brent_m3_m6__BACK/LOW/CALM": {
+      "spread": "brent_m3_m6",
+      "spread_label": "Brent M3-M6",
+      "regime": "BACK/LOW/CALM",
+      "n_train": 127,
+      "n_test": 0,
+      "winner": "ElasticNet",
+      "alpha": 0.001278394897156473,
+      "active_features": 16,
+      "total_features": 19,
+      "competition": {
+        "Ridge": 0.6483,
+        "Lasso": 0.654,
+        "ElasticNet": 0.6527,
+        "Huber": -5.3295,
+        "XGBoost": 0.5221,
+        "LightGBM": 0.4126,
+        "CatBoost": 0.2684
+      },
+      "ridge_r2_train": 0.9824,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "m1_m12",
+          "coef": 0.4283
+        },
+        {
+          "feature": "cot_mm_pct_156w",
+          "coef": -0.0591
+        },
+        {
+          "feature": "fly_lag1",
+          "coef": -0.0529
+        },
+        {
+          "feature": "crack_321",
+          "coef": 0.0483
+        },
+        {
+          "feature": "brent_close",
+          "coef": -0.0459
+        }
+      ],
+      "resid_std": 0.0632,
+      "skipped": false
+    },
+    "brent_m3_m6__BACK/LOW/NORMAL": {
+      "spread": "brent_m3_m6",
+      "spread_label": "Brent M3-M6",
+      "regime": "BACK/LOW/NORMAL",
+      "n_train": 244,
+      "n_test": 0,
+      "winner": "LightGBM",
+      "alpha": null,
+      "active_features": 19,
+      "total_features": 19,
+      "competition": {
+        "Ridge": -0.1654,
+        "Lasso": 0.1518,
+        "ElasticNet": 0.0587,
+        "Huber": -2.0037,
+        "XGBoost": 0.1778,
+        "LightGBM": 0.1948,
+        "CatBoost": -0.4859
+      },
+      "ridge_r2_train": 0.9965,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "m1_m12",
+          "coef": 256.0
+        },
+        {
+          "feature": "realised_vol_20d",
+          "coef": 91.0
+        },
+        {
+          "feature": "curvature",
+          "coef": 76.0
+        },
+        {
+          "feature": "m1_m12_sq",
+          "coef": 74.0
+        },
+        {
+          "feature": "wti_brent_spread",
+          "coef": 58.0
+        }
+      ],
+      "resid_std": 0.068,
+      "skipped": false
+    },
+    "brent_m3_m6__BACK/LOW/STRESSED": {
+      "spread": "brent_m3_m6",
+      "spread_label": "Brent M3-M6",
+      "regime": "BACK/LOW/STRESSED",
+      "n_train": 228,
+      "n_test": 40,
+      "winner": "ElasticNet",
+      "alpha": 0.005450958155847796,
+      "active_features": 11,
+      "total_features": 19,
+      "competition": {
+        "Ridge": 0.8186,
+        "Lasso": 0.8111,
+        "ElasticNet": 0.8213,
+        "Huber": 0.8107,
+        "XGBoost": 0.6906,
+        "LightGBM": 0.3821,
+        "CatBoost": 0.6217
+      },
+      "ridge_r2_train": 0.9875,
+      "ridge_r2_test": 0.8528,
+      "band_hit_rate": 0.75,
+      "top_drivers": [
+        {
+          "feature": "m1_m12",
+          "coef": 1.9411
+        },
+        {
+          "feature": "m1_m2_lag1",
+          "coef": 0.4387
+        },
+        {
+          "feature": "fly_lag1",
+          "coef": -0.3526
+        },
+        {
+          "feature": "gasoline_crack",
+          "coef": -0.203
+        },
+        {
+          "feature": "crack_321",
+          "coef": 0.1963
+        }
+      ],
+      "resid_std": 0.2575,
+      "skipped": false
+    },
+    "brent_m3_m6__BACK/AVG/CALM": {
+      "spread": "brent_m3_m6",
+      "regime": "BACK/AVG/CALM",
+      "n_train": 13,
+      "skipped": true,
+      "reason": "only 13 train rows (<30)"
+    },
+    "brent_m3_m6__BACK/AVG/NORMAL": {
+      "spread": "brent_m3_m6",
+      "spread_label": "Brent M3-M6",
+      "regime": "BACK/AVG/NORMAL",
+      "n_train": 38,
+      "n_test": 0,
+      "winner": "Lasso",
+      "alpha": 0.0022455869142574375,
+      "active_features": 13,
+      "total_features": 19,
+      "competition": {
+        "Ridge": -2.0398,
+        "Lasso": -0.9171,
+        "ElasticNet": -1.4748,
+        "Huber": -54.5467
+      },
+      "ridge_r2_train": 0.9529,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "m1_m12_sq",
+          "coef": 0.1076
+        },
+        {
+          "feature": "fly_lag1",
+          "coef": -0.0702
+        },
+        {
+          "feature": "curvature",
+          "coef": -0.0701
+        },
+        {
+          "feature": "wti_brent_spread",
+          "coef": 0.0387
+        },
+        {
+          "feature": "inv_vs_5yr_pct",
+          "coef": -0.0365
+        }
+      ],
+      "resid_std": 0.0503,
+      "skipped": false
+    },
+    "brent_m3_m6__BACK/AVG/STRESSED": {
+      "spread": "brent_m3_m6",
+      "regime": "BACK/AVG/STRESSED",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "brent_m3_m6__BACK/HIGH/CALM": {
+      "spread": "brent_m3_m6",
+      "regime": "BACK/HIGH/CALM",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "brent_m3_m6__BACK/HIGH/NORMAL": {
+      "spread": "brent_m3_m6",
+      "regime": "BACK/HIGH/NORMAL",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "brent_m3_m6__BACK/HIGH/STRESSED": {
+      "spread": "brent_m3_m6",
+      "regime": "BACK/HIGH/STRESSED",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "brent_fly_123__CONTANGO/LOW/CALM": {
+      "spread": "brent_fly_123",
+      "regime": "CONTANGO/LOW/CALM",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "brent_fly_123__CONTANGO/LOW/NORMAL": {
+      "spread": "brent_fly_123",
+      "regime": "CONTANGO/LOW/NORMAL",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "brent_fly_123__CONTANGO/LOW/STRESSED": {
+      "spread": "brent_fly_123",
+      "regime": "CONTANGO/LOW/STRESSED",
+      "n_train": 15,
+      "skipped": true,
+      "reason": "only 15 train rows (<30)"
+    },
+    "brent_fly_123__CONTANGO/AVG/CALM": {
+      "spread": "brent_fly_123",
+      "regime": "CONTANGO/AVG/CALM",
+      "n_train": 10,
+      "skipped": true,
+      "reason": "only 10 train rows (<30)"
+    },
+    "brent_fly_123__CONTANGO/AVG/NORMAL": {
+      "spread": "brent_fly_123",
+      "spread_label": "Brent front fly (M1-2\u00d7M2+M3)",
+      "regime": "CONTANGO/AVG/NORMAL",
+      "n_train": 73,
+      "n_test": 0,
+      "winner": "Lasso",
+      "alpha": 0.015119507196283426,
+      "active_features": 5,
+      "total_features": 19,
+      "competition": {
+        "Ridge": -1.2765,
+        "Lasso": -0.8371,
+        "ElasticNet": -1.1223,
+        "Huber": -164.6078
+      },
+      "ridge_r2_train": 0.5986,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "curvature",
+          "coef": 0.0914
+        },
+        {
+          "feature": "wti_brent_spread",
+          "coef": -0.0079
+        },
+        {
+          "feature": "crack_321",
+          "coef": 0.0015
+        },
+        {
+          "feature": "inv_surprise",
+          "coef": 0.0007
+        },
+        {
+          "feature": "days_to_expiry",
+          "coef": -0.0006
+        }
+      ],
+      "resid_std": 0.0932,
+      "skipped": false
+    },
+    "brent_fly_123__CONTANGO/AVG/STRESSED": {
+      "spread": "brent_fly_123",
+      "spread_label": "Brent front fly (M1-2\u00d7M2+M3)",
+      "regime": "CONTANGO/AVG/STRESSED",
+      "n_train": 122,
+      "n_test": 0,
+      "winner": "Lasso",
+      "alpha": 0.06450469558133556,
+      "active_features": 4,
+      "total_features": 19,
+      "competition": {
+        "Ridge": -3.1631,
+        "Lasso": -1.4093,
+        "ElasticNet": -1.468,
+        "Huber": -7.0714,
+        "XGBoost": -5.8201,
+        "LightGBM": -3.6099,
+        "CatBoost": -1.7828
+      },
+      "ridge_r2_train": 0.4775,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "m1_m2_lag1",
+          "coef": 0.1594
+        },
+        {
+          "feature": "curvature",
+          "coef": 0.084
+        },
+        {
+          "feature": "inv_surprise",
+          "coef": -0.0531
+        },
+        {
+          "feature": "wti_brent_spread",
+          "coef": 0.0112
+        },
+        {
+          "feature": "m1_m12",
+          "coef": 0.0
+        }
+      ],
+      "resid_std": 0.3467,
+      "skipped": false
+    },
+    "brent_fly_123__CONTANGO/HIGH/CALM": {
+      "spread": "brent_fly_123",
+      "regime": "CONTANGO/HIGH/CALM",
+      "n_train": 4,
+      "skipped": true,
+      "reason": "only 4 train rows (<30)"
+    },
+    "brent_fly_123__CONTANGO/HIGH/NORMAL": {
+      "spread": "brent_fly_123",
+      "spread_label": "Brent front fly (M1-2\u00d7M2+M3)",
+      "regime": "CONTANGO/HIGH/NORMAL",
+      "n_train": 66,
+      "n_test": 0,
+      "winner": "ElasticNet",
+      "alpha": 0.16502796433135367,
+      "active_features": 9,
+      "total_features": 19,
+      "competition": {
+        "Ridge": -2.2281,
+        "Lasso": -1.4693,
+        "ElasticNet": -1.1707,
+        "Huber": -10.7045
+      },
+      "ridge_r2_train": 0.6534,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "wti_brent_spread",
+          "coef": -0.0388
+        },
+        {
+          "feature": "curvature",
+          "coef": 0.0325
+        },
+        {
+          "feature": "ovx_vix_ratio",
+          "coef": 0.0287
+        },
+        {
+          "feature": "m1_m2_lag1",
+          "coef": 0.0156
+        },
+        {
+          "feature": "sin_doy",
+          "coef": -0.0145
+        }
+      ],
+      "resid_std": 0.0846,
+      "skipped": false
+    },
+    "brent_fly_123__CONTANGO/HIGH/STRESSED": {
+      "spread": "brent_fly_123",
+      "spread_label": "Brent front fly (M1-2\u00d7M2+M3)",
+      "regime": "CONTANGO/HIGH/STRESSED",
+      "n_train": 152,
+      "n_test": 0,
+      "winner": "ElasticNet",
+      "alpha": 0.09400990924795022,
+      "active_features": 4,
+      "total_features": 19,
+      "competition": {
+        "Ridge": -4.7325,
+        "Lasso": -0.2812,
+        "ElasticNet": -0.2821,
+        "Huber": -8.8664,
+        "XGBoost": -3.0689,
+        "LightGBM": -2.0122,
+        "CatBoost": -1.3422
+      },
+      "ridge_r2_train": 0.4458,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "m1_m2_lag1",
+          "coef": 0.0643
+        },
+        {
+          "feature": "wti_brent_spread",
+          "coef": -0.0404
+        },
+        {
+          "feature": "curvature",
+          "coef": 0.0292
+        },
+        {
+          "feature": "real_rate",
+          "coef": 0.0014
+        },
+        {
+          "feature": "m1_m12",
+          "coef": 0.0
+        }
+      ],
+      "resid_std": 0.1474,
+      "skipped": false
+    },
+    "brent_fly_123__NEUTRAL/LOW/CALM": {
+      "spread": "brent_fly_123",
+      "spread_label": "Brent front fly (M1-2\u00d7M2+M3)",
+      "regime": "NEUTRAL/LOW/CALM",
+      "n_train": 149,
+      "n_test": 0,
+      "winner": "ElasticNet",
+      "alpha": 0.09613820524239057,
+      "active_features": 8,
+      "total_features": 19,
+      "competition": {
+        "Ridge": -0.1602,
+        "Lasso": -0.0686,
+        "ElasticNet": -0.0396,
+        "Huber": -0.7352,
+        "XGBoost": -0.41,
+        "LightGBM": -0.6286,
+        "CatBoost": -0.2418
+      },
+      "ridge_r2_train": 0.2719,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "curvature",
+          "coef": 0.0322
+        },
+        {
+          "feature": "m3_m6_lag1",
+          "coef": -0.0296
+        },
+        {
+          "feature": "realised_vol_20d",
+          "coef": -0.0222
+        },
+        {
+          "feature": "m1_m2_lag1",
+          "coef": 0.0201
+        },
+        {
+          "feature": "days_to_expiry",
+          "coef": -0.0042
+        }
+      ],
+      "resid_std": 0.118,
+      "skipped": false
+    },
+    "brent_fly_123__NEUTRAL/LOW/NORMAL": {
+      "spread": "brent_fly_123",
+      "spread_label": "Brent front fly (M1-2\u00d7M2+M3)",
+      "regime": "NEUTRAL/LOW/NORMAL",
+      "n_train": 685,
+      "n_test": 0,
+      "winner": "LightGBM",
+      "alpha": null,
+      "active_features": 19,
+      "total_features": 19,
+      "competition": {
+        "Ridge": -0.576,
+        "Lasso": -0.0904,
+        "ElasticNet": -0.0426,
+        "Huber": -2.5587,
+        "XGBoost": -0.3308,
+        "LightGBM": -0.0273,
+        "CatBoost": -0.1357
+      },
+      "ridge_r2_train": 0.8925,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "curvature",
+          "coef": 154.0
+        },
+        {
+          "feature": "m1_m2_lag1",
+          "coef": 129.0
+        },
+        {
+          "feature": "wti_brent_spread",
+          "coef": 129.0
+        },
+        {
+          "feature": "cos_doy",
+          "coef": 118.0
+        },
+        {
+          "feature": "m3_m6_lag1",
+          "coef": 116.0
+        }
+      ],
+      "resid_std": 0.0734,
+      "skipped": false
+    },
+    "brent_fly_123__NEUTRAL/LOW/STRESSED": {
+      "spread": "brent_fly_123",
+      "spread_label": "Brent front fly (M1-2\u00d7M2+M3)",
+      "regime": "NEUTRAL/LOW/STRESSED",
+      "n_train": 265,
+      "n_test": 0,
+      "winner": "XGBoost",
+      "alpha": null,
+      "active_features": 19,
+      "total_features": 19,
+      "competition": {
+        "Ridge": -4.6473,
+        "Lasso": -3.0746,
+        "ElasticNet": -3.0254,
+        "Huber": -5.6601,
+        "XGBoost": -0.0602,
+        "LightGBM": -0.3716,
+        "CatBoost": -0.2055
+      },
+      "ridge_r2_train": 0.9599,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "m1_m2_lag1",
+          "coef": 0.2734
+        },
+        {
+          "feature": "inv_vs_5yr_pct",
+          "coef": 0.149
+        },
+        {
+          "feature": "curvature",
+          "coef": 0.0845
+        },
+        {
+          "feature": "sin_doy",
+          "coef": 0.0669
+        },
+        {
+          "feature": "cos_doy",
+          "coef": 0.051
+        }
+      ],
+      "resid_std": 0.0593,
+      "skipped": false
+    },
+    "brent_fly_123__NEUTRAL/AVG/CALM": {
+      "spread": "brent_fly_123",
+      "spread_label": "Brent front fly (M1-2\u00d7M2+M3)",
+      "regime": "NEUTRAL/AVG/CALM",
+      "n_train": 34,
+      "n_test": 0,
+      "winner": "Lasso",
+      "alpha": 0.0028869138353906656,
+      "active_features": 6,
+      "total_features": 19,
+      "competition": {
+        "Ridge": -1.2659,
+        "Lasso": -0.3305,
+        "ElasticNet": -0.36,
+        "Huber": -193.5075
+      },
+      "ridge_r2_train": 0.8751,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "wti_brent_spread",
+          "coef": -0.0635
+        },
+        {
+          "feature": "curvature",
+          "coef": 0.0488
+        },
+        {
+          "feature": "gasoline_crack",
+          "coef": -0.0434
+        },
+        {
+          "feature": "cot_mm_pct_156w",
+          "coef": 0.0409
+        },
+        {
+          "feature": "real_rate",
+          "coef": 0.0139
+        }
+      ],
+      "resid_std": 0.0398,
+      "skipped": false
+    },
+    "brent_fly_123__NEUTRAL/AVG/NORMAL": {
+      "spread": "brent_fly_123",
+      "spread_label": "Brent front fly (M1-2\u00d7M2+M3)",
+      "regime": "NEUTRAL/AVG/NORMAL",
+      "n_train": 245,
+      "n_test": 0,
+      "winner": "LightGBM",
+      "alpha": null,
+      "active_features": 19,
+      "total_features": 19,
+      "competition": {
+        "Ridge": -0.5321,
+        "Lasso": -0.5394,
+        "ElasticNet": -0.5078,
+        "Huber": -1.9161,
+        "XGBoost": -0.9518,
+        "LightGBM": -0.1246,
+        "CatBoost": -0.4822
+      },
+      "ridge_r2_train": 0.9243,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "curvature",
+          "coef": 159.0
+        },
+        {
+          "feature": "days_to_expiry",
+          "coef": 88.0
+        },
+        {
+          "feature": "cot_mm_pct_156w",
+          "coef": 86.0
+        },
+        {
+          "feature": "sin_doy",
+          "coef": 83.0
+        },
+        {
+          "feature": "real_rate",
+          "coef": 83.0
+        }
+      ],
+      "resid_std": 0.0462,
+      "skipped": false
+    },
+    "brent_fly_123__NEUTRAL/AVG/STRESSED": {
+      "spread": "brent_fly_123",
+      "spread_label": "Brent front fly (M1-2\u00d7M2+M3)",
+      "regime": "NEUTRAL/AVG/STRESSED",
+      "n_train": 95,
+      "n_test": 0,
+      "winner": "CatBoost",
+      "alpha": null,
+      "active_features": 19,
+      "total_features": 19,
+      "competition": {
+        "Ridge": -89.3638,
+        "Lasso": -80.1178,
+        "ElasticNet": -80.9598,
+        "Huber": -52.3359,
+        "XGBoost": -2.6236,
+        "LightGBM": -2.1564,
+        "CatBoost": -1.5292
+      },
+      "ridge_r2_train": 0.9381,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "cos_doy",
+          "coef": 14.9651
+        },
+        {
+          "feature": "curvature",
+          "coef": 12.3233
+        },
+        {
+          "feature": "m1_m2_lag1",
+          "coef": 10.0487
+        },
+        {
+          "feature": "wti_brent_spread",
+          "coef": 8.7991
+        },
+        {
+          "feature": "crack_321",
+          "coef": 7.504
+        }
+      ],
+      "resid_std": 0.0603,
+      "skipped": false
+    },
+    "brent_fly_123__NEUTRAL/HIGH/CALM": {
+      "spread": "brent_fly_123",
+      "regime": "NEUTRAL/HIGH/CALM",
+      "n_train": 25,
+      "skipped": true,
+      "reason": "only 25 train rows (<30)"
+    },
+    "brent_fly_123__NEUTRAL/HIGH/NORMAL": {
+      "spread": "brent_fly_123",
+      "spread_label": "Brent front fly (M1-2\u00d7M2+M3)",
+      "regime": "NEUTRAL/HIGH/NORMAL",
+      "n_train": 50,
+      "n_test": 0,
+      "winner": "Lasso",
+      "alpha": 0.0482279685978723,
+      "active_features": 1,
+      "total_features": 19,
+      "competition": {
+        "Ridge": -92.3642,
+        "Lasso": -46.9415,
+        "ElasticNet": -46.9519,
+        "Huber": -155.8612
+      },
+      "ridge_r2_train": 0.0509,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "realised_vol_20d",
+          "coef": 0.0072
+        },
+        {
+          "feature": "m1_m12",
+          "coef": 0.0
+        },
+        {
+          "feature": "m1_m12_sq",
+          "coef": -0.0
+        },
+        {
+          "feature": "curvature",
+          "coef": 0.0
+        },
+        {
+          "feature": "brent_close",
+          "coef": -0.0
+        }
+      ],
+      "resid_std": 0.1182,
+      "skipped": false
+    },
+    "brent_fly_123__NEUTRAL/HIGH/STRESSED": {
+      "spread": "brent_fly_123",
+      "regime": "NEUTRAL/HIGH/STRESSED",
+      "n_train": 12,
+      "skipped": true,
+      "reason": "only 12 train rows (<30)"
+    },
+    "brent_fly_123__BACK/LOW/CALM": {
+      "spread": "brent_fly_123",
+      "spread_label": "Brent front fly (M1-2\u00d7M2+M3)",
+      "regime": "BACK/LOW/CALM",
+      "n_train": 127,
+      "n_test": 0,
+      "winner": "CatBoost",
+      "alpha": null,
+      "active_features": 19,
+      "total_features": 19,
+      "competition": {
+        "Ridge": -1.4843,
+        "Lasso": -2.0696,
+        "ElasticNet": -3.0162,
+        "Huber": -178.8238,
+        "XGBoost": -2.1946,
+        "LightGBM": -0.9675,
+        "CatBoost": -0.8895
+      },
+      "ridge_r2_train": 0.9087,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "wti_brent_spread",
+          "coef": 16.6897
+        },
+        {
+          "feature": "m1_m2_lag1",
+          "coef": 16.2956
+        },
+        {
+          "feature": "curvature",
+          "coef": 9.6036
+        },
+        {
+          "feature": "ovx_vix_ratio",
+          "coef": 6.5369
+        },
+        {
+          "feature": "real_rate",
+          "coef": 6.4474
+        }
+      ],
+      "resid_std": 0.0727,
+      "skipped": false
+    },
+    "brent_fly_123__BACK/LOW/NORMAL": {
+      "spread": "brent_fly_123",
+      "spread_label": "Brent front fly (M1-2\u00d7M2+M3)",
+      "regime": "BACK/LOW/NORMAL",
+      "n_train": 244,
+      "n_test": 0,
+      "winner": "ElasticNet",
+      "alpha": 0.033098754555911554,
+      "active_features": 7,
+      "total_features": 19,
+      "competition": {
+        "Ridge": -0.0892,
+        "Lasso": 0.0957,
+        "ElasticNet": 0.2515,
+        "Huber": -1.932,
+        "XGBoost": -0.2868,
+        "LightGBM": 0.1169,
+        "CatBoost": 0.18
+      },
+      "ridge_r2_train": 0.5016,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "curvature",
+          "coef": 0.1982
+        },
+        {
+          "feature": "wti_brent_spread",
+          "coef": -0.032
+        },
+        {
+          "feature": "ovx_vix_ratio",
+          "coef": 0.0314
+        },
+        {
+          "feature": "days_to_expiry",
+          "coef": 0.0103
+        },
+        {
+          "feature": "crack_321",
+          "coef": -0.0094
+        }
+      ],
+      "resid_std": 0.2284,
+      "skipped": false
+    },
+    "brent_fly_123__BACK/LOW/STRESSED": {
+      "spread": "brent_fly_123",
+      "spread_label": "Brent front fly (M1-2\u00d7M2+M3)",
+      "regime": "BACK/LOW/STRESSED",
+      "n_train": 228,
+      "n_test": 40,
+      "winner": "XGBoost",
+      "alpha": null,
+      "active_features": 19,
+      "total_features": 19,
+      "competition": {
+        "Ridge": -1.1904,
+        "Lasso": -1.1644,
+        "ElasticNet": -1.1655,
+        "Huber": -3.5803,
+        "XGBoost": -0.3255,
+        "LightGBM": -0.9862,
+        "CatBoost": -0.3602
+      },
+      "ridge_r2_train": 0.9613,
+      "ridge_r2_test": -0.0696,
+      "band_hit_rate": 0.75,
+      "top_drivers": [
+        {
+          "feature": "cos_doy",
+          "coef": 0.1927
+        },
+        {
+          "feature": "m1_m2_lag1",
+          "coef": 0.1416
+        },
+        {
+          "feature": "m1_m12_sq",
+          "coef": 0.0929
+        },
+        {
+          "feature": "curvature",
+          "coef": 0.0921
+        },
+        {
+          "feature": "wti_brent_spread",
+          "coef": 0.074
+        }
+      ],
+      "resid_std": 0.1645,
+      "skipped": false
+    },
+    "brent_fly_123__BACK/AVG/CALM": {
+      "spread": "brent_fly_123",
+      "regime": "BACK/AVG/CALM",
+      "n_train": 13,
+      "skipped": true,
+      "reason": "only 13 train rows (<30)"
+    },
+    "brent_fly_123__BACK/AVG/NORMAL": {
+      "spread": "brent_fly_123",
+      "spread_label": "Brent front fly (M1-2\u00d7M2+M3)",
+      "regime": "BACK/AVG/NORMAL",
+      "n_train": 38,
+      "n_test": 0,
+      "winner": "Lasso",
+      "alpha": 0.06800702042576658,
+      "active_features": 2,
+      "total_features": 19,
+      "competition": {
+        "Ridge": -3.8698,
+        "Lasso": -3.3001,
+        "ElasticNet": -3.6074,
+        "Huber": -19.7875
+      },
+      "ridge_r2_train": 0.7147,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "curvature",
+          "coef": 0.2476
+        },
+        {
+          "feature": "brent_close",
+          "coef": -0.0006
+        },
+        {
+          "feature": "m1_m12",
+          "coef": 0.0
+        },
+        {
+          "feature": "m1_m12_sq",
+          "coef": 0.0
+        },
+        {
+          "feature": "brent_ret_5d",
+          "coef": -0.0
+        }
+      ],
+      "resid_std": 0.1949,
+      "skipped": false
+    },
+    "brent_fly_123__BACK/AVG/STRESSED": {
+      "spread": "brent_fly_123",
+      "regime": "BACK/AVG/STRESSED",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "brent_fly_123__BACK/HIGH/CALM": {
+      "spread": "brent_fly_123",
+      "regime": "BACK/HIGH/CALM",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "brent_fly_123__BACK/HIGH/NORMAL": {
+      "spread": "brent_fly_123",
+      "regime": "BACK/HIGH/NORMAL",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "brent_fly_123__BACK/HIGH/STRESSED": {
+      "spread": "brent_fly_123",
+      "regime": "BACK/HIGH/STRESSED",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_m1_m2__CONTANGO/LOW/CALM": {
+      "spread": "wti_m1_m2",
+      "regime": "CONTANGO/LOW/CALM",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_m1_m2__CONTANGO/LOW/NORMAL": {
+      "spread": "wti_m1_m2",
+      "regime": "CONTANGO/LOW/NORMAL",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_m1_m2__CONTANGO/LOW/STRESSED": {
+      "spread": "wti_m1_m2",
+      "regime": "CONTANGO/LOW/STRESSED",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_m1_m2__CONTANGO/AVG/CALM": {
+      "spread": "wti_m1_m2",
+      "regime": "CONTANGO/AVG/CALM",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_m1_m2__CONTANGO/AVG/NORMAL": {
+      "spread": "wti_m1_m2",
+      "regime": "CONTANGO/AVG/NORMAL",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_m1_m2__CONTANGO/AVG/STRESSED": {
+      "spread": "wti_m1_m2",
+      "regime": "CONTANGO/AVG/STRESSED",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_m1_m2__CONTANGO/HIGH/CALM": {
+      "spread": "wti_m1_m2",
+      "regime": "CONTANGO/HIGH/CALM",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_m1_m2__CONTANGO/HIGH/NORMAL": {
+      "spread": "wti_m1_m2",
+      "regime": "CONTANGO/HIGH/NORMAL",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_m1_m2__CONTANGO/HIGH/STRESSED": {
+      "spread": "wti_m1_m2",
+      "regime": "CONTANGO/HIGH/STRESSED",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_m1_m2__NEUTRAL/LOW/CALM": {
+      "spread": "wti_m1_m2",
+      "spread_label": "WTI M1-M2",
+      "regime": "NEUTRAL/LOW/CALM",
+      "n_train": 57,
+      "n_test": 0,
+      "winner": "ElasticNet",
+      "alpha": 0.00216569912172132,
+      "active_features": 14,
+      "total_features": 24,
+      "competition": {
+        "Ridge": -0.3936,
+        "Lasso": -0.2552,
+        "ElasticNet": -0.2519,
+        "Huber": -0.3277
+      },
+      "ridge_r2_train": 0.979,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "wti_m1_m12",
+          "coef": 0.2473
+        },
+        {
+          "feature": "sin_doy",
+          "coef": -0.0595
+        },
+        {
+          "feature": "curvature",
+          "coef": 0.0506
+        },
+        {
+          "feature": "real_rate",
+          "coef": 0.0417
+        },
+        {
+          "feature": "m1_m12",
+          "coef": -0.0363
+        }
+      ],
+      "resid_std": 0.0405,
+      "skipped": false
+    },
+    "wti_m1_m2__NEUTRAL/LOW/NORMAL": {
+      "spread": "wti_m1_m2",
+      "spread_label": "WTI M1-M2",
+      "regime": "NEUTRAL/LOW/NORMAL",
+      "n_train": 449,
+      "n_test": 0,
+      "winner": "ElasticNet",
+      "alpha": 0.00032967026370259205,
+      "active_features": 24,
+      "total_features": 24,
+      "competition": {
+        "Ridge": 0.8312,
+        "Lasso": 0.8541,
+        "ElasticNet": 0.854,
+        "Huber": 0.849,
+        "XGBoost": 0.4257,
+        "LightGBM": 0.3821,
+        "CatBoost": 0.3428
+      },
+      "ridge_r2_train": 0.9794,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "wti_m1_m12",
+          "coef": 0.3191
+        },
+        {
+          "feature": "wti_fly_lag1",
+          "coef": 0.0898
+        },
+        {
+          "feature": "m1_m2_lag1",
+          "coef": 0.057
+        },
+        {
+          "feature": "m3_m6_lag1",
+          "coef": -0.0556
+        },
+        {
+          "feature": "m1_m12",
+          "coef": -0.0458
+        }
+      ],
+      "resid_std": 0.0522,
+      "skipped": false
+    },
+    "wti_m1_m2__NEUTRAL/LOW/STRESSED": {
+      "spread": "wti_m1_m2",
+      "spread_label": "WTI M1-M2",
+      "regime": "NEUTRAL/LOW/STRESSED",
+      "n_train": 200,
+      "n_test": 0,
+      "winner": "ElasticNet",
+      "alpha": 0.000729457630390322,
+      "active_features": 21,
+      "total_features": 24,
+      "competition": {
+        "Ridge": 0.6429,
+        "Lasso": 0.7377,
+        "ElasticNet": 0.7378,
+        "Huber": -0.2741,
+        "XGBoost": 0.2169,
+        "LightGBM": 0.3838,
+        "CatBoost": -0.0601
+      },
+      "ridge_r2_train": 0.9816,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "wti_m1_m12",
+          "coef": 0.3615
+        },
+        {
+          "feature": "curvature",
+          "coef": 0.122
+        },
+        {
+          "feature": "crack_321",
+          "coef": 0.0907
+        },
+        {
+          "feature": "gasoline_crack",
+          "coef": -0.0808
+        },
+        {
+          "feature": "m1_m12",
+          "coef": -0.0731
+        }
+      ],
+      "resid_std": 0.0627,
+      "skipped": false
+    },
+    "wti_m1_m2__NEUTRAL/AVG/CALM": {
+      "spread": "wti_m1_m2",
+      "regime": "NEUTRAL/AVG/CALM",
+      "n_train": 8,
+      "skipped": true,
+      "reason": "only 8 train rows (<30)"
+    },
+    "wti_m1_m2__NEUTRAL/AVG/NORMAL": {
+      "spread": "wti_m1_m2",
+      "spread_label": "WTI M1-M2",
+      "regime": "NEUTRAL/AVG/NORMAL",
+      "n_train": 50,
+      "n_test": 0,
+      "winner": "Lasso",
+      "alpha": 0.015468054437392501,
+      "active_features": 5,
+      "total_features": 24,
+      "competition": {
+        "Ridge": -6.4079,
+        "Lasso": -5.4329,
+        "ElasticNet": -5.5216,
+        "Huber": -58.9571
+      },
+      "ridge_r2_train": 0.7536,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "wti_m1_m12",
+          "coef": 0.0658
+        },
+        {
+          "feature": "days_to_expiry",
+          "coef": 0.0067
+        },
+        {
+          "feature": "wti_brent_spread",
+          "coef": 0.0045
+        },
+        {
+          "feature": "realised_vol_20d",
+          "coef": 0.0043
+        },
+        {
+          "feature": "cot_mm_pct_156w",
+          "coef": -0.0034
+        }
+      ],
+      "resid_std": 0.0486,
+      "skipped": false
+    },
+    "wti_m1_m2__NEUTRAL/AVG/STRESSED": {
+      "spread": "wti_m1_m2",
+      "regime": "NEUTRAL/AVG/STRESSED",
+      "n_train": 24,
+      "skipped": true,
+      "reason": "only 24 train rows (<30)"
+    },
+    "wti_m1_m2__NEUTRAL/HIGH/CALM": {
+      "spread": "wti_m1_m2",
+      "regime": "NEUTRAL/HIGH/CALM",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_m1_m2__NEUTRAL/HIGH/NORMAL": {
+      "spread": "wti_m1_m2",
+      "regime": "NEUTRAL/HIGH/NORMAL",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_m1_m2__NEUTRAL/HIGH/STRESSED": {
+      "spread": "wti_m1_m2",
+      "regime": "NEUTRAL/HIGH/STRESSED",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_m1_m2__BACK/LOW/CALM": {
+      "spread": "wti_m1_m2",
+      "spread_label": "WTI M1-M2",
+      "regime": "BACK/LOW/CALM",
+      "n_train": 122,
+      "n_test": 0,
+      "winner": "XGBoost",
+      "alpha": null,
+      "active_features": 24,
+      "total_features": 24,
+      "competition": {
+        "Ridge": -9.5557,
+        "Lasso": -5.1612,
+        "ElasticNet": -5.0638,
+        "Huber": -4.8261,
+        "XGBoost": 0.3179,
+        "LightGBM": 0.0103,
+        "CatBoost": -0.0197
+      },
+      "ridge_r2_train": 0.9918,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "wti_m1_m12",
+          "coef": 0.2326
+        },
+        {
+          "feature": "curvature",
+          "coef": 0.121
+        },
+        {
+          "feature": "wti_m3_m6_lag1",
+          "coef": 0.1139
+        },
+        {
+          "feature": "fly_lag1",
+          "coef": 0.0841
+        },
+        {
+          "feature": "inv_surprise",
+          "coef": 0.0633
+        }
+      ],
+      "resid_std": 0.0338,
+      "skipped": false
+    },
+    "wti_m1_m2__BACK/LOW/NORMAL": {
+      "spread": "wti_m1_m2",
+      "spread_label": "WTI M1-M2",
+      "regime": "BACK/LOW/NORMAL",
+      "n_train": 210,
+      "n_test": 0,
+      "winner": "ElasticNet",
+      "alpha": 0.0024201506641304024,
+      "active_features": 15,
+      "total_features": 24,
+      "competition": {
+        "Ridge": 0.8082,
+        "Lasso": 0.8591,
+        "ElasticNet": 0.868,
+        "Huber": 0.2799,
+        "XGBoost": 0.1105,
+        "LightGBM": 0.0964,
+        "CatBoost": -0.4701
+      },
+      "ridge_r2_train": 0.9818,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "wti_m1_m12",
+          "coef": 0.7924
+        },
+        {
+          "feature": "wti_fly_lag1",
+          "coef": 0.1003
+        },
+        {
+          "feature": "wti_m3_m6_lag1",
+          "coef": -0.052
+        },
+        {
+          "feature": "m3_m6_lag1",
+          "coef": -0.0314
+        },
+        {
+          "feature": "m1_m12",
+          "coef": -0.0312
+        }
+      ],
+      "resid_std": 0.093,
+      "skipped": false
+    },
+    "wti_m1_m2__BACK/LOW/STRESSED": {
+      "spread": "wti_m1_m2",
+      "spread_label": "WTI M1-M2",
+      "regime": "BACK/LOW/STRESSED",
+      "n_train": 223,
+      "n_test": 38,
+      "winner": "Ridge",
+      "alpha": 1.0,
+      "active_features": 24,
+      "total_features": 24,
+      "competition": {
+        "Ridge": 0.6145,
+        "Lasso": -0.0027,
+        "ElasticNet": 0.0868,
+        "Huber": 0.3775,
+        "XGBoost": -0.7043,
+        "LightGBM": -0.7566,
+        "CatBoost": -0.9144
+      },
+      "ridge_r2_train": 0.971,
+      "ridge_r2_test": 0.861,
+      "band_hit_rate": 0.1842,
+      "top_drivers": [
+        {
+          "feature": "wti_m1_m12",
+          "coef": 0.8511
+        },
+        {
+          "feature": "wti_fly_lag1",
+          "coef": 0.4571
+        },
+        {
+          "feature": "m1_m2_lag1",
+          "coef": 0.424
+        },
+        {
+          "feature": "m1_m12",
+          "coef": -0.3477
+        },
+        {
+          "feature": "wti_m3_m6_lag1",
+          "coef": 0.2461
+        }
+      ],
+      "resid_std": 0.1958,
+      "skipped": false
+    },
+    "wti_m1_m2__BACK/AVG/CALM": {
+      "spread": "wti_m1_m2",
+      "regime": "BACK/AVG/CALM",
+      "n_train": 9,
+      "skipped": true,
+      "reason": "only 9 train rows (<30)"
+    },
+    "wti_m1_m2__BACK/AVG/NORMAL": {
+      "spread": "wti_m1_m2",
+      "regime": "BACK/AVG/NORMAL",
+      "n_train": 12,
+      "skipped": true,
+      "reason": "only 12 train rows (<30)"
+    },
+    "wti_m1_m2__BACK/AVG/STRESSED": {
+      "spread": "wti_m1_m2",
+      "regime": "BACK/AVG/STRESSED",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_m1_m2__BACK/HIGH/CALM": {
+      "spread": "wti_m1_m2",
+      "regime": "BACK/HIGH/CALM",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_m1_m2__BACK/HIGH/NORMAL": {
+      "spread": "wti_m1_m2",
+      "regime": "BACK/HIGH/NORMAL",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_m1_m2__BACK/HIGH/STRESSED": {
+      "spread": "wti_m1_m2",
+      "regime": "BACK/HIGH/STRESSED",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_m3_m6__CONTANGO/LOW/CALM": {
+      "spread": "wti_m3_m6",
+      "regime": "CONTANGO/LOW/CALM",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_m3_m6__CONTANGO/LOW/NORMAL": {
+      "spread": "wti_m3_m6",
+      "regime": "CONTANGO/LOW/NORMAL",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_m3_m6__CONTANGO/LOW/STRESSED": {
+      "spread": "wti_m3_m6",
+      "regime": "CONTANGO/LOW/STRESSED",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_m3_m6__CONTANGO/AVG/CALM": {
+      "spread": "wti_m3_m6",
+      "regime": "CONTANGO/AVG/CALM",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_m3_m6__CONTANGO/AVG/NORMAL": {
+      "spread": "wti_m3_m6",
+      "regime": "CONTANGO/AVG/NORMAL",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_m3_m6__CONTANGO/AVG/STRESSED": {
+      "spread": "wti_m3_m6",
+      "regime": "CONTANGO/AVG/STRESSED",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_m3_m6__CONTANGO/HIGH/CALM": {
+      "spread": "wti_m3_m6",
+      "regime": "CONTANGO/HIGH/CALM",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_m3_m6__CONTANGO/HIGH/NORMAL": {
+      "spread": "wti_m3_m6",
+      "regime": "CONTANGO/HIGH/NORMAL",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_m3_m6__CONTANGO/HIGH/STRESSED": {
+      "spread": "wti_m3_m6",
+      "regime": "CONTANGO/HIGH/STRESSED",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_m3_m6__NEUTRAL/LOW/CALM": {
+      "spread": "wti_m3_m6",
+      "spread_label": "WTI M3-M6",
+      "regime": "NEUTRAL/LOW/CALM",
+      "n_train": 57,
+      "n_test": 0,
+      "winner": "Lasso",
+      "alpha": 0.012565654114050532,
+      "active_features": 11,
+      "total_features": 24,
+      "competition": {
+        "Ridge": -24.4256,
+        "Lasso": -5.5459,
+        "ElasticNet": -11.8961,
+        "Huber": -18.8352
+      },
+      "ridge_r2_train": 0.9663,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "wti_m1_m12",
+          "coef": 0.4443
+        },
+        {
+          "feature": "m1_m12_sq",
+          "coef": 0.0813
+        },
+        {
+          "feature": "sin_doy",
+          "coef": 0.0793
+        },
+        {
+          "feature": "crack_321",
+          "coef": 0.0533
+        },
+        {
+          "feature": "curvature",
+          "coef": -0.0469
+        }
+      ],
+      "resid_std": 0.1102,
+      "skipped": false
+    },
+    "wti_m3_m6__NEUTRAL/LOW/NORMAL": {
+      "spread": "wti_m3_m6",
+      "spread_label": "WTI M3-M6",
+      "regime": "NEUTRAL/LOW/NORMAL",
+      "n_train": 449,
+      "n_test": 0,
+      "winner": "Ridge",
+      "alpha": 2.0,
+      "active_features": 24,
+      "total_features": 24,
+      "competition": {
+        "Ridge": 0.9375,
+        "Lasso": 0.9322,
+        "ElasticNet": 0.9315,
+        "Huber": 0.9372,
+        "XGBoost": 0.7745,
+        "LightGBM": 0.7267,
+        "CatBoost": 0.6903
+      },
+      "ridge_r2_train": 0.9888,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "wti_m1_m12",
+          "coef": 0.425
+        },
+        {
+          "feature": "m3_m6_lag1",
+          "coef": 0.1149
+        },
+        {
+          "feature": "wti_close",
+          "coef": 0.0987
+        },
+        {
+          "feature": "wti_m1_m2_lag1",
+          "coef": -0.0836
+        },
+        {
+          "feature": "m1_m12",
+          "coef": 0.0704
+        }
+      ],
+      "resid_std": 0.0585,
+      "skipped": false
+    },
+    "wti_m3_m6__NEUTRAL/LOW/STRESSED": {
+      "spread": "wti_m3_m6",
+      "spread_label": "WTI M3-M6",
+      "regime": "NEUTRAL/LOW/STRESSED",
+      "n_train": 200,
+      "n_test": 0,
+      "winner": "ElasticNet",
+      "alpha": 0.0018324311300084329,
+      "active_features": 20,
+      "total_features": 24,
+      "competition": {
+        "Ridge": 0.5702,
+        "Lasso": 0.8496,
+        "ElasticNet": 0.8504,
+        "Huber": 0.5259,
+        "XGBoost": 0.7447,
+        "LightGBM": 0.6405,
+        "CatBoost": 0.6666
+      },
+      "ridge_r2_train": 0.9789,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "wti_m1_m12",
+          "coef": 0.6004
+        },
+        {
+          "feature": "wti_m1_m2_lag1",
+          "coef": -0.1868
+        },
+        {
+          "feature": "crack_321",
+          "coef": -0.1326
+        },
+        {
+          "feature": "m1_m12",
+          "coef": 0.0954
+        },
+        {
+          "feature": "gasoline_crack",
+          "coef": 0.0823
+        }
+      ],
+      "resid_std": 0.0727,
+      "skipped": false
+    },
+    "wti_m3_m6__NEUTRAL/AVG/CALM": {
+      "spread": "wti_m3_m6",
+      "regime": "NEUTRAL/AVG/CALM",
+      "n_train": 8,
+      "skipped": true,
+      "reason": "only 8 train rows (<30)"
+    },
+    "wti_m3_m6__NEUTRAL/AVG/NORMAL": {
+      "spread": "wti_m3_m6",
+      "spread_label": "WTI M3-M6",
+      "regime": "NEUTRAL/AVG/NORMAL",
+      "n_train": 50,
+      "n_test": 0,
+      "winner": "Lasso",
+      "alpha": 0.0004018150634874418,
+      "active_features": 16,
+      "total_features": 24,
+      "competition": {
+        "Ridge": -3.6972,
+        "Lasso": 0.8369,
+        "ElasticNet": -0.1125,
+        "Huber": -6.6901
+      },
+      "ridge_r2_train": 0.9981,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "wti_m1_m12",
+          "coef": 0.3064
+        },
+        {
+          "feature": "m1_m12_sq",
+          "coef": 0.0592
+        },
+        {
+          "feature": "m3_m6_lag1",
+          "coef": 0.0415
+        },
+        {
+          "feature": "gasoline_crack",
+          "coef": 0.0379
+        },
+        {
+          "feature": "inv_vs_5yr_pct",
+          "coef": 0.037
+        }
+      ],
+      "resid_std": 0.0181,
+      "skipped": false
+    },
+    "wti_m3_m6__NEUTRAL/AVG/STRESSED": {
+      "spread": "wti_m3_m6",
+      "regime": "NEUTRAL/AVG/STRESSED",
+      "n_train": 24,
+      "skipped": true,
+      "reason": "only 24 train rows (<30)"
+    },
+    "wti_m3_m6__NEUTRAL/HIGH/CALM": {
+      "spread": "wti_m3_m6",
+      "regime": "NEUTRAL/HIGH/CALM",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_m3_m6__NEUTRAL/HIGH/NORMAL": {
+      "spread": "wti_m3_m6",
+      "regime": "NEUTRAL/HIGH/NORMAL",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_m3_m6__NEUTRAL/HIGH/STRESSED": {
+      "spread": "wti_m3_m6",
+      "regime": "NEUTRAL/HIGH/STRESSED",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_m3_m6__BACK/LOW/CALM": {
+      "spread": "wti_m3_m6",
+      "spread_label": "WTI M3-M6",
+      "regime": "BACK/LOW/CALM",
+      "n_train": 122,
+      "n_test": 0,
+      "winner": "XGBoost",
+      "alpha": null,
+      "active_features": 24,
+      "total_features": 24,
+      "competition": {
+        "Ridge": -1.3898,
+        "Lasso": -1.2957,
+        "ElasticNet": -1.2888,
+        "Huber": -5.8428,
+        "XGBoost": 0.5532,
+        "LightGBM": 0.5241,
+        "CatBoost": 0.4648
+      },
+      "ridge_r2_train": 0.9969,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "wti_m1_m12",
+          "coef": 0.378
+        },
+        {
+          "feature": "m3_m6_lag1",
+          "coef": 0.2796
+        },
+        {
+          "feature": "cot_mm_pct_156w",
+          "coef": 0.0516
+        },
+        {
+          "feature": "m1_m12",
+          "coef": 0.0489
+        },
+        {
+          "feature": "gasoline_crack",
+          "coef": 0.0306
+        }
+      ],
+      "resid_std": 0.0344,
+      "skipped": false
+    },
+    "wti_m3_m6__BACK/LOW/NORMAL": {
+      "spread": "wti_m3_m6",
+      "spread_label": "WTI M3-M6",
+      "regime": "BACK/LOW/NORMAL",
+      "n_train": 210,
+      "n_test": 0,
+      "winner": "ElasticNet",
+      "alpha": 0.0016066241684129842,
+      "active_features": 20,
+      "total_features": 24,
+      "competition": {
+        "Ridge": 0.8228,
+        "Lasso": 0.8918,
+        "ElasticNet": 0.892,
+        "Huber": 0.7717,
+        "XGBoost": 0.3161,
+        "LightGBM": 0.2979,
+        "CatBoost": -0.0463
+      },
+      "ridge_r2_train": 0.9958,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "wti_m1_m12",
+          "coef": 1.0935
+        },
+        {
+          "feature": "m3_m6_lag1",
+          "coef": 0.1498
+        },
+        {
+          "feature": "wti_close",
+          "coef": 0.1252
+        },
+        {
+          "feature": "m1_m12",
+          "coef": 0.0864
+        },
+        {
+          "feature": "wti_fly_lag1",
+          "coef": -0.0692
+        }
+      ],
+      "resid_std": 0.0943,
+      "skipped": false
+    },
+    "wti_m3_m6__BACK/LOW/STRESSED": {
+      "spread": "wti_m3_m6",
+      "spread_label": "WTI M3-M6",
+      "regime": "BACK/LOW/STRESSED",
+      "n_train": 223,
+      "n_test": 38,
+      "winner": "Ridge",
+      "alpha": 1.0,
+      "active_features": 24,
+      "total_features": 24,
+      "competition": {
+        "Ridge": 0.9164,
+        "Lasso": 0.3379,
+        "ElasticNet": 0.8591,
+        "Huber": -0.3318,
+        "XGBoost": 0.7034,
+        "LightGBM": 0.5465,
+        "CatBoost": 0.1561
+      },
+      "ridge_r2_train": 0.9898,
+      "ridge_r2_test": 0.7058,
+      "band_hit_rate": 0.6579,
+      "top_drivers": [
+        {
+          "feature": "wti_m1_m12",
+          "coef": 2.4296
+        },
+        {
+          "feature": "m1_m12",
+          "coef": 0.5381
+        },
+        {
+          "feature": "m1_m2_lag1",
+          "coef": -0.3252
+        },
+        {
+          "feature": "wti_fly_lag1",
+          "coef": -0.2557
+        },
+        {
+          "feature": "m3_m6_lag1",
+          "coef": 0.2266
+        }
+      ],
+      "resid_std": 0.2683,
+      "skipped": false
+    },
+    "wti_m3_m6__BACK/AVG/CALM": {
+      "spread": "wti_m3_m6",
+      "regime": "BACK/AVG/CALM",
+      "n_train": 9,
+      "skipped": true,
+      "reason": "only 9 train rows (<30)"
+    },
+    "wti_m3_m6__BACK/AVG/NORMAL": {
+      "spread": "wti_m3_m6",
+      "regime": "BACK/AVG/NORMAL",
+      "n_train": 12,
+      "skipped": true,
+      "reason": "only 12 train rows (<30)"
+    },
+    "wti_m3_m6__BACK/AVG/STRESSED": {
+      "spread": "wti_m3_m6",
+      "regime": "BACK/AVG/STRESSED",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_m3_m6__BACK/HIGH/CALM": {
+      "spread": "wti_m3_m6",
+      "regime": "BACK/HIGH/CALM",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_m3_m6__BACK/HIGH/NORMAL": {
+      "spread": "wti_m3_m6",
+      "regime": "BACK/HIGH/NORMAL",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_m3_m6__BACK/HIGH/STRESSED": {
+      "spread": "wti_m3_m6",
+      "regime": "BACK/HIGH/STRESSED",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_fly_123__CONTANGO/LOW/CALM": {
+      "spread": "wti_fly_123",
+      "regime": "CONTANGO/LOW/CALM",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_fly_123__CONTANGO/LOW/NORMAL": {
+      "spread": "wti_fly_123",
+      "regime": "CONTANGO/LOW/NORMAL",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_fly_123__CONTANGO/LOW/STRESSED": {
+      "spread": "wti_fly_123",
+      "regime": "CONTANGO/LOW/STRESSED",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_fly_123__CONTANGO/AVG/CALM": {
+      "spread": "wti_fly_123",
+      "regime": "CONTANGO/AVG/CALM",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_fly_123__CONTANGO/AVG/NORMAL": {
+      "spread": "wti_fly_123",
+      "regime": "CONTANGO/AVG/NORMAL",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_fly_123__CONTANGO/AVG/STRESSED": {
+      "spread": "wti_fly_123",
+      "regime": "CONTANGO/AVG/STRESSED",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_fly_123__CONTANGO/HIGH/CALM": {
+      "spread": "wti_fly_123",
+      "regime": "CONTANGO/HIGH/CALM",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_fly_123__CONTANGO/HIGH/NORMAL": {
+      "spread": "wti_fly_123",
+      "regime": "CONTANGO/HIGH/NORMAL",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_fly_123__CONTANGO/HIGH/STRESSED": {
+      "spread": "wti_fly_123",
+      "regime": "CONTANGO/HIGH/STRESSED",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_fly_123__NEUTRAL/LOW/CALM": {
+      "spread": "wti_fly_123",
+      "spread_label": "WTI front fly (M1-2\u00d7M2+M3)",
+      "regime": "NEUTRAL/LOW/CALM",
+      "n_train": 57,
+      "n_test": 0,
+      "winner": "ElasticNet",
+      "alpha": 0.07335569178485106,
+      "active_features": 1,
+      "total_features": 24,
+      "competition": {
+        "Ridge": -4.6671,
+        "Lasso": -1.875,
+        "ElasticNet": -1.8279,
+        "Huber": -89.0196
+      },
+      "ridge_r2_train": 0.0543,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "wti_m1_m2_lag1",
+          "coef": 0.0098
+        },
+        {
+          "feature": "m1_m12",
+          "coef": -0.0
+        },
+        {
+          "feature": "m1_m12_sq",
+          "coef": -0.0
+        },
+        {
+          "feature": "curvature",
+          "coef": 0.0
+        },
+        {
+          "feature": "brent_close",
+          "coef": -0.0
+        }
+      ],
+      "resid_std": 0.1558,
+      "skipped": false
+    },
+    "wti_fly_123__NEUTRAL/LOW/NORMAL": {
+      "spread": "wti_fly_123",
+      "spread_label": "WTI front fly (M1-2\u00d7M2+M3)",
+      "regime": "NEUTRAL/LOW/NORMAL",
+      "n_train": 449,
+      "n_test": 0,
+      "winner": "Lasso",
+      "alpha": 0.00030817948508035447,
+      "active_features": 20,
+      "total_features": 24,
+      "competition": {
+        "Ridge": 0.3171,
+        "Lasso": 0.3389,
+        "ElasticNet": 0.2529,
+        "Huber": 0.292,
+        "XGBoost": 0.1061,
+        "LightGBM": 0.0623,
+        "CatBoost": 0.0384
+      },
+      "ridge_r2_train": 0.8421,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "wti_m1_m2_lag1",
+          "coef": 0.1765
+        },
+        {
+          "feature": "wti_m3_m6_lag1",
+          "coef": -0.1125
+        },
+        {
+          "feature": "m1_m12_sq",
+          "coef": 0.0324
+        },
+        {
+          "feature": "brent_close",
+          "coef": 0.0255
+        },
+        {
+          "feature": "m1_m12",
+          "coef": -0.0227
+        }
+      ],
+      "resid_std": 0.0633,
+      "skipped": false
+    },
+    "wti_fly_123__NEUTRAL/LOW/STRESSED": {
+      "spread": "wti_fly_123",
+      "spread_label": "WTI front fly (M1-2\u00d7M2+M3)",
+      "regime": "NEUTRAL/LOW/STRESSED",
+      "n_train": 200,
+      "n_test": 0,
+      "winner": "Ridge",
+      "alpha": 25.0,
+      "active_features": 24,
+      "total_features": 24,
+      "competition": {
+        "Ridge": -0.2444,
+        "Lasso": -0.2697,
+        "ElasticNet": -0.2495,
+        "Huber": -0.766,
+        "XGBoost": -1.2877,
+        "LightGBM": -1.0481,
+        "CatBoost": -0.5929
+      },
+      "ridge_r2_train": 0.6265,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "wti_m1_m2_lag1",
+          "coef": 0.0607
+        },
+        {
+          "feature": "wti_m3_m6_lag1",
+          "coef": -0.0478
+        },
+        {
+          "feature": "curvature",
+          "coef": 0.0348
+        },
+        {
+          "feature": "inv_vs_5yr_pct",
+          "coef": 0.021
+        },
+        {
+          "feature": "cot_mm_pct_156w",
+          "coef": -0.0205
+        }
+      ],
+      "resid_std": 0.094,
+      "skipped": false
+    },
+    "wti_fly_123__NEUTRAL/AVG/CALM": {
+      "spread": "wti_fly_123",
+      "regime": "NEUTRAL/AVG/CALM",
+      "n_train": 8,
+      "skipped": true,
+      "reason": "only 8 train rows (<30)"
+    },
+    "wti_fly_123__NEUTRAL/AVG/NORMAL": {
+      "spread": "wti_fly_123",
+      "spread_label": "WTI front fly (M1-2\u00d7M2+M3)",
+      "regime": "NEUTRAL/AVG/NORMAL",
+      "n_train": 50,
+      "n_test": 0,
+      "winner": "ElasticNet",
+      "alpha": 0.03210391103087674,
+      "active_features": 7,
+      "total_features": 24,
+      "competition": {
+        "Ridge": -18.375,
+        "Lasso": -6.6604,
+        "ElasticNet": -6.6159,
+        "Huber": -41.0818
+      },
+      "ridge_r2_train": 0.7548,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "wti_close",
+          "coef": -0.0227
+        },
+        {
+          "feature": "m1_m12_sq",
+          "coef": -0.0079
+        },
+        {
+          "feature": "wti_m1_m12",
+          "coef": -0.0061
+        },
+        {
+          "feature": "sin_doy",
+          "coef": -0.0032
+        },
+        {
+          "feature": "wti_m3_m6_lag1",
+          "coef": -0.0015
+        }
+      ],
+      "resid_std": 0.0277,
+      "skipped": false
+    },
+    "wti_fly_123__NEUTRAL/AVG/STRESSED": {
+      "spread": "wti_fly_123",
+      "regime": "NEUTRAL/AVG/STRESSED",
+      "n_train": 24,
+      "skipped": true,
+      "reason": "only 24 train rows (<30)"
+    },
+    "wti_fly_123__NEUTRAL/HIGH/CALM": {
+      "spread": "wti_fly_123",
+      "regime": "NEUTRAL/HIGH/CALM",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_fly_123__NEUTRAL/HIGH/NORMAL": {
+      "spread": "wti_fly_123",
+      "regime": "NEUTRAL/HIGH/NORMAL",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_fly_123__NEUTRAL/HIGH/STRESSED": {
+      "spread": "wti_fly_123",
+      "regime": "NEUTRAL/HIGH/STRESSED",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_fly_123__BACK/LOW/CALM": {
+      "spread": "wti_fly_123",
+      "spread_label": "WTI front fly (M1-2\u00d7M2+M3)",
+      "regime": "BACK/LOW/CALM",
+      "n_train": 122,
+      "n_test": 0,
+      "winner": "LightGBM",
+      "alpha": null,
+      "active_features": 24,
+      "total_features": 24,
+      "competition": {
+        "Ridge": -2.5475,
+        "Lasso": -1.4852,
+        "ElasticNet": -1.6498,
+        "Huber": -144.8522,
+        "XGBoost": -2.8975,
+        "LightGBM": -1.4459,
+        "CatBoost": -1.626
+      },
+      "ridge_r2_train": 0.9605,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "days_to_expiry",
+          "coef": 105.0
+        },
+        {
+          "feature": "wti_brent_spread",
+          "coef": 104.0
+        },
+        {
+          "feature": "brent_ret_5d",
+          "coef": 89.0
+        },
+        {
+          "feature": "realised_vol_20d",
+          "coef": 57.0
+        },
+        {
+          "feature": "fly_lag1",
+          "coef": 52.0
+        }
+      ],
+      "resid_std": 0.0385,
+      "skipped": false
+    },
+    "wti_fly_123__BACK/LOW/NORMAL": {
+      "spread": "wti_fly_123",
+      "spread_label": "WTI front fly (M1-2\u00d7M2+M3)",
+      "regime": "BACK/LOW/NORMAL",
+      "n_train": 210,
+      "n_test": 0,
+      "winner": "Lasso",
+      "alpha": 0.0038087869961809396,
+      "active_features": 15,
+      "total_features": 24,
+      "competition": {
+        "Ridge": -2.6172,
+        "Lasso": -0.1132,
+        "ElasticNet": -0.1932,
+        "Huber": -25.0959,
+        "XGBoost": -1.3571,
+        "LightGBM": -0.8527,
+        "CatBoost": -0.408
+      },
+      "ridge_r2_train": 0.5837,
+      "ridge_r2_test": null,
+      "band_hit_rate": null,
+      "top_drivers": [
+        {
+          "feature": "wti_m1_m2_lag1",
+          "coef": 0.2492
+        },
+        {
+          "feature": "wti_m3_m6_lag1",
+          "coef": -0.2427
+        },
+        {
+          "feature": "curvature",
+          "coef": -0.0652
+        },
+        {
+          "feature": "wti_close",
+          "coef": 0.0301
+        },
+        {
+          "feature": "cot_mm_pct_156w",
+          "coef": -0.0246
+        }
+      ],
+      "resid_std": 0.1199,
+      "skipped": false
+    },
+    "wti_fly_123__BACK/LOW/STRESSED": {
+      "spread": "wti_fly_123",
+      "spread_label": "WTI front fly (M1-2\u00d7M2+M3)",
+      "regime": "BACK/LOW/STRESSED",
+      "n_train": 223,
+      "n_test": 38,
+      "winner": "CatBoost",
+      "alpha": null,
+      "active_features": 24,
+      "total_features": 24,
+      "competition": {
+        "Ridge": -3.1566,
+        "Lasso": -2.4591,
+        "ElasticNet": -1.9799,
+        "Huber": -2.3362,
+        "XGBoost": -0.6836,
+        "LightGBM": -0.5159,
+        "CatBoost": -0.3526
+      },
+      "ridge_r2_train": 0.9393,
+      "ridge_r2_test": -0.7351,
+      "band_hit_rate": 0.5,
+      "top_drivers": [
+        {
+          "feature": "ovx_vix_ratio",
+          "coef": 34.0995
+        },
+        {
+          "feature": "cos_doy",
+          "coef": 8.7349
+        },
+        {
+          "feature": "sin_doy",
+          "coef": 7.5547
+        },
+        {
+          "feature": "wti_m1_m2_lag1",
+          "coef": 5.4744
+        },
+        {
+          "feature": "brent_ret_5d",
+          "coef": 5.1869
+        }
+      ],
+      "resid_std": 0.1345,
+      "skipped": false
+    },
+    "wti_fly_123__BACK/AVG/CALM": {
+      "spread": "wti_fly_123",
+      "regime": "BACK/AVG/CALM",
+      "n_train": 9,
+      "skipped": true,
+      "reason": "only 9 train rows (<30)"
+    },
+    "wti_fly_123__BACK/AVG/NORMAL": {
+      "spread": "wti_fly_123",
+      "regime": "BACK/AVG/NORMAL",
+      "n_train": 12,
+      "skipped": true,
+      "reason": "only 12 train rows (<30)"
+    },
+    "wti_fly_123__BACK/AVG/STRESSED": {
+      "spread": "wti_fly_123",
+      "regime": "BACK/AVG/STRESSED",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_fly_123__BACK/HIGH/CALM": {
+      "spread": "wti_fly_123",
+      "regime": "BACK/HIGH/CALM",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_fly_123__BACK/HIGH/NORMAL": {
+      "spread": "wti_fly_123",
+      "regime": "BACK/HIGH/NORMAL",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    },
+    "wti_fly_123__BACK/HIGH/STRESSED": {
+      "spread": "wti_fly_123",
+      "regime": "BACK/HIGH/STRESSED",
+      "n_train": 0,
+      "skipped": true,
+      "reason": "only 0 train rows (<30)"
+    }
+  }
+}

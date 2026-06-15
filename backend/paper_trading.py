@@ -48,6 +48,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import numpy as np
 import os
 import sqlite3
 import sys
@@ -63,11 +64,25 @@ log = logging.getLogger("pulse.paper")
 
 _DB_PATH = os.path.join(_BACKEND, "db", "pulse_cache.db")
 
+# Phase 2.9.1 — time-stop in TRADING days for the tuned exit rule. MIRROR of
+# research.live_ranker.TUNED_MAX_HOLD_DAYS — keep the two in sync (a position the
+# ranker opened under the tuned rule must close on the same horizon the backtest
+# used). Parity to be asserted in test_invariants.py in Phase 3.0.
+TUNED_MAX_HOLD_TRADING_DAYS = 30
+
 
 # ── Schema bootstrap ─────────────────────────────────────────────────────────
 
 def _conn() -> sqlite3.Connection:
     c = sqlite3.connect(_DB_PATH, check_same_thread=False)
+    # Phase 3.D — WAL + busy_timeout + synchronous=NORMAL so the always-on
+    # APScheduler writer (daily A/B tick + 60 s MTM sweep) and concurrent
+    # dashboard reads don't deadlock the book. WAL is db-level (idempotent);
+    # busy_timeout + synchronous are per-connection, so set on every open.
+    # MIRRORS db/cache.py:_apply_pragmas — same pulse_cache.db file.
+    c.execute("PRAGMA journal_mode=WAL")
+    c.execute("PRAGMA busy_timeout=5000")
+    c.execute("PRAGMA synchronous=NORMAL")
     c.row_factory = sqlite3.Row
     return c
 
@@ -101,6 +116,19 @@ def _ensure_table() -> None:
     """)
     c.execute("CREATE INDEX IF NOT EXISTS idx_paper_status ON paper_trades(status)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_paper_opened ON paper_trades(opened_at)")
+    # Phase 2.8.6-followup: A/B test column. NULL = legacy / non-AB row.
+    # Values: 'pooled' (un-gated PULSE_REGIME_MODE=pooled arm) or
+    # 'gated' (Phase 2.6 PULSE_GATED_BLEND=1 arm). Added via ALTER for
+    # backward-compat on existing DBs.
+    try:
+        c.execute("ALTER TABLE paper_trades ADD COLUMN ab_mode TEXT DEFAULT NULL")
+    except sqlite3.OperationalError:
+        pass  # column already present
+    try:
+        c.execute("ALTER TABLE paper_trades ADD COLUMN ab_session TEXT DEFAULT NULL")
+    except sqlite3.OperationalError:
+        pass
+    c.execute("CREATE INDEX IF NOT EXISTS idx_paper_ab_mode ON paper_trades(ab_mode)")
     # Phase 2 Sprint 2b: per-leg book for spread/butterfly positions.
     # Parent paper_trades row still records the synthetic-spread entry/MTM/PnL
     # so all existing analytics (Sharpe, equity curve, etc.) keep working.
@@ -216,7 +244,14 @@ def _fetch_legs(trade_id: int) -> list[dict]:
 
 # ── Public API ───────────────────────────────────────────────────────────────
 
-def push_trade(idea: dict, *, size: float = 1.0, source: str = "trade_idea") -> dict:
+def push_trade(
+    idea: dict,
+    *,
+    size: float = 1.0,
+    source: str = "trade_idea",
+    ab_mode: str | None = None,
+    ab_session: str | None = None,
+) -> dict:
     """
     Open a new paper position from a trade-idea payload.
 
@@ -230,6 +265,10 @@ def push_trade(idea: dict, *, size: float = 1.0, source: str = "trade_idea") -> 
       conviction      — "HIGH" / "MODERATE" / "LOW"
       entry_thesis    — list[str] or string
       time_horizon    — string
+
+    A/B harness (Phase 2.8.6-followup):
+      ab_mode         — 'pooled' | 'gated' | None
+      ab_session      — opaque session/run id (e.g. ISO date 'YYYY-MM-DD')
     """
     direction = (idea.get("direction") or "").upper()
     if direction not in ("LONG", "SHORT"):
@@ -259,13 +298,14 @@ def push_trade(idea: dict, *, size: float = 1.0, source: str = "trade_idea") -> 
         INSERT INTO paper_trades
           (asset, direction, size, entry_price, target_price, stop_price,
            opened_at, status, source, conviction, thesis,
-           mtm_price, mtm_at, unrealised, metadata_json)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'OPEN', ?, ?, ?, ?, ?, 0.0, ?)
+           mtm_price, mtm_at, unrealised, metadata_json, ab_mode, ab_session)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'OPEN', ?, ?, ?, ?, ?, 0.0, ?, ?, ?)
     """, (asset, direction, float(size), float(entry),
           float(target) if target else None,
           float(stop)   if stop   else None,
           _now_iso(), source, conviction, str(thesis),
-          float(entry), _now_iso(), json.dumps(md)))
+          float(entry), _now_iso(), json.dumps(md),
+          ab_mode, ab_session))
     trade_id = cur.lastrowid
 
     # Spread / butterfly: record per-leg book using today's outright settlements.
@@ -371,6 +411,18 @@ def mark_to_market() -> dict:
             if sl is not None and px >= sl:
                 c.close(); close_trade(r["id"], reason="stop_hit"); c = _conn()
                 summary["auto_closed"] += 1; continue
+        # Phase 2.9.1 time-stop: if neither TP nor SL was hit, close once the
+        # position has been held TUNED_MAX_HOLD_TRADING_DAYS trading days — the
+        # same horizon the tuned backtest used (mirrors live_ranker.TUNED_MAX_HOLD_DAYS).
+        try:
+            opened = datetime.fromisoformat(r["opened_at"])
+            held_bdays = int(np.busday_count(opened.date(),
+                                             datetime.now(timezone.utc).date()))
+            if held_bdays >= TUNED_MAX_HOLD_TRADING_DAYS:
+                c.close(); close_trade(r["id"], reason="time_stop"); c = _conn()
+                summary["auto_closed"] += 1; continue
+        except (ValueError, TypeError):
+            pass
         # Otherwise update unrealised PnL
         unreal = _pnl(direction, entry, px, size)
         c.execute("UPDATE paper_trades SET mtm_price=?, mtm_at=?, unrealised=? WHERE id=?",
@@ -410,6 +462,48 @@ def list_positions(status: str = "all", limit: int = 200) -> list[dict]:
                      args + (limit,)).fetchall()
     c.close()
     return [_row_to_dict(r) for r in rows]
+
+
+def open_position_exists(asset: str, direction: str, ab_mode: str) -> bool:
+    """
+    Phase 2.8.6-followup dedup: does an OPEN paper trade already exist for the
+    given (asset, direction, ab_mode)? Prevents the A/B harness from stacking
+    multiple positions on a persistent signal across days.
+    """
+    c = _conn()
+    row = c.execute(
+        "SELECT 1 FROM paper_trades WHERE status='OPEN' AND asset=? AND direction=? AND ab_mode=? LIMIT 1",
+        (asset, direction, ab_mode),
+    ).fetchone()
+    c.close()
+    return row is not None
+
+
+def list_ab_trades(ab_mode: str | None = None, status: str = "all") -> list[dict]:
+    """
+    Phase 2.8.6-followup: return paper_trades rows filtered by ab_mode.
+    ab_mode=None returns every A/B-tagged row (both arms). status filters
+    OPEN / CLOSED / all.
+    """
+    c = _conn()
+    clauses = []
+    args: list = []
+    if ab_mode is None:
+        clauses.append("ab_mode IS NOT NULL")
+    else:
+        clauses.append("ab_mode = ?")
+        args.append(ab_mode)
+    if status == "open":
+        clauses.append("status='OPEN'")
+    elif status == "closed":
+        clauses.append("status='CLOSED'")
+    where = " WHERE " + " AND ".join(clauses) if clauses else ""
+    rows = c.execute(
+        f"SELECT * FROM paper_trades{where} ORDER BY id ASC",
+        tuple(args),
+    ).fetchall()
+    c.close()
+    return [_row_to_dict(r, with_legs=False) for r in rows]
 
 
 def clear_trades(scope: str = "all") -> int:

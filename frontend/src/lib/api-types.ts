@@ -10,6 +10,82 @@
  */
 
 // ── Nested models ──────────────────────────────────────
+export interface ABArmEquityPoint {
+  closed_at?: string | null;
+  cum_pnl_net?: number | null;
+  trade_id?: number | null;
+  [key: string]: unknown;
+}
+
+export interface ABArmMetrics {
+  n_opened?: number;
+  n_closed?: number;
+  n_open?: number;
+  hit_rate?: number | null;
+  mean_pnl_gross?: number | null;
+  mean_pnl_net?: number | null;
+  total_pnl_gross?: number | null;
+  total_pnl_net?: number | null;
+  sharpe_gross?: number | null;
+  sharpe_net?: number | null;
+  max_dd_net?: number | null;
+  mean_cost?: number | null;
+  equity_curve?: Array<ABArmEquityPoint>;
+  [key: string]: unknown;
+}
+
+export interface ABArms {
+  pooled: ABArmMetrics;
+  gated: ABArmMetrics;
+  [key: string]: unknown;
+}
+
+export interface ABDiff {
+  mean_pnl_net_delta?: number | null;
+  sharpe_net_delta?: number | null;
+  welch?: ABWelch | null;
+  paired?: ABPaired | null;
+  [key: string]: unknown;
+}
+
+export interface ABPaired {
+  n_pairs?: number | null;
+  mean_diff?: number | null;
+  t_stat?: number | null;
+  p_value?: number | null;
+  [key: string]: unknown;
+}
+
+export interface ABReportData {
+  available: boolean;
+  as_of?: string | null;
+  sessions?: Array<string>;
+  days_elapsed?: number;
+  arms?: ABArms | null;
+  diff?: ABDiff | null;
+  stop_criteria?: ABStopCriteria | null;
+  verdict?: string | null;
+  verdict_note?: string | null;
+  [key: string]: unknown;
+}
+
+export interface ABStopCriteria {
+  min_n_closed?: number;
+  p_value_lt?: number;
+  max_days?: number;
+  n_closed_ok?: boolean;
+  p_value_ok?: boolean;
+  timeout?: boolean;
+  [key: string]: unknown;
+}
+
+export interface ABWelch {
+  t_stat?: number | null;
+  df?: number | null;
+  p_value?: number | null;
+  [key: string]: unknown;
+}
+
 export interface AssetSignal {
   asset: string;
   direction?: number | null;
@@ -253,6 +329,12 @@ export interface TradeIdeaData {
 }
 
 // ── Top-level responses ────────────────────────────────
+export interface ABReportResponse {
+  data: ABReportData;
+  timestamp: string;
+  [key: string]: unknown;
+}
+
 export interface FundamentalsResponse {
   data: FundamentalsData;
   timestamp: string;
@@ -310,6 +392,7 @@ export interface ApiResponseMap {
   "/api/paper/performance": PaperPerformanceResponse;
   "/api/paper/positions": PaperPositionsResponse;
   "/api/prices": PricesResponse;
+  "/api/regime/ab": ABReportResponse;
   "/api/signal": SignalResponse;
   "/api/trade-idea": TradeIdeaResponse;
 }

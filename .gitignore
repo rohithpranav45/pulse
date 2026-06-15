@@ -1,4 +1,4 @@
-# ── Python ────────────────────────────────────────────────────────────────────
+# ── Python ─────────────────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *.pyo
@@ -16,35 +16,51 @@ venv/
 env/
 ENV/
 
-# ── Environment / secrets ─────────────────────────────────────────────────────
+# ── Node ───────────────────────────────────────────────────────────────────────
+node_modules/
+
+# ── Environment / secrets ──────────────────────────────────────────────────────
 .env
 .env.*
 !.env.example
+# stray secrets file (must be named .env, not env — gotcha 5). Never commit.
+/env
 
-# ── Cache & data files ────────────────────────────────────────────────────────
-backend/cache/*.pkl
+# ── Rebuildable caches (regenerate on first run — NOT migrated) ────────────────
+# These rebuild automatically, so versioning them only bloats the repo.
+# (gitignore has no inline comments — keep notes on their own lines.)
+# cot.pkl is a 66 MB COT fetch cache; kept out of git to keep .git lean.
+backend/cache/cot.pkl
 backend/data/cache/
 data/cache/*.pkl
-*.pkl
-*.parquet
-*.feather
-backend/db/*.db
+
+# NOTE: regime model artifacts (backend/data/research/ — the models*/ pkls,
+# reports, and research parquets) ARE versioned on purpose, so switching between
+# laptop and desk needs no manual copy. The small fetch caches that ARE already
+# tracked (fred_rate.pkl, historical.pkl) stay tracked — they're tiny.
+
+# ── SQLite paper book ──────────────────────────────────────────────────────────
+# pulse_cache.db carries the live paper book + A/B arms; it's versioned so the
+# book follows you between machines. Only the transient WAL sidecars are ignored.
 backend/db/*.db-journal
 backend/db/*.db-wal
 backend/db/*.db-shm
 
-# ── Institutional desk-feed data lake (3.5 GB, supplied separately) ───────────
-Data/
+# ── Institutional desk-feed data lake (4 GB, supplied separately) ──────────────
+# Leading slash anchors this to the repo root ONLY. Without it, Windows git
+# (case-insensitive) also matched backend/data/ — which silently kept the regime
+# models out of git and forced manual copies between machines.
+/Data/
 
-# ── Claude Code local settings ────────────────────────────────────────────────
+# ── Claude Code local settings ─────────────────────────────────────────────────
 .claude/settings.local.json
 
-# ── Logs ──────────────────────────────────────────────────────────────────────
+# ── Logs ───────────────────────────────────────────────────────────────────────
 *.log
-logs/
 *.log.*
+logs/
 
-# ── OS / editor ───────────────────────────────────────────────────────────────
+# ── OS / editor ────────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
 .idea/
@@ -53,17 +69,18 @@ Thumbs.db
 *.swo
 *~
 
-# ── Testing ───────────────────────────────────────────────────────────────────
+# ── Testing ────────────────────────────────────────────────────────────────────
 .pytest_cache/
 .coverage
 htmlcov/
 .tox/
 
-# ── Jupyter ───────────────────────────────────────────────────────────────────
+# ── Jupyter ────────────────────────────────────────────────────────────────────
 .ipynb_checkpoints/
 *.ipynb
 
-# ── Misc ──────────────────────────────────────────────────────────────────────
+# ── Misc ───────────────────────────────────────────────────────────────────────
 *.bak
 *.tmp
 *.backup.*
+cloudflared.exe
