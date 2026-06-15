@@ -334,6 +334,50 @@ def build_pdf(out_path: Path = _OUT_PDF) -> Path:
             "the blended level.",
             body,
         ),
+        Paragraph(
+            "Phase 2.8.4 — <b>global model with regime-as-feature</b>. The 2018-2026 "
+            "walk-forward (Phase 2.8.8) showed the regime-unaware baseline beats "
+            "every per-cell variant on NET Sharpe — so the per-cell <i>split</i> "
+            "is itself the problem. Phase 2.8.4 collapses the grid: <b>ONE</b> "
+            "model per spread trained on <i>all</i> rows, with the composite "
+            "regime fed as <b>9 one-hot axis columns</b> (curve / inventory / "
+            "vol — 3+3+3) instead of partitioning the data. Same 7-model "
+            "competition. Each spread now trains on ~5&times; more rows per "
+            "refit, giving boosters a real shot at picking up regime &times; "
+            "feature interactions the per-cell linear winners can't express. "
+            "Reported alongside the other modes on page 2 — same NET cost "
+            "model, same horizon, same 34 refits.",
+            body,
+        ),
+
+        Paragraph("10b. Phase 2.8.5 &mdash; soft regime probabilities", h2),
+        Paragraph(
+            "Complementary test to 2.8.4. The hard pooled grid forces "
+            "<b>discontinuous</b> regime assignment at -$2 and +$5 on M1-M12; "
+            "two days at &minus;1.9 and &minus;2.1 flip cell, model, and "
+            "residual scale even though the market is virtually identical. "
+            "Phase 2.8.5 replaces the indicator with a <b>logistic membership "
+            "function</b> at each threshold (bandwidth $1/bbl for curve and "
+            "inventory, 2.5pp for vol) — at the boundary a day is 50/50 across "
+            "adjacent regimes, far from the boundary it collapses back to the "
+            "hard label. Each day&apos;s prediction is the <i>posterior-weighted "
+            "blend</i> across all trained cells for that spread (point, "
+            "quantiles, and residual variance all blended). Bandwidths come "
+            "from the trader thresholds, not tuned to PnL.",
+            body,
+        ),
+        Paragraph(
+            "Honest framing: hard pooled recovers as bandwidth &rarr; 0; a "
+            "flat prior across cells recovers as bandwidth &rarr; &infin;, "
+            "which is approximately the 2.8.4 global model. So 2.8.5 sits on "
+            "the interpolation between &lsquo;hard split&rsquo; and "
+            "&lsquo;single global model&rsquo; — the question it answers is "
+            "whether a *small* amount of cell-sharing recovers alpha the "
+            "discontinuous cut leaks. Reported on page 2 alongside the other "
+            "modes under the same 34-refit walk-forward and the same NET "
+            "cost model.",
+            body,
+        ),
 
         Paragraph("11. Phase 2.8.6 &mdash; transaction costs", h2),
         Paragraph(
@@ -621,9 +665,15 @@ def build_pdf(out_path: Path = _OUT_PDF) -> Path:
         base_net = (costs.get("baseline_net") or {}).get("overall") or {}
         pool_net = (costs.get("pooled_net")   or {}).get("overall") or {}
         gate_net = (costs.get("gated_blend_net") or {}).get("overall") or {}
+        glob_net = (costs.get("global_net")   or {}).get("overall") or {}
+        psoft_net = (costs.get("pooled_soft_net") or {}).get("overall") or {}
         sbn      = costs.get("sized_blend_net") or {}
         sh_net = (sbn.get("half")  or {}).get("overall") or {}
         sk_net = (sbn.get("kelly") or {}).get("overall") or {}
+        glob = wf.get("global") or {}
+        glo  = glob.get("overall") or {}
+        psoft = wf.get("pooled_soft") or {}
+        pso   = psoft.get("overall") or {}
 
         def _both(gross, net, key, digits=3):
             g = gross.get(key); n = net.get(key)
@@ -636,6 +686,8 @@ def build_pdf(out_path: Path = _OUT_PDF) -> Path:
             ["Baseline 252d z",     _both(bo, base_net, "sharpe", 2),                            _both(bo, base_net, "mean_pnl", 3),                            _fmt(base_net.get("mean_cost"), 4), str(base_net.get("n_signals") or 0)],
             ["Pooled (un-gated)",   _both(po, pool_net, "sharpe", 2),                            _both(po, pool_net, "mean_pnl", 3),                            _fmt(pool_net.get("mean_cost"), 4), str(pool_net.get("n_signals") or 0)],
             ["Gated blend (2.8.3)", _both(go, gate_net, "sharpe", 2),                            _both(go, gate_net, "mean_pnl", 3),                            _fmt(gate_net.get("mean_cost"), 4), str(gate_net.get("n_signals") or 0)],
+            ["Global (Phase 2.8.4)",_both(glo, glob_net, "sharpe", 2),                           _both(glo, glob_net, "mean_pnl", 3),                           _fmt(glob_net.get("mean_cost"), 4), str(glob_net.get("n_signals") or 0)],
+            ["Pooled-soft (2.8.5)", _both(pso, psoft_net, "sharpe", 2),                          _both(pso, psoft_net, "mean_pnl", 3),                          _fmt(psoft_net.get("mean_cost"), 4), str(psoft_net.get("n_signals") or 0)],
             ["Sized half",          _both(sho, sh_net, "sharpe", 2),                             _both(sho, sh_net, "mean_pnl", 3),                             _fmt(sh_net.get("mean_cost"), 4),   str(sh_net.get("n_signals") or 0)],
             ["Sized kelly",         _both(sko, sk_net, "sharpe", 2),                             _both(sko, sk_net, "mean_pnl", 3),                             _fmt(sk_net.get("mean_cost"), 4),   str(sk_net.get("n_signals") or 0)],
         ]
@@ -709,6 +761,82 @@ def build_pdf(out_path: Path = _OUT_PDF) -> Path:
                 "fly (highest per-trade cost class)."
             )
 
+        # Phase 2.8.4 — global verdict line.
+        if glob_net.get("sharpe") is not None and base_net.get("sharpe") is not None:
+            global_vs_base = (glob_net.get("sharpe") or 0) - (base_net.get("sharpe") or 0)
+            global_vs_gated = (glob_net.get("sharpe") or 0) - (gate_net.get("sharpe") or 0)
+            if global_vs_base >= 0.02:
+                glob_line = (
+                    f" <b>Phase 2.8.4 (global model)</b>: net Sharpe "
+                    f"{glob_net.get('sharpe'):+.3f} &mdash; collapsing the per-cell "
+                    f"split and feeding regime as a one-hot feature <b>beats</b> baseline "
+                    f"by {global_vs_base:+.3f}. This is the credible regime route the "
+                    f"2.8.8 verdict pointed to."
+                )
+            elif global_vs_base >= -0.02:
+                glob_line = (
+                    f" <b>Phase 2.8.4 (global model)</b>: net Sharpe "
+                    f"{glob_net.get('sharpe'):+.3f} &mdash; ties baseline "
+                    f"({base_net.get('sharpe'):+.3f}). Regime-as-feature is not a "
+                    f"headline lift on this universe, but it doesn&apos;t cost anything "
+                    f"either &mdash; the per-cell <i>split</i> was the binding constraint."
+                )
+            else:
+                glob_line = (
+                    f" <b>Phase 2.8.4 (global model)</b>: net Sharpe "
+                    f"{glob_net.get('sharpe'):+.3f} &mdash; even one global model per "
+                    f"spread with regime-as-feature underperforms baseline "
+                    f"({base_net.get('sharpe'):+.3f}) by {abs(global_vs_base):.3f}. "
+                    f"Regime conditioning &mdash; whether by split or by feature &mdash; "
+                    f"is not lifting this universe. Acceptance bar for Phase 2.8 "
+                    f"(gated NET &ge; +0.65) remains unmet."
+                )
+            phase286 += glob_line
+        # Phase 2.8.5 — soft pooled verdict line.
+        if psoft_net.get("sharpe") is not None and base_net.get("sharpe") is not None:
+            ps_vs_base   = (psoft_net.get("sharpe") or 0) - (base_net.get("sharpe") or 0)
+            ps_vs_pooled = (psoft_net.get("sharpe") or 0) - (pool_net.get("sharpe") or 0)
+            diag = (wf.get("pooled_soft") or {}).get("soft_diagnostics") or {}
+            mean_top_w = diag.get("mean_top_weight")
+            mean_cells = diag.get("mean_cells_blended")
+            soft_ctx = ""
+            if mean_top_w is not None and mean_cells is not None:
+                soft_ctx = f" (mean modal weight {mean_top_w:.2f}, ~{mean_cells:.1f} cells blended per fire)"
+            if ps_vs_base >= 0.02:
+                ps_line = (
+                    f" <b>Phase 2.8.5 (soft pooled)</b>: net Sharpe "
+                    f"{psoft_net.get('sharpe'):+.3f} &mdash; softening the hard "
+                    f"&minus;$2 / +$5 curve thresholds <b>beats</b> baseline by "
+                    f"{ps_vs_base:+.3f} (and hard pooled by {ps_vs_pooled:+.3f}). "
+                    f"The discontinuous regime cut <i>was</i> leaking alpha{soft_ctx}."
+                )
+            elif ps_vs_pooled >= 0.02:
+                ps_line = (
+                    f" <b>Phase 2.8.5 (soft pooled)</b>: net Sharpe "
+                    f"{psoft_net.get('sharpe'):+.3f} &mdash; softening lifts the "
+                    f"hard pooled engine by {ps_vs_pooled:+.3f} but still trails "
+                    f"baseline ({base_net.get('sharpe'):+.3f}) by "
+                    f"{abs(ps_vs_base):.3f}. The hard cut leaked some alpha "
+                    f"but not enough to clear baseline{soft_ctx}."
+                )
+            elif ps_vs_base >= -0.02:
+                ps_line = (
+                    f" <b>Phase 2.8.5 (soft pooled)</b>: net Sharpe "
+                    f"{psoft_net.get('sharpe'):+.3f} &mdash; ties baseline "
+                    f"({base_net.get('sharpe'):+.3f}). Softening the curve "
+                    f"threshold delivers the same headline as the global "
+                    f"regime-as-feature model {soft_ctx}."
+                )
+            else:
+                ps_line = (
+                    f" <b>Phase 2.8.5 (soft pooled)</b>: net Sharpe "
+                    f"{psoft_net.get('sharpe'):+.3f} &mdash; softening the curve "
+                    f"thresholds does not lift pooled past baseline "
+                    f"({base_net.get('sharpe'):+.3f}). Discontinuity at the "
+                    f"trader cuts isn&apos;t the binding constraint on this "
+                    f"universe{soft_ctx}."
+                )
+            phase286 += ps_line
         if (pool_net.get("sharpe") or 0) > (base_net.get("sharpe") or 0) + 0.02 and \
            (pool_net.get("sharpe") or 0) > (gate_net.get("sharpe") or 0) + 0.02:
             phase286 += (

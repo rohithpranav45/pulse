@@ -49,6 +49,16 @@ Phase 2.7 — sized regime leg (fourth leg):
                concentration of 97 high-Sharpe regime fires costs the leg,
                without giving up the +1.332 Sharpe alpha?
 
+Phase 2.8.4 — global model with regime-as-feature (fifth leg):
+  global      — collapse the per-cell grid: train ONE model per spread on
+               ALL rows ≤ cutoff, with the composite regime fed as 9 one-hot
+               axis columns (curve / inv / vol — 3+3+3). Same 7-model
+               competition as the per-cell harness; each spread trains on ~5×
+               more rows per refit. Tests whether the per-cell *split* was
+               the binding constraint vs the regime *information*. Reuses
+               the existing infrastructure: one extra refit driver, one
+               extra block in the report.
+
 Baseline for comparison: a regime-UNAWARE rolling z-score on the same spreads.
 At date d, fair = 252-day rolling mean, σ = 252-day rolling std, same trading
 rule and horizon. This is the cleanest answer to "does regime conditioning
@@ -75,6 +85,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import sys
 import warnings
@@ -95,6 +106,22 @@ _GATED_TRADES_FILE    = Path(__file__).parent.parent / "data" / "research" / "ga
 _COMPOSITE_TRADES_FILE = Path(__file__).parent.parent / "data" / "research" / "composite_trades.json"
 _POOLED_TRADES_FILE   = Path(__file__).parent.parent / "data" / "research" / "pooled_trades.json"
 _BASELINE_TRADES_FILE = Path(__file__).parent.parent / "data" / "research" / "baseline_trades.json"
+_GLOBAL_TRADES_FILE   = Path(__file__).parent.parent / "data" / "research" / "global_trades.json"
+_POOLED_SOFT_TRADES_FILE    = Path(__file__).parent.parent / "data" / "research" / "pooled_soft_trades.json"
+_COMPOSITE_SOFT_TRADES_FILE = Path(__file__).parent.parent / "data" / "research" / "composite_soft_trades.json"
+
+# Phase 2.8.4 — regime axes used as one-hot features in the "global" leg.
+# Composite label decomposes into 3 axes; the one-hot expansion is 3+3+3=9
+# columns instead of the 27 you'd get from raw composite labels — same info
+# content but lower cardinality, which the linear candidates handle better.
+_REGIME_AXIS_BUCKETS = {
+    "curve_": ("CONTANGO", "NEUTRAL", "BACK"),
+    "inv_":   ("LOW", "AVG", "HIGH"),
+    "vol_":   ("CALM", "NORMAL", "STRESSED"),
+}
+_REGIME_OH_COLS = [
+    f"{prefix}{bucket}" for prefix, buckets in _REGIME_AXIS_BUCKETS.items() for bucket in buckets
+]
 
 # ── Config ───────────────────────────────────────────────────────────────────
 FORWARD_DAYS = 20
@@ -102,6 +129,16 @@ MIN_SAMPLES  = 30
 Z_ENTRY      = 0.5
 ROLLING_WIN  = 252
 REFIT_DATES  = [
+    # Phase 2.8.8 — extended back to 2018 for full 2018-2026 walk-forward coverage.
+    # Brent legs span the entire window (real C1-C31 settlements from 2016).
+    # WTI cells (synth from 1-min mids, 2021+) auto-skip per-refit when pre-2021
+    # train rows < MIN_SAMPLES — read 2018-2020 verdict as a Brent-only story.
+    "2018-01-02", "2018-04-02", "2018-07-02", "2018-10-01",
+    "2019-01-02", "2019-04-01", "2019-07-01", "2019-10-01",
+    "2020-01-02", "2020-04-01", "2020-07-01", "2020-10-01",
+    "2021-01-04", "2021-04-01", "2021-07-01", "2021-10-01",
+    "2022-01-03", "2022-04-01", "2022-07-01", "2022-10-03",
+    "2023-01-03", "2023-04-03", "2023-07-03", "2023-10-02",
     "2024-01-02", "2024-04-01", "2024-07-01", "2024-10-01",
     "2025-01-02", "2025-04-01", "2025-07-01", "2025-10-01",
     "2026-01-02", "2026-04-01",
@@ -362,6 +399,446 @@ def _evaluate_window(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Phase 2.8.4 — global model with regime-as-feature
+# ─────────────────────────────────────────────────────────────────────────────
+# Reframes the 2.8.8 verdict (baseline beats every per-cell regime variant on
+# long history): instead of *splitting* the data by regime, train ONE model
+# per spread on ALL rows and feed the composite regime as 9 one-hot columns.
+# Same 7-model competition as the per-cell harness. Each spread now has ~5×
+# more training rows per refit (the union of all regime cells), so boosters
+# have a real shot at finding regime × feature interactions the linear
+# per-cell winners can't express.
+#
+# Honest test: does collapsing the grid + adding regime-as-feature beat
+# baseline NET +0.372 / gated NET +0.298 / pooled NET +0.293 from the
+# 2026-06-15 walk-forward?
+def _regime_one_hot(row: pd.Series) -> dict:
+    """Decompose a row's composite regime label into 9 one-hot axis columns.
+    UNKNOWN rows (any axis) get all-zeros for that axis — already dropped
+    upstream in build_features() but defensive."""
+    label = str(row.get("regime") or "")
+    parts = label.split("/")
+    if len(parts) != 3:
+        return {col: 0 for col in _REGIME_OH_COLS}
+    curve, inv, vol = parts
+    out: dict[str, int] = {col: 0 for col in _REGIME_OH_COLS}
+    for prefix, val in (("curve_", curve), ("inv_", inv), ("vol_", vol)):
+        col = f"{prefix}{val}"
+        if col in out:
+            out[col] = 1
+    return out
+
+
+def _train_global_through(
+    joined: pd.DataFrame,
+    cutoff: pd.Timestamp,
+) -> dict:
+    """
+    Phase 2.8.4 — train ONE model per spread on rows ≤ cutoff. Regime is fed
+    as 9 one-hot axis columns instead of partitioning the training data.
+    Returns dict keyed by spread → {point, q10, q50, q90, resid_std, winner,
+                                    n_train, feat_cols, cv_r2}.
+    """
+    from research.models          import (
+        _fit_ridge, _fit_lasso, _fit_elastic, _fit_huber,
+        _fit_xgb, _fit_lgbm, _fit_catboost,
+        _fit_quantile, _cv_r2, _TIEBREAK_RANK,
+        _HAS_XGB, _HAS_LGBM, _HAS_CATBOOST, _BOOSTER_MIN_ROWS,
+    )
+    from research.features        import predictors_for
+    from research.spread_universe import INSTRUMENTS
+
+    train_df = joined[joined.index <= cutoff].copy()
+    # Build one-hot regime columns on the training frame.
+    oh = train_df.apply(_regime_one_hot, axis=1, result_type="expand")
+    for col in _REGIME_OH_COLS:
+        train_df[col] = oh[col].astype(int) if col in oh.columns else 0
+
+    linear_fitters = {
+        "Ridge":      _fit_ridge,
+        "Lasso":      _fit_lasso,
+        "ElasticNet": _fit_elastic,
+        "Huber":      _fit_huber,
+    }
+    booster_fitters: dict = {}
+    if _HAS_XGB:      booster_fitters["XGBoost"]  = _fit_xgb
+    if _HAS_LGBM:     booster_fitters["LightGBM"] = _fit_lgbm
+    if _HAS_CATBOOST: booster_fitters["CatBoost"] = _fit_catboost
+
+    out: dict = {}
+    for spread in INSTRUMENTS:
+        base_feats = predictors_for(spread)
+        feat_cols  = base_feats + _REGIME_OH_COLS
+        sub = train_df.dropna(subset=base_feats + [spread])
+        if len(sub) < MIN_SAMPLES:
+            continue
+        X = sub[feat_cols].values
+        y = sub[spread].values
+
+        cell_fitters = dict(linear_fitters)
+        if len(sub) >= _BOOSTER_MIN_ROWS:
+            cell_fitters.update(booster_fitters)
+        scores: dict[str, float] = {}
+        fitted: dict = {}
+        for name, fitter in cell_fitters.items():
+            try:
+                scores[name] = _cv_r2(fitter, X, y)
+                fitted[name] = fitter(X, y)
+            except Exception:
+                scores[name] = float("-inf")
+
+        valid = {n: s for n, s in scores.items() if s > float("-inf")}
+        if not valid:
+            continue
+        best = max(valid.values())
+        tie  = {n: s for n, s in valid.items() if best - s < 0.005}
+        winner = min(tie.keys(), key=lambda n: _TIEBREAK_RANK[n])
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            q10 = _fit_quantile(X, y, 0.10)
+            q50 = _fit_quantile(X, y, 0.50)
+            q90 = _fit_quantile(X, y, 0.90)
+
+        resid = y - fitted[winner].predict(X)
+        out[spread] = {
+            "point":     fitted[winner],
+            "q10":       q10, "q50": q50, "q90": q90,
+            "resid_std": float(np.std(resid)) or 1.0,
+            "winner":    winner,
+            "n_train":   int(len(sub)),
+            "feat_cols": feat_cols,
+            "cv_r2":     round(valid[winner], 4),
+        }
+    return out
+
+
+def _evaluate_window_global(
+    joined: pd.DataFrame,
+    spreads: pd.DataFrame,
+    cells: dict,
+    start: pd.Timestamp,
+    end: pd.Timestamp,
+) -> list[dict]:
+    """
+    Global-mode counterpart to _evaluate_window. One model per spread; the
+    day's regime appears as a feature row, not a cell key.
+    """
+    from research.spread_universe import INSTRUMENTS
+
+    window = joined[(joined.index > start) & (joined.index <= end)].copy()
+    oh = window.apply(_regime_one_hot, axis=1, result_type="expand")
+    for col in _REGIME_OH_COLS:
+        window[col] = oh[col].astype(int) if col in oh.columns else 0
+
+    trades: list[dict] = []
+    for d, row in window.iterrows():
+        regime = str(row.get("regime") or "")
+        for spread in INSTRUMENTS:
+            cell = cells.get(spread)
+            if cell is None:
+                continue
+            feat_cols = cell["feat_cols"]
+            feat_vals = row[feat_cols]
+            if feat_vals.isnull().any():
+                continue
+            actual = spreads.at[d, spread] if d in spreads.index else None
+            if actual is None or not np.isfinite(actual):
+                continue
+
+            X = feat_vals.values.reshape(1, -1)
+            point = float(cell["point"].predict(X)[0])
+            p10   = float(cell["q10"].predict(X)[0])
+            p50   = float(cell["q50"].predict(X)[0])
+            p90   = float(cell["q90"].predict(X)[0])
+            sigma = cell["resid_std"]
+            z     = (actual - point) / sigma if sigma > 0 else 0.0
+
+            if z > Z_ENTRY:      direction =  "SELL"; sign = -1
+            elif z < -Z_ENTRY:   direction =  "BUY";  sign = +1
+            else:                direction = "NEUTRAL"; sign = 0
+
+            future = spreads.loc[spreads.index > d, spread].dropna()
+            if len(future) >= FORWARD_DAYS:
+                fwd_spread = float(future.iloc[FORWARD_DAYS - 1])
+                fwd_move   = fwd_spread - float(actual)
+                fwd_pnl    = sign * fwd_move
+                fwd_date   = future.index[FORWARD_DAYS - 1].strftime("%Y-%m-%d")
+            else:
+                fwd_pnl = None; fwd_move = None; fwd_date = None
+
+            trades.append({
+                "date":      d.strftime("%Y-%m-%d"),
+                "spread":    spread,
+                "regime":    regime,
+                "actual":    round(float(actual), 4),
+                "fair":      round(point, 4),
+                "p10":       round(p10, 4),
+                "p50":       round(p50, 4),
+                "p90":       round(p90, 4),
+                "resid_std": round(float(sigma), 6),
+                "z":         round(z, 3),
+                "direction": direction,
+                "winner":    cell["winner"],
+                "fwd_move":  round(fwd_move, 4) if fwd_move is not None else None,
+                "fwd_pnl":   round(fwd_pnl, 4)  if fwd_pnl  is not None else None,
+                "fwd_date":  fwd_date,
+            })
+    return trades
+
+
+def _produce_global_trades(
+    joined: pd.DataFrame,
+    spreads: pd.DataFrame,
+    refit_ts: list[pd.Timestamp],
+) -> tuple[list[dict], list[dict]]:
+    """Quarterly-refit driver for the global regime-as-feature leg."""
+    all_trades: list[dict] = []
+    refit_meta: list[dict] = []
+    for i, cutoff in enumerate(refit_ts):
+        next_cutoff = refit_ts[i + 1] if i + 1 < len(refit_ts) else joined.index.max()
+        log.info("[global] Refit %d/%d  cutoff=%s  window=(%s, %s]",
+                 i + 1, len(refit_ts), cutoff.date(),
+                 cutoff.date(), next_cutoff.date())
+        cells = _train_global_through(joined, cutoff)
+        log.info("  trained %d spreads", len(cells))
+
+        window_trades = _evaluate_window_global(joined, spreads, cells, cutoff, next_cutoff)
+        log.info("  evaluated %d records", len(window_trades))
+
+        winners: dict[str, int] = {}
+        for _, c in cells.items():
+            winners[c["winner"]] = winners.get(c["winner"], 0) + 1
+        refit_meta.append({
+            "cutoff":     cutoff.strftime("%Y-%m-%d"),
+            "window_end": next_cutoff.strftime("%Y-%m-%d"),
+            "n_cells":    len(cells),
+            "winners":    winners,
+            "n_records":  len(window_trades),
+        })
+        all_trades.extend(window_trades)
+    return all_trades, refit_meta
+
+
+def _aggregate_global(trades: list[dict], refit_meta: list[dict]) -> dict:
+    """Same shape as _aggregate_mode but no per-regime/winner-by-regime split."""
+    return {
+        "regime_mode":   "global",
+        "overall":       _metrics(trades),
+        "by_spread":     _by(trades, "spread"),
+        "by_curve_axis": _by_curve_axis(trades),
+        "by_winner":     _by(trades, "winner"),
+        "by_direction":  _by(trades, "direction"),
+        "refits":        refit_meta,
+        "n_trades":      len(trades),
+        "feature_set":   {
+            "base":     "predictors_for(spread)",
+            "one_hot":  list(_REGIME_OH_COLS),
+            "note":     "Phase 2.8.4 — ONE model per spread; composite regime fed as 9 one-hot axis columns (curve/inv/vol). Reuses the same 7-model competition as the per-cell harness.",
+        },
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 2.8.5 — soft regime probabilities
+# ─────────────────────────────────────────────────────────────────────────────
+# Reuses the per-cell trained models from `_train_cells_through` (pooled or
+# composite) but evaluates each day by *blending* every cell's prediction by
+# the day's soft posterior over regimes (softprob.py). Hard regimes recover
+# in the limit h → 0; this leg sits at the trader-set bandwidths in
+# softprob.AXIS_BANDWIDTHS.
+#
+# Mechanics per (date, spread):
+#   1. compute axis-soft posterior for the day → 3 or 27 weights, summing 1
+#   2. for each (spread, regime) cell that was trained at this refit, get
+#      point / q10 / q50 / q90 / resid_std
+#   3. blended point = Σ_r w_r · point_r  (linear; same for quantiles & sigma)
+#   4. z = (actual - blended_point) / blended_sigma → direction by Z_ENTRY
+#   5. fwd_pnl = sign × 20-day spread move (same horizon as hard variants)
+#
+# Weights are renormalised over the *available* cells: a cell with no trained
+# model (n_train < MIN_SAMPLES at this refit, especially WTI pre-2021) drops
+# out and the rest of the posterior is rescaled. This keeps the leg honest
+# about cell availability without imputing a hard-zero weight that would bias
+# the blended prediction toward whichever cells happened to train.
+def _evaluate_window_soft(
+    joined: pd.DataFrame,
+    spreads: pd.DataFrame,
+    cells: dict,
+    start: pd.Timestamp,
+    end: pd.Timestamp,
+    regime_mode: str = "pooled",
+) -> list[dict]:
+    """
+    Soft-posterior counterpart to `_evaluate_window`. Reuses cells from
+    `_train_cells_through(regime_mode=...)`; `regime_mode` decides which
+    soft posterior is computed (pooled = 3-bucket curve; composite = 27).
+    """
+    from research.spread_universe import INSTRUMENTS
+    from research.softprob        import pooled_soft, composite_soft
+
+    if regime_mode not in ("pooled", "composite"):
+        raise ValueError(f"_evaluate_window_soft: unknown regime_mode {regime_mode!r}")
+
+    # Build a {spread -> {regime -> cell}} index once so the per-day loop is cheap.
+    by_spread: dict[str, dict[str, dict]] = {}
+    for (sp, rg), c in cells.items():
+        by_spread.setdefault(sp, {})[rg] = c
+
+    window = joined[(joined.index > start) & (joined.index <= end)]
+    trades: list[dict] = []
+
+    for d, row in window.iterrows():
+        if regime_mode == "pooled":
+            posterior = pooled_soft(row.get("m1_m12"))
+        else:
+            posterior = composite_soft(
+                row.get("m1_m12"),
+                row.get("inv_vs_5yr_pct"),
+                row.get("realised_vol_20d"),
+            )
+
+        for spread in INSTRUMENTS:
+            cell_map = by_spread.get(spread, {})
+            if not cell_map:
+                continue
+            # Build the (regime, weight, cell) list restricted to trained cells.
+            available = [(rg, w, cell_map[rg]) for rg, w in posterior.items()
+                         if rg in cell_map and w > 0.0]
+            if not available:
+                continue
+            wsum = sum(w for _, w, _ in available)
+            if wsum <= 0:
+                continue
+
+            # All cells for one spread share predictors_for(spread) → same feat_cols.
+            feat_cols = available[0][2]["feat_cols"]
+            feat_vals = row[feat_cols]
+            if feat_vals.isnull().any():
+                continue
+            actual = spreads.at[d, spread] if d in spreads.index else None
+            if actual is None or not np.isfinite(actual):
+                continue
+
+            X = feat_vals.values.reshape(1, -1)
+            point_b = 0.0; q10_b = 0.0; q50_b = 0.0; q90_b = 0.0
+            sigma_sq_b = 0.0
+            top_weight = 0.0
+            top_regime = ""
+            top_winner = ""
+            for rg, w, cell in available:
+                ww = w / wsum
+                point_b += ww * float(cell["point"].predict(X)[0])
+                q10_b   += ww * float(cell["q10"].predict(X)[0])
+                q50_b   += ww * float(cell["q50"].predict(X)[0])
+                q90_b   += ww * float(cell["q90"].predict(X)[0])
+                # Blend variances additively, then take sqrt — standard mixture
+                # marginal variance ignoring the (small) point-prediction
+                # disagreement term. Conservative: under-states sigma slightly
+                # when cell predictions differ, which makes the z threshold a
+                # touch easier to trip; same direction the hard variant has.
+                sigma_sq_b += ww * (cell["resid_std"] ** 2)
+                if ww > top_weight:
+                    top_weight = ww
+                    top_regime = rg
+                    top_winner = cell["winner"]
+            sigma_b = math.sqrt(sigma_sq_b) if sigma_sq_b > 0 else 1.0
+            z = (float(actual) - point_b) / sigma_b if sigma_b > 0 else 0.0
+
+            if z > Z_ENTRY:      direction =  "SELL"; sign = -1
+            elif z < -Z_ENTRY:   direction =  "BUY";  sign = +1
+            else:                direction = "NEUTRAL"; sign = 0
+
+            future = spreads.loc[spreads.index > d, spread].dropna()
+            if len(future) >= FORWARD_DAYS:
+                fwd_spread = float(future.iloc[FORWARD_DAYS - 1])
+                fwd_move   = fwd_spread - float(actual)
+                fwd_pnl    = sign * fwd_move
+                fwd_date   = future.index[FORWARD_DAYS - 1].strftime("%Y-%m-%d")
+            else:
+                fwd_pnl = None; fwd_move = None; fwd_date = None
+
+            trades.append({
+                "date":         d.strftime("%Y-%m-%d"),
+                "spread":       spread,
+                # `regime` carries the MODAL regime so by_curve_axis / by_winner
+                # still aggregate sensibly; the blend itself is in posterior_*.
+                "regime":       top_regime,
+                "actual":       round(float(actual), 4),
+                "fair":         round(point_b, 4),
+                "p10":          round(q10_b, 4),
+                "p50":          round(q50_b, 4),
+                "p90":          round(q90_b, 4),
+                "resid_std":    round(float(sigma_b), 6),
+                "z":            round(z, 3),
+                "direction":    direction,
+                "winner":       top_winner,
+                "fwd_move":     round(fwd_move, 4) if fwd_move is not None else None,
+                "fwd_pnl":      round(fwd_pnl, 4)  if fwd_pnl  is not None else None,
+                "fwd_date":     fwd_date,
+                "soft_top_w":   round(float(top_weight), 4),
+                "soft_n_cells": len(available),
+            })
+    return trades
+
+
+def _produce_soft_trades(
+    joined: pd.DataFrame,
+    spreads: pd.DataFrame,
+    refit_ts: list[pd.Timestamp],
+    regime_mode: str,
+) -> tuple[list[dict], list[dict]]:
+    """Quarterly-refit driver for the soft-posterior leg of `regime_mode`."""
+    if regime_mode not in ("pooled", "composite"):
+        raise ValueError(regime_mode)
+
+    all_trades: list[dict] = []
+    refit_meta: list[dict] = []
+    tag = f"{regime_mode}_soft"
+    for i, cutoff in enumerate(refit_ts):
+        next_cutoff = refit_ts[i + 1] if i + 1 < len(refit_ts) else joined.index.max()
+        log.info("[%s] Refit %d/%d  cutoff=%s  window=(%s, %s]",
+                 tag, i + 1, len(refit_ts), cutoff.date(),
+                 cutoff.date(), next_cutoff.date())
+        cells = _train_cells_through(joined, cutoff, regime_mode=regime_mode)
+        log.info("  trained %d cells", len(cells))
+
+        window_trades = _evaluate_window_soft(joined, spreads, cells, cutoff, next_cutoff,
+                                              regime_mode=regime_mode)
+        log.info("  evaluated %d records", len(window_trades))
+
+        winners: dict[str, int] = {}
+        for _, c in cells.items():
+            winners[c["winner"]] = winners.get(c["winner"], 0) + 1
+        refit_meta.append({
+            "cutoff":     cutoff.strftime("%Y-%m-%d"),
+            "window_end": next_cutoff.strftime("%Y-%m-%d"),
+            "n_cells":    len(cells),
+            "winners":    winners,
+            "n_records":  len(window_trades),
+        })
+        all_trades.extend(window_trades)
+    return all_trades, refit_meta
+
+
+def _aggregate_soft(trades: list[dict], refit_meta: list[dict], regime_mode: str) -> dict:
+    """Same shape as `_aggregate_mode` plus a soft-specific diagnostics block."""
+    blk = _aggregate_mode(trades, refit_meta, f"{regime_mode}_soft")
+    # Soft-specific diagnostics: mean top-weight (1.0 ≈ hard) + average #cells used.
+    top_w = [t.get("soft_top_w") for t in trades if t.get("soft_top_w") is not None]
+    n_cells = [t.get("soft_n_cells") for t in trades if t.get("soft_n_cells") is not None]
+    blk["soft_diagnostics"] = {
+        "mean_top_weight":     round(float(np.mean(top_w)),     4) if top_w   else None,
+        "median_top_weight":   round(float(np.median(top_w)),   4) if top_w   else None,
+        "mean_cells_blended":  round(float(np.mean(n_cells)),   2) if n_cells else None,
+        "median_cells_blended":int(np.median(n_cells))                if n_cells else None,
+        "bandwidths":          dict(__import__("research.softprob", fromlist=["AXIS_BANDWIDTHS"]).AXIS_BANDWIDTHS),
+        "note":                "Phase 2.8.5 — softprob.axis_softprob blends per-(spread,regime) cell predictions by per-day posterior. Hard pooled/composite recover as h→0; flat-prior global recovers as h→∞. Bandwidths picked from trader thresholds, not tuned to PnL.",
+    }
+    return blk
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Regime-unaware baseline (rolling z-score)
 # ─────────────────────────────────────────────────────────────────────────────
 def _baseline_trades(
@@ -501,7 +978,10 @@ def _by_curve_axis(trades: list[dict], cost_fn=None) -> dict:
     """Roll regime label up to its CURVE axis bucket (CONTANGO/NEUTRAL/BACK)."""
     rolled = []
     for t in trades:
-        regime = t.get("regime", "")
+        # Gated-blend baseline-fallback rows have regime=None when no pooled
+        # cell was trained for (date, spread) — e.g. WTI before 2021. _by()
+        # maps the empty bucket to "UNKNOWN".
+        regime = t.get("regime") or ""
         curve  = regime.split("/", 1)[0] if "/" in regime else regime
         rolled.append({**t, "curve_axis": curve})
     return _by(rolled, "curve_axis", cost_fn=cost_fn)
@@ -852,6 +1332,21 @@ def run_walkforward() -> dict:
     composite_block, composite_trades = _run_mode(joined, spreads, refit_ts, regime_mode="composite")
     pooled_block,    pooled_trades    = _run_mode(joined, spreads, refit_ts, regime_mode="pooled")
 
+    # Phase 2.8.4 — global model with regime-as-feature (one model per spread).
+    log.info("Phase 2.8.4 — global regime-as-feature leg...")
+    global_trades, global_meta = _produce_global_trades(joined, spreads, refit_ts)
+    global_block = _aggregate_global(global_trades, global_meta)
+
+    # Phase 2.8.5 — soft pooled posterior. Composite-soft is opt-in
+    # (`python -m research.walkforward --soft-only --composite`) because
+    # retraining the 27-cell grid + soft-blending dominates wall time; the
+    # pooled variant tests the same hypothesis on the cheaper grid.
+    log.info("Phase 2.8.5 — pooled_soft leg...")
+    pooled_soft_trades, pooled_soft_meta = _produce_soft_trades(
+        joined, spreads, refit_ts, regime_mode="pooled"
+    )
+    pooled_soft_block = _aggregate_soft(pooled_soft_trades, pooled_soft_meta, "pooled")
+
     # Baseline: regime-UNAWARE 252d rolling z-score on each spread
     if refit_ts:
         baseline_start = refit_ts[0]
@@ -942,6 +1437,8 @@ def run_walkforward() -> dict:
         "composite_net":  _net_block(composite_trades),
         "pooled_net":     _net_block(pooled_trades),
         "baseline_net":   _net_block(baseline),
+        "global_net":     _net_block(global_trades),
+        "pooled_soft_net":_net_block(pooled_soft_trades),
         "gated_blend_net":_net_block(gated_trades, include_source=True),
         "sized_blend_net":{
             mode: _net_block(_apply_sizing(gated_trades, mode, refit_ts, kelly_lookup),
@@ -952,6 +1449,18 @@ def run_walkforward() -> dict:
     # Headline lift NET (gated vs baseline) at the by-spread + overall level
     costs_block["lift_gated_vs_baseline_net"] = _lift(
         costs_block["gated_blend_net"],
+        costs_block["baseline_net"]["by_spread"],
+        costs_block["baseline_net"]["overall"],
+    )
+    # Phase 2.8.4 — global vs baseline NET lift
+    costs_block["lift_global_vs_baseline_net"] = _lift(
+        costs_block["global_net"],
+        costs_block["baseline_net"]["by_spread"],
+        costs_block["baseline_net"]["overall"],
+    )
+    # Phase 2.8.5 — soft pooled vs baseline NET lift
+    costs_block["lift_pooled_soft_vs_baseline_net"] = _lift(
+        costs_block["pooled_soft_net"],
         costs_block["baseline_net"]["by_spread"],
         costs_block["baseline_net"]["overall"],
     )
@@ -967,9 +1476,11 @@ def run_walkforward() -> dict:
     # run without retraining the ~3h walk-forward. Gated tape is already saved
     # above.
     for path, tape in (
-        (_COMPOSITE_TRADES_FILE, composite_trades),
-        (_POOLED_TRADES_FILE,    pooled_trades),
-        (_BASELINE_TRADES_FILE,  baseline),
+        (_COMPOSITE_TRADES_FILE,     composite_trades),
+        (_POOLED_TRADES_FILE,        pooled_trades),
+        (_BASELINE_TRADES_FILE,      baseline),
+        (_GLOBAL_TRADES_FILE,        global_trades),
+        (_POOLED_SOFT_TRADES_FILE,   pooled_soft_trades),
     ):
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -1002,7 +1513,7 @@ def run_walkforward() -> dict:
             "z_entry":       Z_ENTRY,
             "rolling_win":   ROLLING_WIN,
             "refit_dates":   REFIT_DATES,
-            "regime_modes":  ["composite", "pooled", "gated_blend", "sized_blend"],
+            "regime_modes":  ["composite", "pooled", "gated_blend", "sized_blend", "global", "pooled_soft"],
             "gated_blend": {
                 "regime":   GATED_REGIME,
                 "winners":  sorted(GATED_WINNERS),
@@ -1025,11 +1536,17 @@ def run_walkforward() -> dict:
         "baseline_overall":   base_overall,
         "baseline_by_spread": base_by_spread,
         "n_baseline":         len(baseline),
+        # --- Phase 2.8.4 — one global model per spread w/ regime-as-feature ---
+        "global":             global_block,
+        # --- Phase 2.8.5 — soft pooled posterior (logistic transitions at threshold) ---
+        "pooled_soft":        pooled_soft_block,
         # --- Phase 2.8.6 transaction-cost NET aggregates ---
         "costs":              costs_block,
         "lift_composite_vs_baseline":   _lift(composite_block,       base_by_spread, base_overall),
         "lift_pooled_vs_baseline":      _lift(pooled_block,          base_by_spread, base_overall),
         "lift_gated_vs_baseline":       _lift(gated_block,           base_by_spread, base_overall),
+        "lift_global_vs_baseline":      _lift(global_block,          base_by_spread, base_overall),
+        "lift_pooled_soft_vs_baseline": _lift(pooled_soft_block,     base_by_spread, base_overall),
         "lift_sized_half_vs_baseline":  _lift(sized_blocks["half"],  base_by_spread, base_overall),
         "lift_sized_kelly_vs_baseline": _lift(sized_blocks["kelly"], base_by_spread, base_overall),
         "lift_sized_half_vs_gated":     _lift(sized_blocks["half"],  gated_block.get("by_spread", {}), gated_block.get("overall", {})),
@@ -1082,8 +1599,251 @@ def load_report() -> dict | None:
     return None
 
 
+def run_global_only() -> dict:
+    """
+    Phase 2.8.4 — train + evaluate ONLY the global (regime-as-feature) leg
+    and merge the result into the existing walkforward_report.json. Lets us
+    add the new leg without re-running the ~3-h full walk-forward, since
+    composite / pooled / baseline / gated / sized blocks are unaffected.
+    """
+    from research.features        import build_features
+    from research.spread_universe import build_spread_series
+
+    existing = load_report()
+    if existing is None:
+        raise RuntimeError(
+            "walkforward_report.json missing — run the full walk-forward first "
+            "(python -m backend.research.walkforward), then re-run with --global-only "
+            "if you only want to refresh the global leg."
+        )
+
+    log.info("Building feature matrix + spread universe...")
+    features = build_features()
+    spreads  = build_spread_series()
+    joined   = features.join(spreads, how="inner")
+
+    refit_ts = [pd.Timestamp(d) for d in REFIT_DATES]
+    refit_ts = [t for t in refit_ts if t >= joined.index.min() and t <= joined.index.max()]
+
+    global_trades, global_meta = _produce_global_trades(joined, spreads, refit_ts)
+    global_block = _aggregate_global(global_trades, global_meta)
+    global_net   = _net_block(global_trades)
+
+    # Persist raw trades.
+    try:
+        _GLOBAL_TRADES_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(_GLOBAL_TRADES_FILE, "w") as f:
+            json.dump(global_trades, f, default=str)
+        log.info("  saved %s (%d rows)", _GLOBAL_TRADES_FILE.name, len(global_trades))
+    except Exception as exc:
+        log.warning("  failed to save %s: %s", _GLOBAL_TRADES_FILE.name, exc)
+
+    base_by_spread = existing.get("baseline_by_spread") or {}
+    base_overall   = existing.get("baseline_overall")   or {}
+    base_net       = (existing.get("costs") or {}).get("baseline_net") or {}
+
+    existing["global"] = global_block
+    existing["lift_global_vs_baseline"] = _lift(global_block, base_by_spread, base_overall)
+
+    costs = existing.setdefault("costs", {})
+    costs["global_net"] = global_net
+    costs["lift_global_vs_baseline_net"] = _lift(
+        global_net,
+        base_net.get("by_spread", {}),
+        base_net.get("overall", {}),
+    )
+
+    # Update config record so consumers know global is part of the report now.
+    cfg = existing.setdefault("config", {})
+    modes = cfg.get("regime_modes") or []
+    if "global" not in modes:
+        cfg["regime_modes"] = list(modes) + ["global"]
+
+    # Stamp the merge so the regenerated PDF reflects the new run, not the
+    # original 2026-06-15 timestamp.
+    existing["generated_at"] = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+
+    _REPORT_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(_REPORT_FILE, "w") as f:
+        json.dump(existing, f, indent=2, default=str)
+    log.info("Saved walk-forward report (global leg merged) → %s", _REPORT_FILE)
+    return existing
+
+
+def run_soft_only(modes: tuple[str, ...] = ("pooled",)) -> dict:
+    """
+    Phase 2.8.5 — produce ONLY the soft-posterior leg(s) and merge into the
+    existing walkforward_report.json. Per-cell models aren't persisted across
+    runs, so we retrain via `_train_cells_through` at each refit and evaluate
+    with `_evaluate_window_soft`. Composite mode is heavier (27 cells × 6
+    spreads × 34 refits ≈ 5,500 cell trainings vs ~600 for pooled), so the
+    default is pooled only — pass modes=("pooled","composite") to do both.
+    """
+    from research.features        import build_features
+    from research.spread_universe import build_spread_series
+
+    for m in modes:
+        if m not in ("pooled", "composite"):
+            raise ValueError(f"unknown soft regime_mode {m!r}")
+
+    existing = load_report()
+    if existing is None:
+        raise RuntimeError(
+            "walkforward_report.json missing — run the full walk-forward first "
+            "(python -m backend.research.walkforward), then re-run with "
+            "--soft-only if you only want to refresh the soft leg."
+        )
+
+    log.info("Building feature matrix + spread universe...")
+    features = build_features()
+    spreads  = build_spread_series()
+    joined   = features.join(spreads, how="inner")
+    log.info("  features: %d rows  spreads: %d rows  joined: %d rows",
+             len(features), len(spreads), len(joined))
+
+    refit_ts = [pd.Timestamp(d) for d in REFIT_DATES]
+    refit_ts = [t for t in refit_ts if t >= joined.index.min() and t <= joined.index.max()]
+
+    base_by_spread = existing.get("baseline_by_spread") or {}
+    base_overall   = existing.get("baseline_overall")   or {}
+    base_net       = (existing.get("costs") or {}).get("baseline_net") or {}
+    costs          = existing.setdefault("costs", {})
+    cfg            = existing.setdefault("config", {})
+    cfg_modes      = list(cfg.get("regime_modes") or [])
+
+    tape_paths = {
+        "pooled":    _POOLED_SOFT_TRADES_FILE,
+        "composite": _COMPOSITE_SOFT_TRADES_FILE,
+    }
+    summary: dict[str, dict] = {}
+
+    for m in modes:
+        log.info("Phase 2.8.5 — %s_soft leg...", m)
+        trades, meta = _produce_soft_trades(joined, spreads, refit_ts, regime_mode=m)
+        block = _aggregate_soft(trades, meta, regime_mode=m)
+        net   = _net_block(trades)
+
+        key      = f"{m}_soft"
+        net_key  = f"{m}_soft_net"
+        lift_key = f"lift_{m}_soft_vs_baseline"
+        lift_net_key = f"lift_{m}_soft_vs_baseline_net"
+
+        existing[key]      = block
+        existing[lift_key] = _lift(block, base_by_spread, base_overall)
+        costs[net_key]     = net
+        costs[lift_net_key] = _lift(net, base_net.get("by_spread", {}), base_net.get("overall", {}))
+
+        if key not in cfg_modes:
+            cfg_modes.append(key)
+
+        # Persist raw tape so future cost re-aggregations don't reretain.
+        path = tape_paths[m]
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with open(path, "w") as f:
+                json.dump(trades, f, default=str)
+            log.info("  saved %s (%d rows)", path.name, len(trades))
+        except Exception as exc:
+            log.warning("  failed to save %s: %s", path.name, exc)
+
+        summary[m] = {
+            "gross_sharpe": block["overall"].get("sharpe"),
+            "net_sharpe":   net["overall"].get("sharpe"),
+            "n_signals":    net["overall"].get("n_signals"),
+        }
+
+    cfg["regime_modes"] = cfg_modes
+
+    # Stamp the merge so the regenerated PDF reflects the new run.
+    existing["generated_at"] = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+
+    _REPORT_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(_REPORT_FILE, "w") as f:
+        json.dump(existing, f, indent=2, default=str)
+    log.info("Saved walk-forward report (soft leg merged) → %s", _REPORT_FILE)
+    return existing
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    if "--soft-only" in sys.argv:
+        soft_modes: tuple[str, ...] = ("pooled",)
+        if "--composite" in sys.argv:
+            soft_modes = ("pooled", "composite")
+        rpt = run_soft_only(modes=soft_modes)
+        base_net = rpt["costs"]["baseline_net"]["overall"]
+        pool_net = rpt["costs"]["pooled_net"]["overall"]
+        gate_net = rpt["costs"]["gated_blend_net"]["overall"]
+        gl_net   = rpt["costs"]["global_net"]["overall"]
+        print()
+        print("=== Phase 2.8.5 — soft regime probabilities ===")
+        for m in soft_modes:
+            blk     = rpt[f"{m}_soft"]["overall"]
+            net     = rpt["costs"][f"{m}_soft_net"]["overall"]
+            diag    = rpt[f"{m}_soft"].get("soft_diagnostics", {})
+            print(f"  [{m}_soft]")
+            print(f"    records              {rpt[f'{m}_soft']['n_trades']:>6}")
+            print(f"    signals fired        {blk['n_signals']:>6}")
+            print(f"    hit rate             {blk['hit_rate']}")
+            print(f"    GROSS Sharpe         {blk['sharpe']}")
+            print(f"    NET   Sharpe         {net['sharpe']}")
+            print(f"    max drawdown (gross) {blk['max_drawdown']}")
+            print(f"    soft top-weight mean {diag.get('mean_top_weight')}  cells blended mean {diag.get('mean_cells_blended')}")
+        print()
+        print("=== NET-Sharpe verdict (Phase 2.8.5 vs 2026-06-15 headline) ===")
+        print(f"  baseline             {base_net['sharpe']:+.3f}")
+        print(f"  global  (Phase 2.8.4){gl_net['sharpe']:+.3f}")
+        print(f"  gated_blend          {gate_net['sharpe']:+.3f}")
+        print(f"  pooled  (hard)       {pool_net['sharpe']:+.3f}")
+        for m in soft_modes:
+            net = rpt["costs"][f"{m}_soft_net"]["overall"]
+            print(f"  {m}_soft           {net['sharpe']:+.3f}")
+        print()
+        print("=== Per-spread NET Sharpe — soft vs baseline ===")
+        bnet_sp = rpt["costs"]["baseline_net"]["by_spread"]
+        for m in soft_modes:
+            snet_sp = rpt["costs"][f"{m}_soft_net"]["by_spread"]
+            print(f"  [{m}_soft]")
+            for sp in sorted(set(list(snet_sp.keys()) + list(bnet_sp.keys()))):
+                s = (snet_sp.get(sp) or {}).get("sharpe")
+                b = (bnet_sp.get(sp) or {}).get("sharpe")
+                print(f"    {sp:<14}  soft={s}  baseline={b}")
+        sys.exit(0)
+
+    if "--global-only" in sys.argv:
+        rpt = run_global_only()
+        gl = rpt["global"]["overall"]
+        gl_net = rpt["costs"]["global_net"]["overall"]
+        base = rpt["baseline_overall"]
+        base_net = rpt["costs"]["baseline_net"]["overall"]
+        gate = rpt["gated_blend"]["overall"]
+        gate_net = rpt["costs"]["gated_blend_net"]["overall"]
+        pool = rpt["pooled"]["overall"]
+        pool_net = rpt["costs"]["pooled_net"]["overall"]
+        print()
+        print("=== Phase 2.8.4 — Global model (regime-as-feature) ===")
+        print(f"  records              {rpt['global']['n_trades']:>6}")
+        print(f"  signals fired        {gl['n_signals']:>6}")
+        print(f"  hit rate             {gl['hit_rate']}")
+        print(f"  mean PnL             {gl['mean_pnl']}")
+        print(f"  GROSS Sharpe         {gl['sharpe']}")
+        print(f"  NET  Sharpe          {gl_net['sharpe']}")
+        print(f"  max drawdown (gross) {gl['max_drawdown']}")
+        print()
+        print("=== NET-Sharpe verdict (Phase 2.8.4 vs 2026-06-15 headline) ===")
+        print(f"  baseline             {base_net['sharpe']:+.3f}")
+        print(f"  gated_blend          {gate_net['sharpe']:+.3f}")
+        print(f"  pooled               {pool_net['sharpe']:+.3f}")
+        print(f"  global (Phase 2.8.4) {gl_net['sharpe']:+.3f}")
+        print()
+        print("=== Per-spread NET Sharpe — global vs baseline ===")
+        gnet_sp = rpt["costs"]["global_net"]["by_spread"]
+        bnet_sp = rpt["costs"]["baseline_net"]["by_spread"]
+        for sp in sorted(set(list(gnet_sp.keys()) + list(bnet_sp.keys()))):
+            g  = (gnet_sp.get(sp) or {}).get("sharpe")
+            b  = (bnet_sp.get(sp) or {}).get("sharpe")
+            print(f"  {sp:<14}  global={g}  baseline={b}")
+        sys.exit(0)
     rpt = run_walkforward()
     base = rpt["baseline_overall"]
     print()
