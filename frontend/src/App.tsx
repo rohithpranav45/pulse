@@ -78,7 +78,7 @@ export default function App() {
             <div
               aria-hidden
               className="absolute bottom-0 left-0 right-0 h-px pointer-events-none"
-              style={{ background: 'linear-gradient(90deg, transparent, rgba(212,175,55,0.32) 12%, rgba(255,255,255,0.05) 50%, rgba(212,175,55,0.32) 88%, transparent)' }}
+              style={{ background: 'linear-gradient(90deg, transparent, var(--border-accent) 12%, var(--hairline) 50%, var(--border-accent) 88%, transparent)' }}
             />
             <div className="flex items-baseline gap-4">
               <motion.h1

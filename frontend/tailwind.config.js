@@ -4,35 +4,38 @@ export default {
   theme: {
     extend: {
       colors: {
+        /* All colors resolve to CSS variables defined in index.css (dark in
+           :root, light under [data-theme="light"]), so flipping the theme
+           re-skins the whole app. Solid tokens use the rgb(var(--x) /
+           <alpha-value>) pattern so Tailwind /opacity utilities keep working;
+           alpha-baked tokens (borders, *-soft, *-ring) are full-color vars. */
         bg: {
-          /* Near-black palette — the dashboard's "void". Each step up is small
-             so panels read as floating glass, not stacked cards. */
-          DEFAULT: '#04060c',   // page void
-          elev:    '#070a13',   // chrome (sidebar, topbar)
-          surface: '#0b101d',   // panel surface
-          card:    '#0f1626',   // nested card inside a panel
-          hover:   '#131b2e',
+          DEFAULT: 'rgb(var(--bg-default) / <alpha-value>)',   // page void
+          elev:    'rgb(var(--bg-elev) / <alpha-value>)',      // chrome (sidebar, topbar)
+          surface: 'rgb(var(--bg-surface) / <alpha-value>)',   // panel surface
+          card:    'rgb(var(--bg-card) / <alpha-value>)',      // nested card
+          hover:   'rgb(var(--bg-hover) / <alpha-value>)',
         },
         border: {
-          DEFAULT: 'rgba(255,255,255,0.06)',  // hairline default
-          strong:  'rgba(255,255,255,0.10)',
-          accent:  'rgba(212,175,55,0.32)',
+          DEFAULT: 'var(--border-default)',  // hairline default
+          strong:  'var(--border-strong)',
+          accent:  'var(--border-accent)',
         },
         text: {
-          primary: '#eef2f9',
-          secondary: '#aebccf',
-          tertiary: '#6b809e',
-          muted: '#4a5b78',
+          primary:   'rgb(var(--text-primary) / <alpha-value>)',
+          secondary: 'rgb(var(--text-secondary) / <alpha-value>)',
+          tertiary:  'rgb(var(--text-tertiary) / <alpha-value>)',
+          muted:     'rgb(var(--text-muted) / <alpha-value>)',
         },
-        bull: { DEFAULT: '#10d997', soft: 'rgba(16,217,151,0.12)', ring: 'rgba(16,217,151,0.35)' },
-        bear: { DEFAULT: '#ff4d6d', soft: 'rgba(255,77,109,0.12)', ring: 'rgba(255,77,109,0.35)' },
-        neut: { DEFAULT: '#f5a623', soft: 'rgba(245,166,35,0.12)', ring: 'rgba(245,166,35,0.35)' },
-        gold: { DEFAULT: '#d4af37', bright: '#f0cf5f', soft: 'rgba(212,175,55,0.12)' },
+        bull: { DEFAULT: 'rgb(var(--bull) / <alpha-value>)', soft: 'var(--bull-soft)', ring: 'var(--bull-ring)' },
+        bear: { DEFAULT: 'rgb(var(--bear) / <alpha-value>)', soft: 'var(--bear-soft)', ring: 'var(--bear-ring)' },
+        neut: { DEFAULT: 'rgb(var(--neut) / <alpha-value>)', soft: 'var(--neut-soft)', ring: 'var(--neut-ring)' },
+        gold: { DEFAULT: 'rgb(var(--gold) / <alpha-value>)', bright: 'rgb(var(--gold-bright) / <alpha-value>)', soft: 'var(--gold-soft)' },
         accent: {
-          blue: '#4d8eff',
-          cyan: '#22d3ee',
-          purple: '#a78bfa',
-          pink: '#f472b6',
+          blue:   'rgb(var(--accent-blue) / <alpha-value>)',
+          cyan:   'rgb(var(--accent-cyan) / <alpha-value>)',
+          purple: 'rgb(var(--accent-purple) / <alpha-value>)',
+          pink:   'rgb(var(--accent-pink) / <alpha-value>)',
         },
       },
       fontFamily: {
