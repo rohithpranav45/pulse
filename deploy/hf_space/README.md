@@ -6,7 +6,7 @@ colorTo: gray
 sdk: docker
 app_port: 7860
 pinned: false
-short_description: Live energy-trading dashboard, regime engine & A/B paper book
+short_description: Live energy-trading dashboard + regime engine + paper book
 ---
 
 # PULSE — Energy Intelligence Terminal
