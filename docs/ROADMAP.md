@@ -67,10 +67,17 @@ CLOSED filter + GENERATE button. API methods `regimeSignals` / `regimeLive` / `r
 `npm run build` clean; browser-verified (2 live Brent signals render, GENERATE round-trips, no console
 errors). **Phase 3.1 functionally complete** — remaining items are operational (L2) + WTI enablement.
 
-**L2 — Confirm with mentor + operational hardening.** `[S · owner action]` (1) The recorder is currently
-**intermittent** (share file frozen 06-12 11:06) — confirm it'll stream continuously. (2) The Oracle box
-can't see `I:\` → decide: run live engine on an office PC, or sync the feed to the cloud. (3) Retrain WTI
-on the real feed before enabling `include_wti` (models are synth-trained).
+**L2 — Live ingestion fix + operational hardening.** ✅ **INGESTION DONE 2026-06-16** — the live engine now
+runs on the **actual** `I:\` feed from this office desk. The blocker was reading the recorder's live WAL db
+*in place over the SMB share* → `database disk image is malformed` (and, under the old code, an
+uninterruptible thread hang). Fixed via `live_feed._open_feed_local` / `_snapshot_feed_locally` (copy
+`.db` + best-effort `-wal`, never the stale `-shm`, to a local temp dir; integrity-guarded, memoised).
+Verified end-to-end on live 06-16 data: BACK/LOW/STRESSED, top Brent fly BUY z −3.73 conf 0.96, 4 signals
+logged + API-served; 9 invariants green. **Remaining (owner/follow-up):** (1) confirm the recorder keeps
+streaming continuously (currently one ever-appended file). (2) **Reboot the desk to reclaim port 5000**
+(an unkillable zombie from the old hanging code squats it; run on `PORT=5050` meanwhile). (3) Pin sklearn
+or retrain — pkls are sklearn-1.7.0, desk runs 1.9.0 (`InconsistentVersionWarning`). (4) Retrain WTI on the
+real feed before enabling `include_wti` (still synth-trained; `CL_*` live tables already present).
 
 ---
 
