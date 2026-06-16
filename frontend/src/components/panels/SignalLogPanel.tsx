@@ -207,7 +207,7 @@ export function SignalLogPanel() {
                           tone={s.direction === 'BUY' ? 'bull' : 'bear'}
                           icon={s.direction === 'BUY' ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />}
                         >
-                          {s.direction}
+                          {s.direction === 'BUY' ? 'LONG' : 'SHORT'}
                         </Chip>
                       </td>
                       <td className="py-1.5 pr-2 text-text-secondary whitespace-nowrap">{s.regime}</td>

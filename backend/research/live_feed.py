@@ -47,8 +47,11 @@ from __future__ import annotations
 import logging
 import os
 import re
+import shutil
 import sqlite3
 import sys
+import tempfile
+import time
 from datetime import date
 from pathlib import Path
 
@@ -105,19 +108,80 @@ def latest_feed_file(feed_dir: Path | None = None) -> Path | None:
     return files[-1]
 
 
-def _connect_ro_wal(f: Path) -> sqlite3.Connection:
-    """
-    Open a feed DB read-only while still seeing the live writer's WAL.
+# ---------------------------------------------------------------------------
+# Local-snapshot ingestion.
+#
+# The recorder writes the feed DB live (a main .db plus a -wal it actively
+# appends). Reading that file *in place over the SMB share* raises
+# "database disk image is malformed": SQLite's WAL relies on a memory-mapped
+# -shm index that does not work over network filesystems, and the recorder's
+# on-share -shm is stale relative to its -wal. So we snapshot the feed to local
+# disk first and read the copy.
+#
+# Recipe (validated against the live recorder):
+#   • copy the main .db          — required; last-checkpointed image, integrity-ok
+#   • best-effort copy the -wal  — fresher bars; SQLite rebuilds the -shm on open
+#   • NEVER copy the on-share -shm (stale → corrupts the read)
+#   • never carry a previous run's -wal/-shm forward (same stale-WAL hazard)
+# If the -wal is momentarily locked by the writer we fall back to the .db alone
+# (a checkpointed image that is at worst one checkpoint-interval behind).
+# ---------------------------------------------------------------------------
 
-    Tries `mode=ro` first (read-only, WAL-aware via the -shm the recorder
-    maintains). Falls back to a normal connection if the share rejects the URI.
-    We deliberately avoid `immutable=1` — it skips the WAL, so we'd read only
-    the checkpointed fragment and miss the most-recent live bars.
+_SCRATCH = Path(tempfile.gettempdir()) / "pulse_livefeed"
+_SNAP_TTL = 20.0                 # s — dedupe re-copies across reads in one sweep
+_SNAP_MEMO: tuple | None = None  # (key, monotonic_ts, local_path)
+
+
+def _snapshot_feed_locally(f: Path, *, force: bool = False, with_wal: bool = True) -> Path:
+    """Copy the live feed DB to local disk and return the local .db path.
+
+    Best-effort includes the writer's -wal (fresher bars) but never its -shm,
+    and always clears any stale local sidecars first. Memoised for _SNAP_TTL
+    seconds so the several reads in one sweep (CO + CL + perf) copy only once.
     """
+    global _SNAP_MEMO
+    st = f.stat()
+    wal = Path(str(f) + "-wal")
+    wsig = (wal.stat().st_mtime_ns, wal.stat().st_size) if wal.exists() else (0, 0)
+    key = (str(f), st.st_mtime_ns, st.st_size, *wsig)
+    now = time.monotonic()
+    if not force and _SNAP_MEMO and _SNAP_MEMO[0] == key and now - _SNAP_MEMO[1] < _SNAP_TTL:
+        return _SNAP_MEMO[2]
+
+    _SCRATCH.mkdir(parents=True, exist_ok=True)
+    local = _SCRATCH / f.name
+    for ext in ("-wal", "-shm"):                          # never reuse stale sidecars
+        try:
+            Path(str(local) + ext).unlink()
+        except OSError:
+            pass
+    shutil.copy2(f, local)                                # main db (required)
+    if with_wal:
+        try:
+            shutil.copy2(wal, Path(str(local) + "-wal"))  # fresher tail; shm rebuilt on open
+        except (OSError, PermissionError):
+            pass                                          # writer holds the lock → .db only
+    _SNAP_MEMO = (key, now, local)
+    return local
+
+
+def _open_feed_local(f: Path) -> sqlite3.Connection:
+    """Open a local snapshot of the live feed file, integrity-guarded.
+
+    A torn copy (recorder mid-write) is rare but possible; on a malformed read
+    we re-snapshot once with the -wal forced off — the .db alone is always a
+    consistent checkpointed image.
+    """
+    local = _snapshot_feed_locally(f)
+    conn = sqlite3.connect(str(local), timeout=5.0)
     try:
-        return sqlite3.connect(f"file:{f}?mode=ro", uri=True, timeout=5.0)
-    except sqlite3.OperationalError:
-        return sqlite3.connect(str(f), timeout=5.0)
+        if conn.execute("PRAGMA quick_check").fetchone()[0] == "ok":
+            return conn
+    except sqlite3.DatabaseError:
+        pass
+    conn.close()
+    local = _snapshot_feed_locally(f, force=True, with_wal=False)
+    return sqlite3.connect(str(local), timeout=5.0)
 
 
 def _expiry_sort_key(month_code: str, yy: str) -> date:
@@ -224,12 +288,10 @@ def get_live_snapshot(product: str = "CO", feed_dir: Path | None = None) -> dict
     if f is None:
         return {"available": False, "error": f"no live feed file under {resolve_feed_dir()}"}
 
-    # Read-only connection that STILL sees the live writer's WAL. The recorder
-    # keeps most recent bars in the -wal file; `immutable=1` would skip it and
-    # we'd read only the (tiny) checkpointed fragment, so we must NOT use it.
-    # Plain `mode=ro` replays/reads the WAL via the -shm the writer maintains.
-    # Fall back to a normal connection if the share rejects the ro URI.
-    conn = _connect_ro_wal(f)
+    # Read from a local snapshot — reading the recorder's live WAL db in place
+    # over the SMB share raises "database disk image is malformed" (WAL/-shm
+    # semantics don't work over a network filesystem). See _open_feed_local.
+    conn = _open_feed_local(f)
 
     try:
         contracts = list_contracts(conn, prod)

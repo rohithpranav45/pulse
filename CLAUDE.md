@@ -7,13 +7,14 @@ spread engine), and serves a React dashboard with a paper-trading book.
 - **Stack:** Flask 3 · React 18 + Vite + Tailwind · SQLite (cache + paper book) ·
   DuckDB/Parquet over a 3.5 GB `/Data` desk feed · sklearn + XGBoost/LightGBM/CatBoost
 - **Run (local):** `python start.py` from the repo root → http://127.0.0.1:5000
-- **Last updated:** 2026-06-15 (Phase 3.E — live on Hugging Face Spaces)
-- **Live:** https://rohithpranav45-pulse.hf.space (free HF Space, A/B book accumulating 24/7)
+- **Last updated:** 2026-06-16 (Phase 4 — dashboard rebuild planned · HF regime root-cause found)
+- **Live:** https://rohithpranav45-pulse.hf.space (free HF Space, A/B book accumulating 24/7 — **regime endpoints currently failing**, see §1 below)
 
 > 🧭 **Three docs, one per tense:**
 > **this file = present** (current state · how to run · architecture · gotchas) ·
 > [`docs/ROADMAP.md`](docs/ROADMAP.md) **= future** (pending tasks · timeline · copy-paste session prompts) ·
-> [`docs/PHASE_HISTORY.md`](docs/PHASE_HISTORY.md) **= past** (full sprint-by-sprint log).
+> [`docs/PHASE_HISTORY.md`](docs/PHASE_HISTORY.md) **= past** (full sprint-by-sprint log) ·
+> [`docs/DASHBOARD_REBUILD.md`](docs/DASHBOARD_REBUILD.md) **= active plan** (Phase 4 — 9 tabs → 6 tabs, one phase per session).
 
 ---
 
@@ -93,6 +94,29 @@ spread engine), and serves a React dashboard with a paper-trading book.
   Build files + runbook: `deploy/hf_space/` + `deploy/HF_DEPLOY.md`. (Supersedes the Oracle-ARM plan,
   which stayed capacity-blocked after 400+ retries.)
 
+### 🔄 In progress — **Phase 4: dashboard rebuild (9 tabs → 6 tabs)** (planning, 2026-06-16)
+Full plan: [`docs/DASHBOARD_REBUILD.md`](docs/DASHBOARD_REBUILD.md). Target structure: **DESK · CHARTS · REGIME ·
+PAPER · SIGNAL LOG · MARKETS**. Charts tab kept as-is per user. Cutting Signal / Intelligence /
+Fundamentals / Playbook / Spreads tabs (their useful panels relocate). One phase per session, additive
+before deletive. Local-only first; HF deploy frozen until mentor verdict on strategy direction is in.
+Next session = Phase 4.A (new DESK landing view + risk panel). Strategy + architecture changes
+deliberately deferred (mentor decision pending + demo-risk).
+
+### 🚨 HF Spaces regime endpoints broken (root cause found, 2026-06-16)
+- `https://rohithpranav45-pulse.hf.space/api/regime/recommendation` and `/api/regime/backtest` return
+  `{"available": false}` silently. `/api/regime/drill/<spread>` surfaces the real error:
+  **`No module named 'joblib'`**.
+- Root cause: `requirements.txt` shipped without `scikit-learn` pinned, so the HF image installed
+  neither sklearn nor its transitive `joblib`. Every `pkl` load via `joblib.load` raises ImportError,
+  caught by `safe_fetch`, masked as "available: false". `/api/regime` (current regime, no pkls) and
+  `/api/regime/walkforward` + `/api/regime/ab` (cached JSON / SQLite) still work — that's why the
+  failure looked partial.
+- **Fix already in local working tree** (this session): added `scikit-learn==1.7.0` to `requirements.txt`.
+  When the user is ready, push to `main` → HF auto-rebuilds with sklearn + joblib → all regime
+  endpoints recover. Until then, the dashboard's Regime tab shows partial data only.
+- User-deferred: pushing was held back so the HF Space stays stable as a presentation backup
+  (today, 2026-06-16). Local desk version is what's being demoed.
+
 ### 🔄 In progress — **Phase 3.1: live analysis engine + signal log** (mentor directive, 2026-06-15)
 Mentor asked everyone past the historical-validation phase to **run the framework on live market
 data** and **add a dashboard signal log** (timestamp · regime · instrument · rationale · confidence ·
@@ -114,14 +138,31 @@ office share `I:\Public\Summer Interns Energy\DB\` (the shared path; override wi
     `PULSE_LIVE_SIGNALS_DISABLED=1`.
   - Verified end-to-end on the captured weekend file: live curve M1-M12 +7.35 → **BACK** regime, top live
     signal Brent fly BUY (z −4.33, XGBoost, conf 0.96). 9 invariants still green; daily path unaffected.
+  - **✅ 2026-06-16 — now running on the ACTUAL live feed from this office desk** (both laptop-era blockers
+    gone: this desk sees `I:\`, and the recorder is streaming again — `bars_15min_*.db` advancing, latest
+    bar within the hour). Live read on 06-16: curve M1-M12 +7.25 → **BACK/LOW/STRESSED**, top live signal
+    **Brent fly BUY (z −3.73, XGBoost, conf 0.96)**; 4 signals logged + served by the API. **The fix that
+    made it live (gotcha 14):** reading the recorder's WAL db *in place over the SMB share* raises
+    `database disk image is malformed` (WAL/`-shm` semantics don't work over a network filesystem). New
+    `live_feed._snapshot_feed_locally` / `_open_feed_local` copy the `.db` (+ best-effort `-wal`, never the
+    stale `-shm`) to a local temp dir and read the copy — integrity-guarded, memoised per sweep. Replaces
+    the old `_connect_ro_wal` (which also *hung* a thread uninterruptibly on certain SMB/WAL states).
   - **✅ Dashboard Signal Log tab** (`views/SignalLogView.tsx` + `panels/SignalLogPanel.tsx`, sidebar key 9) —
     columns timestamp · instrument · dir · regime · confidence · entry→fair(z) · subsequent perf, with ALL/
     OPEN/CLOSED filter + GENERATE button. `api.regimeSignals/regimeLive/regimeSignalsGenerate`. Built +
     browser-verified (2 live Brent signals render; GENERATE round-trips). Phase 3.1 functionally complete.
-- **⚠️ Operational findings (relay to mentor):** (1) the share file is currently **stale/frozen** (3 bars,
-  06-12 11:06) — the recorder isn't streaming continuously; the full weekend lives only in the Downloads
-  copy. (2) The pending **Oracle box can't see `I:\`** → the live engine must run on an office PC (or the
-  feed be synced). Dev pattern: `PULSE_LIVE_FEED_DIR` points at a local dir holding the complete `.db`.
+- **⚠️ Operational notes (2026-06-16):** (1) The live engine **must run on a machine that sees `I:\`** —
+  this office desk does; HF/Oracle don't. So "live analysis engine" = a **desk-hosted** process; HF stays
+  the public A/B book. (2) The recorder writes one file `bars_15min_20260612.db` and keeps appending to it
+  (filename date is stale, data is live — `latest_feed_file` picks it by name-date so this is fine while
+  there's one file). The *other* path `I:\Public\Siddharth Raj\lightstreamer_data\` is the **dead** old
+  recorder (frozen 06-12) — ignore it; the code default `I:\Public\Summer Interns Energy\DB` is correct.
+  (3) **sklearn version skew:** model pkls were trained on sklearn 1.7.0; this desk runs 1.9.0
+  (`InconsistentVersionWarning` on every unpickle). Outputs look sane but pin sklearn or retrain to be
+  rigorous. (4) **Port-5000 zombie:** the earlier restart churn (under the OLD hanging code) left one
+  unkillable python process squatting `:5000` (stuck thread, `TerminateProcess` can't reap it). A
+  **reboot reclaims 5000**; until then run on another port (`PORT=5050 python backend/app.py`). The new
+  local-snapshot ingestion won't reproduce that hang.
 
 ### 🔄 In progress — **always-on deployment** (details in memory `pulse-deployment-pending`)
 Goal: a public link so the A/B book accumulates 24/7. Host = **Oracle Cloud Always Free (ARM)**,
@@ -251,10 +292,15 @@ Converted to `Data/parquet/` for DuckDB. Research caches (COT, FRED/external, cr
 11. WTI settlements are synth/ESTIMATE — swap in a real daily file inside `data_lake.get_wti_settlements()`.
 
 **Live feed (Phase 3.1)**
-14. **Reading a live SQLite WAL over a share:** the recorder keeps recent bars in the `-wal` file.
-    `immutable=1` (or copying only the `.db`) **skips the WAL** → you read a tiny checkpointed fragment.
-    `live_feed._connect_ro_wal` uses `mode=ro` (WAL-aware). When copying a feed file, take `.db` + `-wal`
-    + `-shm` together, or `PRAGMA wal_checkpoint` first. (Opening a WAL db read-write also checkpoints it.)
+14. **Reading the live SQLite WAL feed over a share → read a LOCAL snapshot, never the share file in place.**
+    The recorder writes `.db` + a live `-wal`; opening that over the SMB share raises `database disk image is
+    malformed` (WAL relies on a memory-mapped `-shm` index that doesn't work over network filesystems; the
+    on-share `-shm` is also stale vs the `-wal`). Worse, the old in-place `mode=ro` open could *hang a thread
+    uninterruptibly* (→ an unkillable process squatting the port). Fix (2026-06-16): `live_feed._open_feed_local`
+    → `_snapshot_feed_locally` copies the `.db` (+ **best-effort** fresh `-wal`, **never** the stale `-shm`,
+    clearing any stale local sidecars) to a temp dir and reads the copy, integrity-guarded + memoised per sweep.
+    db-only is a checkpointed image (≤1 checkpoint-interval stale); db+wal recovers the freshest bars and SQLite
+    rebuilds the `-shm`. Don't reintroduce a direct share read.
 15. **`PULSE_LIVE_FEED_DIR`** overrides the default share path. The Oracle deploy can't see `I:\` — set it
     to a synced local dir there, or run the live engine on an office PC. `PULSE_LIVE_SIGNALS_DISABLED=1`
     turns off the scheduler jobs.
