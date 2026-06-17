@@ -13,19 +13,29 @@ re-marking it against later live bars and resolving the tuned exit rule
 (TP halfway-to-fair / SL 2.5σ / 30-trading-day time-stop), mirroring
 live_ranker + paper_trading.
 
-Idempotent: signals dedupe on (instrument, direction, feed_as_of, cadence), so
-re-running a tick or firing daily + intraday jobs over the same bar won't
-double-log.
+Phase 4.G — session-based dedup. One row per *session*, where a session
+starts the first bar an opportunity fires for a given (instrument, direction)
+and runs until that row closes via TP/SL/time-stop or the direction flips.
+Re-firing the same opportunity on subsequent bars only bumps `bar_count` and
+refreshes the MTM columns on the existing row. UNIQUE is on
+(instrument, direction, opened_at_session); the previous per-bar UNIQUE on
+(instrument, direction, feed_as_of, cadence) is dropped during migration.
 
 Public API
 ----------
-  generate_live_signals(*, cadence="daily", include_wti=False) → dict
+  generate_live_signals(*, cadence="daily", include_wti=True) → dict
       Run the live engine, persist each non-NEUTRAL opportunity, return a summary.
+      include_wti default flipped 2026-06-17: the live WTI feed is up and we
+      WANT both products visible in the desk's signal log; WTI rows are tagged
+      with metadata.synth_caveat so the synth-trained model concern is surfaced.
   update_signal_performance() → dict
       Mark every OPEN signal against the latest live spread value; resolve
       TP/SL/time-stop. Returns {checked, closed, still_open}.
   list_signals(status="all", limit=200) → list[dict]
   clear_signals(scope="all") → int
+  ensure_schema() → None
+      Public wrapper around the create-or-migrate path so tests + callers can
+      force the v2 schema without going through generate_live_signals.
 """
 
 from __future__ import annotations
@@ -35,7 +45,17 @@ import logging
 import os
 import sqlite3
 import sys
+import time
 from datetime import datetime, timezone
+
+import numpy as np
+
+# Wall-clock guard: when the live feed file's most recent bar is older than
+# this, skip the perf sweep entirely. Without this, a frozen recorder lets the
+# wall-clock time-stop fire on positions for which no new market data ever
+# arrived — those rows would close "time_stop" against the same stale price
+# they were opened at.
+_FEED_STALE_MINUTES = 90.0
 
 _BACKEND = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if _BACKEND not in sys.path:
@@ -44,6 +64,16 @@ if _BACKEND not in sys.path:
 log = logging.getLogger("pulse.research.signal_log")
 
 _DB_PATH = os.path.join(_BACKEND, "db", "pulse_cache.db")
+
+# Sanity gate on signal extremity. |z| > 8 has never been a real opportunity in
+# the walk-forward (the max observed in 8 years of pooled_trades.json is ~5σ);
+# anything larger is model misspecification (cell with tiny resid_std and a
+# live snapshot the model never saw at training). The synth-trained WTI models
+# are the most common offender — wti_m1_m2 can score |z|≈50σ against live real
+# WTI prices on a normal session, which is obviously not a tradeable signal.
+# We log + drop these instead of opening a phantom position. The cap is loose
+# enough to keep the live brent z≈-6.85 we already track.
+_SANITY_Z_CAP = 8.0
 
 
 def _conn() -> sqlite3.Connection:
@@ -56,50 +86,234 @@ def _conn() -> sqlite3.Connection:
     return c
 
 
+_SCHEMA_V2 = """
+    CREATE TABLE IF NOT EXISTS signal_log (
+        id                INTEGER PRIMARY KEY AUTOINCREMENT,
+        signal_at         TEXT NOT NULL,      -- when we first generated it (UTC wall clock)
+        feed_as_of        TEXT,               -- live bar timestamp the signal was based on
+        cadence           TEXT NOT NULL,      -- 'daily' | 'intraday'
+        instrument        TEXT NOT NULL,      -- spread key (brent_m1_m2, ...)
+        label             TEXT,
+        regime            TEXT,
+        regime_mode       TEXT,
+        direction         TEXT NOT NULL,      -- BUY | SELL
+        source            TEXT,               -- regime | baseline
+        winner_model      TEXT,
+        confidence        REAL,               -- engine confidence 0..1
+        entry             REAL,               -- spread value at session open
+        fair_value        REAL,
+        z_score           REAL,
+        band_low          REAL,
+        band_high         REAL,
+        target            REAL,
+        stop              REAL,
+        notional_scale    REAL,
+        rationale         TEXT,
+        -- session bookkeeping (Phase 4.G) --
+        opened_at_session TEXT NOT NULL,      -- ISO ts; primary dedup key
+        last_seen_at      TEXT,               -- updated each bar the session re-fires
+        bar_count         INTEGER NOT NULL DEFAULT 1,
+        -- subsequent performance (updated by update_signal_performance) --
+        status            TEXT NOT NULL DEFAULT 'OPEN',   -- OPEN | CLOSED
+        mtm_value         REAL,
+        mtm_at            TEXT,
+        mtm_move          REAL,               -- signed PnL in spread units (favourable +)
+        close_value       REAL,
+        closed_at         TEXT,
+        close_reason      TEXT,               -- target | stop | time_stop | flip | manual
+        realised_move     REAL,
+        metadata_json     TEXT,
+        UNIQUE(instrument, direction, opened_at_session)
+    )
+"""
+
+
+def _is_v2_schema(c: sqlite3.Connection) -> bool:
+    """v2 has opened_at_session column AND no legacy (feed_as_of, cadence) UNIQUE."""
+    cols = {r[1] for r in c.execute("PRAGMA table_info(signal_log)").fetchall()}
+    if "opened_at_session" not in cols:
+        return False
+    # Look at the table's CREATE statement for the legacy UNIQUE — easier than
+    # walking PRAGMA index_list.
+    row = c.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='signal_log'"
+    ).fetchone()
+    if not row or not row[0]:
+        return False
+    return "feed_as_of, cadence" not in row[0]
+
+
+def _migrate_to_v2(c: sqlite3.Connection) -> None:
+    """Rebuild the table with the v2 schema, backfilling session columns.
+
+    SQLite can't drop a UNIQUE in place, so we do the standard
+    create-new → copy → drop-old → rename dance. Wrapped in a single
+    transaction so the WAL-shared cache.db never sees a half-migrated state.
+    """
+    log.info("signal_log: migrating v1 → v2 (session dedup)")
+    c.execute("BEGIN IMMEDIATE")
+    try:
+        c.execute("""
+            CREATE TABLE signal_log_v2 (
+                id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                signal_at         TEXT NOT NULL,
+                feed_as_of        TEXT,
+                cadence           TEXT NOT NULL,
+                instrument        TEXT NOT NULL,
+                label             TEXT,
+                regime            TEXT,
+                regime_mode       TEXT,
+                direction         TEXT NOT NULL,
+                source            TEXT,
+                winner_model      TEXT,
+                confidence        REAL,
+                entry             REAL,
+                fair_value        REAL,
+                z_score           REAL,
+                band_low          REAL,
+                band_high         REAL,
+                target            REAL,
+                stop              REAL,
+                notional_scale    REAL,
+                rationale         TEXT,
+                opened_at_session TEXT NOT NULL,
+                last_seen_at      TEXT,
+                bar_count         INTEGER NOT NULL DEFAULT 1,
+                status            TEXT NOT NULL DEFAULT 'OPEN',
+                mtm_value         REAL,
+                mtm_at            TEXT,
+                mtm_move          REAL,
+                close_value       REAL,
+                closed_at         TEXT,
+                close_reason      TEXT,
+                realised_move     REAL,
+                metadata_json     TEXT,
+                UNIQUE(instrument, direction, opened_at_session)
+            )
+        """)
+        # Backfill: each pre-existing row becomes its own session opened at
+        # signal_at; last_seen_at defaults to mtm_at (or signal_at when not
+        # marked yet); bar_count = 1.
+        c.execute("""
+            INSERT INTO signal_log_v2
+                (id, signal_at, feed_as_of, cadence, instrument, label, regime, regime_mode,
+                 direction, source, winner_model, confidence, entry, fair_value, z_score,
+                 band_low, band_high, target, stop, notional_scale, rationale,
+                 opened_at_session, last_seen_at, bar_count,
+                 status, mtm_value, mtm_at, mtm_move, close_value, closed_at, close_reason,
+                 realised_move, metadata_json)
+            SELECT
+                id, signal_at, feed_as_of, cadence, instrument, label, regime, regime_mode,
+                direction, source, winner_model, confidence, entry, fair_value, z_score,
+                band_low, band_high, target, stop, notional_scale, rationale,
+                signal_at AS opened_at_session,
+                COALESCE(mtm_at, signal_at) AS last_seen_at,
+                1 AS bar_count,
+                status, mtm_value, mtm_at, mtm_move, close_value, closed_at, close_reason,
+                realised_move, metadata_json
+            FROM signal_log
+        """)
+        c.execute("DROP TABLE signal_log")
+        c.execute("ALTER TABLE signal_log_v2 RENAME TO signal_log")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_signal_status ON signal_log(status)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_signal_at     ON signal_log(signal_at)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_signal_session ON signal_log(instrument, direction, status)")
+        c.commit()
+        log.info("signal_log: migration complete")
+    except Exception:
+        c.rollback()
+        raise
+
+
+def _collapse_duplicate_open_sessions(c: sqlite3.Connection) -> int:
+    """Repair pass: collapse multiple OPEN rows per (instrument, direction).
+
+    Why this exists: the v1 → v2 migration backfilled each pre-existing per-bar
+    row as its own session (`opened_at_session = signal_at`). All of them stayed
+    OPEN. The post-migration engine extends ONE of them per fire — the rest sit
+    forever as phantom OPEN sessions that never close. This sweep keeps the
+    *oldest* OPEN session per (instrument, direction) as the canonical row,
+    folds the others' bar counts into it, refreshes last_seen_at to the
+    newest, and closes the duplicates with `close_reason='duplicate'`.
+
+    Returns the number of duplicates closed. Idempotent (no-ops on clean DBs).
+    """
+    groups = c.execute("""
+        SELECT instrument, direction, COUNT(*) AS n
+          FROM signal_log
+         WHERE status='OPEN'
+      GROUP BY instrument, direction
+        HAVING COUNT(*) > 1
+    """).fetchall()
+    if not groups:
+        return 0
+
+    closed = 0
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    for g in groups:
+        rows = c.execute("""
+            SELECT id, opened_at_session, last_seen_at, bar_count
+              FROM signal_log
+             WHERE status='OPEN' AND instrument=? AND direction=?
+          ORDER BY opened_at_session ASC, id ASC
+        """, (g["instrument"], g["direction"])).fetchall()
+        if len(rows) <= 1:
+            continue
+        keeper = rows[0]
+        dupes  = rows[1:]
+        # Aggregate the duplicates into the keeper.
+        total_bars = sum((r["bar_count"] or 1) for r in rows)
+        newest_seen = max(
+            (r["last_seen_at"] for r in rows if r["last_seen_at"]),
+            default=keeper["last_seen_at"],
+        )
+        c.execute(
+            "UPDATE signal_log SET bar_count=?, last_seen_at=? WHERE id=?",
+            (total_bars, newest_seen, keeper["id"]),
+        )
+        dupe_ids = [r["id"] for r in dupes]
+        c.executemany(
+            "UPDATE signal_log SET status='CLOSED', closed_at=?, close_reason='duplicate' WHERE id=?",
+            [(now, d) for d in dupe_ids],
+        )
+        closed += len(dupe_ids)
+    if closed:
+        log.info("signal_log: collapsed %d duplicate OPEN sessions", closed)
+    return closed
+
+
 def _ensure_table() -> None:
     c = _conn()
     try:
-        c.execute("""
-            CREATE TABLE IF NOT EXISTS signal_log (
-                id            INTEGER PRIMARY KEY AUTOINCREMENT,
-                signal_at     TEXT NOT NULL,      -- when we generated it (UTC wall clock)
-                feed_as_of    TEXT,               -- live bar timestamp the signal was based on
-                cadence       TEXT NOT NULL,      -- 'daily' | 'intraday'
-                instrument    TEXT NOT NULL,      -- spread key (brent_m1_m2, ...)
-                label         TEXT,
-                regime        TEXT,
-                regime_mode   TEXT,
-                direction     TEXT NOT NULL,      -- BUY | SELL
-                source        TEXT,               -- regime | baseline
-                winner_model  TEXT,
-                confidence    REAL,               -- engine confidence 0..1
-                entry         REAL,               -- spread value at signal time
-                fair_value    REAL,
-                z_score       REAL,
-                band_low      REAL,
-                band_high     REAL,
-                target        REAL,
-                stop          REAL,
-                notional_scale REAL,
-                rationale     TEXT,
-                -- subsequent performance (updated by update_signal_performance) --
-                status        TEXT NOT NULL DEFAULT 'OPEN',   -- OPEN | CLOSED
-                mtm_value     REAL,
-                mtm_at        TEXT,
-                mtm_move      REAL,               -- signed PnL in spread units (favourable +)
-                close_value   REAL,
-                closed_at     TEXT,
-                close_reason  TEXT,               -- target | stop | time_stop | manual
-                realised_move REAL,
-                metadata_json TEXT,
-                UNIQUE(instrument, direction, feed_as_of, cadence)
-            )
-        """)
-        c.execute("CREATE INDEX IF NOT EXISTS idx_signal_status ON signal_log(status)")
-        c.execute("CREATE INDEX IF NOT EXISTS idx_signal_at ON signal_log(signal_at)")
+        # Does the table exist at all?
+        exists = c.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='signal_log'"
+        ).fetchone() is not None
+        if not exists:
+            c.execute(_SCHEMA_V2)
+            c.execute("CREATE INDEX IF NOT EXISTS idx_signal_status  ON signal_log(status)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_signal_at      ON signal_log(signal_at)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_signal_session ON signal_log(instrument, direction, status)")
+            c.commit()
+            return
+        if not _is_v2_schema(c):
+            _migrate_to_v2(c)
+        # Idempotent index ensure (covers DBs migrated by earlier code paths).
+        c.execute("CREATE INDEX IF NOT EXISTS idx_signal_status  ON signal_log(status)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_signal_at      ON signal_log(signal_at)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_signal_session ON signal_log(instrument, direction, status)")
+        # Repair: a DB that survived the v1→v2 migration can have phantom
+        # duplicate OPEN sessions left over (each per-bar v1 row was backfilled
+        # as its own session). Collapse on every ensure — idempotent, cheap.
+        _collapse_duplicate_open_sessions(c)
         c.commit()
     finally:
         c.close()
+
+
+def ensure_schema() -> None:
+    """Public wrapper — callable from tests + bootstrap code."""
+    _ensure_table()
 
 
 def _sign(direction: str) -> int:
@@ -128,12 +342,94 @@ def _rationale(r: dict, regime: str) -> str:
     return " · ".join(bits)
 
 
-def generate_live_signals(*, cadence: str = "daily", include_wti: bool = False) -> dict:
+def _record_signal(
+    c: sqlite3.Connection,
+    *,
+    instrument: str,
+    direction: str,
+    now_iso: str,
+    feed_as_of: str | None,
+    row_payload: dict,
+) -> str:
+    """Apply the session-dedup rules and return the outcome.
+
+    Returns one of {"opened", "extended", "flipped", "noop"}.
+      • opened   — new row inserted (no OPEN session for this instrument)
+      • extended — existing OPEN session bumped (bar_count++, MTM refreshed)
+      • flipped  — opposite-direction OPEN session closed with reason 'flip',
+                   new session opened in this direction
+      • noop     — direction matches an OPEN session that was already
+                   refreshed at this feed timestamp; nothing to do
+    """
+    # Pick the OLDEST OPEN session — the canonical row for this instrument.
+    # (Phantom duplicates left over from the v1→v2 migration are collapsed in
+    # _ensure_table → _collapse_duplicate_open_sessions, but using ASC here is
+    # also defensive: it makes "extend the original session" the rule even if
+    # a stray duplicate sneaks past.)
+    open_row = c.execute(
+        """SELECT id, direction, opened_at_session, last_seen_at, bar_count, entry
+             FROM signal_log
+            WHERE instrument=? AND status='OPEN'
+         ORDER BY opened_at_session ASC, id ASC LIMIT 1""",
+        (instrument,),
+    ).fetchone()
+
+    if open_row and open_row["direction"] == direction:
+        # Same direction still active — bump bar_count + last_seen_at, but
+        # idempotent against repeated calls on the same feed_as_of.
+        if feed_as_of and open_row["last_seen_at"] == feed_as_of:
+            return "noop"
+        c.execute(
+            """UPDATE signal_log
+                  SET last_seen_at = ?,
+                      bar_count    = bar_count + 1
+                WHERE id = ?""",
+            (feed_as_of or now_iso, open_row["id"]),
+        )
+        return "extended"
+
+    if open_row and open_row["direction"] != direction:
+        # Direction flip: close the prior session with reason 'flip', then
+        # fall through to insert a new session.
+        c.execute(
+            """UPDATE signal_log
+                  SET status        = 'CLOSED',
+                      closed_at     = ?,
+                      close_reason  = 'flip',
+                      close_value   = ?,
+                      realised_move = ?
+                WHERE id = ?""",
+            (now_iso, row_payload.get("entry"), None, open_row["id"]),
+        )
+
+    insert = dict(row_payload)
+    insert["signal_at"]         = now_iso
+    insert["feed_as_of"]        = feed_as_of
+    insert["opened_at_session"] = now_iso
+    insert["last_seen_at"]      = feed_as_of or now_iso
+    c.execute(
+        """INSERT INTO signal_log
+           (signal_at, feed_as_of, cadence, instrument, label, regime, regime_mode,
+            direction, source, winner_model, confidence, entry, fair_value, z_score,
+            band_low, band_high, target, stop, notional_scale, rationale,
+            opened_at_session, last_seen_at, bar_count, metadata_json)
+           VALUES
+           (:signal_at,:feed_as_of,:cadence,:instrument,:label,:regime,:regime_mode,
+            :direction,:source,:winner_model,:confidence,:entry,:fair_value,:z_score,
+            :band_low,:band_high,:target,:stop,:notional_scale,:rationale,
+            :opened_at_session,:last_seen_at,1,:metadata_json)""",
+        insert,
+    )
+    return "flipped" if (open_row and open_row["direction"] != direction) else "opened"
+
+
+def generate_live_signals(*, cadence: str = "daily", include_wti: bool = True) -> dict:
     """
     Run the live engine and persist every non-NEUTRAL opportunity it ranks.
 
-    Idempotent on (instrument, direction, feed_as_of, cadence) — re-running over
-    the same live bar inserts nothing new.
+    Session-dedup: re-firing the same (instrument, direction) on later bars
+    updates the existing OPEN row instead of inserting. Direction flip closes
+    the prior session with reason 'flip' and opens a new one.
     """
     from research.live_engine import get_live_recommendation
 
@@ -148,19 +444,44 @@ def generate_live_signals(*, cadence: str = "daily", include_wti: bool = False) 
     now        = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
     c = _conn()
-    logged = 0
-    skipped_neutral = 0
+    counts = {"opened": 0, "extended": 0, "flipped": 0, "noop": 0}
+    skipped_neutral = skipped_extreme = 0
     try:
         for r in rec.get("ranked", []):
             direction = r.get("direction")
             if direction not in ("BUY", "SELL"):
                 skipped_neutral += 1
                 continue
-            row = {
-                "signal_at":      now,
-                "feed_as_of":     feed_as_of,
+            # Sanity gate — skip and warn on misspecified cells (see
+            # _SANITY_Z_CAP comment above).
+            z = r.get("z_score")
+            try:
+                z_val = float(z) if z is not None else None
+            except (TypeError, ValueError):
+                z_val = None
+            if z_val is not None and abs(z_val) > _SANITY_Z_CAP:
+                log.warning(
+                    "signal_log: dropping %s %s — |z|=%.2f > sanity cap %.1f "
+                    "(model misspec; fair=%.4f entry=%.4f resid_std≈%.4f)",
+                    r.get("spread"), direction, abs(z_val), _SANITY_Z_CAP,
+                    r.get("fair_value") or float("nan"),
+                    r.get("current")    or float("nan"),
+                    (abs((r.get("fair_value") or 0) - (r.get("current") or 0)) / abs(z_val))
+                    if z_val != 0 else float("nan"),
+                )
+                skipped_extreme += 1
+                continue
+            spread_key = r.get("spread") or ""
+            # WTI carries a "synth caveat": the WTI per-cell models were trained
+            # on the synthetic-from-1-min-mids daily settlements (`data_lake.
+            # get_wti_settlements` returns ESTIMATE; CLAUDE.md gotcha 11), so
+            # their fair_value can carry a level offset against the live real
+            # WTI feed. Tag the metadata so the mentor sees this on hover and
+            # we can deprioritise / suppress WTI rows later if needed.
+            is_wti = spread_key.startswith("wti_")
+            payload = {
                 "cadence":        cadence,
-                "instrument":     r.get("spread"),
+                "instrument":     spread_key,
                 "label":          r.get("label"),
                 "regime":         r.get("regime", regime),
                 "regime_mode":    mode,
@@ -179,116 +500,246 @@ def generate_live_signals(*, cadence: str = "daily", include_wti: bool = False) 
                 "rationale":      _rationale(r, r.get("regime", regime)),
                 "metadata_json":  json.dumps({
                     "r2_oos": r.get("r2_oos"), "n_train": r.get("n_train"),
-                    "gate": r.get("gate"), "source_file": (rec.get("live_feed") or {}).get("source_file"),
+                    "gate":   r.get("gate"),
+                    "source_file": (rec.get("live_feed") or {}).get("source_file"),
+                    "synth_caveat": (
+                        "WTI models trained on synthetic settlements built from 1-min mids "
+                        "(data_lake.get_wti_settlements → ESTIMATE); live real WTI may carry "
+                        "a small level offset until retrained on real daily settles."
+                        if is_wti else None
+                    ),
                 }),
             }
-            cur = c.execute(
-                """INSERT OR IGNORE INTO signal_log
-                   (signal_at, feed_as_of, cadence, instrument, label, regime, regime_mode,
-                    direction, source, winner_model, confidence, entry, fair_value, z_score,
-                    band_low, band_high, target, stop, notional_scale, rationale, metadata_json)
-                   VALUES
-                   (:signal_at,:feed_as_of,:cadence,:instrument,:label,:regime,:regime_mode,
-                    :direction,:source,:winner_model,:confidence,:entry,:fair_value,:z_score,
-                    :band_low,:band_high,:target,:stop,:notional_scale,:rationale,:metadata_json)""",
-                row,
+            outcome = _record_signal(
+                c,
+                instrument=r.get("spread"),
+                direction=direction,
+                now_iso=now,
+                feed_as_of=feed_as_of,
+                row_payload=payload,
             )
-            if cur.rowcount:
-                logged += 1
+            counts[outcome] = counts.get(outcome, 0) + 1
         c.commit()
     finally:
         c.close()
 
     return {
-        "available":   True,
-        "logged":      logged,
-        "deduped":     len(rec.get("ranked", [])) - skipped_neutral - logged,
-        "neutral":     skipped_neutral,
-        "feed_as_of":  feed_as_of,
-        "regime":      regime,
-        "cadence":     cadence,
-        "top":         (rec.get("top") or {}).get("label") if rec.get("top") else None,
+        "available":      True,
+        "logged":         counts["opened"] + counts["flipped"],
+        "extended":       counts["extended"],
+        "flipped":        counts["flipped"],
+        "noop":           counts["noop"],
+        "neutral":        skipped_neutral,
+        "skipped_extreme": skipped_extreme,
+        "feed_as_of":     feed_as_of,
+        "regime":         regime,
+        "cadence":        cadence,
+        "top":            (rec.get("top") or {}).get("label") if rec.get("top") else None,
     }
+
+
+# ── Live snapshot cache (Phase 4 fix) ──────────────────────────────────────
+# The intraday job runs `generate_live_signals` immediately followed by
+# `update_signal_performance` — both open the live feed DB. Add a short TTL
+# cache so a single 15-min sweep doesn't re-open the share-mounted file four
+# times (CO+CL for each path). Matches paper_trading._live_spreads_for.
+_LIVE_SNAP_TTL = 30.0
+_live_snap_cache: dict[str, tuple[float, dict]] = {}
+
+
+def _cached_live_snapshot(product: str) -> dict:
+    now = time.time()
+    cached = _live_snap_cache.get(product)
+    if cached and (now - cached[0] < _LIVE_SNAP_TTL):
+        return cached[1]
+    try:
+        from research.live_feed import get_live_snapshot
+        snap = get_live_snapshot(product)
+    except Exception as exc:
+        log.warning("signal_log: live snapshot %s failed: %s", product, exc)
+        snap = {"available": False, "error": str(exc)}
+    _live_snap_cache[product] = (now, snap)
+    return snap
+
+
+def _trading_days_between(opened_iso: str, now: datetime) -> int | None:
+    """Trading days from opened_iso (UTC) to now, via np.busday_count.
+
+    Mirrors paper_trading.mark_to_market exactly so the live signal log and the
+    live paper book agree on the time-stop horizon. Returns None when the
+    opened timestamp is unparseable so the caller skips the time-stop branch.
+    """
+    try:
+        opened = datetime.fromisoformat(opened_iso)
+    except (ValueError, TypeError):
+        return None
+    try:
+        return int(np.busday_count(opened.date(), now.date()))
+    except (ValueError, TypeError):
+        return None
 
 
 def update_signal_performance() -> dict:
     """
     Mark every OPEN signal against the latest live spread value (subsequent
-    performance), and resolve the tuned exit rule:
-      • target hit → close 'target'
-      • stop hit   → close 'stop'
-      • else update unrealised mtm_move and leave OPEN
-    (Time-stop in trading days is handled by the scheduler/age check below.)
+    performance), and resolve the tuned exit rule.
 
-    mtm_move is signed so favourable moves are positive for BUY and SELL alike.
+    Phase 4 audit (2026-06-17) — closing semantics now match the paper book +
+    exit_sim:
+      • target hit → close at the **target level**, not at live cur (which
+        may have overshot — exit_sim books the fill at the trigger)
+      • stop   hit → close at the **stop level**     (same reason)
+      • time-stop  → 30 **trading** days (np.busday_count, not calendar days)
+                     mirrors paper_trading.mark_to_market
+      • ambiguous bar (TP and SL both true) → resolved as **stop** —
+        conservative against the optimistic "TP first" else-if order
+      • feed stale (no fresh bar in 90 min) → skip the sweep so wall-clock
+        time-stops can't fire against stale prices
+      • noop on same bar — if the row's last_seen_at already matches the live
+        bar's as_of, neither price nor age has changed → leave the row alone
+
+    mtm_at is stamped with the live feed's bar timestamp (`as_of`), not the
+    wall-clock, so reading a row later shows when the recorded mtm price was
+    actually quoted by the feed.
     """
-    from research.live_feed   import get_live_snapshot
     from research.live_ranker import TUNED_MAX_HOLD_DAYS
 
     _ensure_table()
-    # Current live spread values for both products (so already-logged WTI rows
-    # still update even when new signals are Brent-only).
+
+    # Pull both products through the cache so generate+update share state.
     live: dict[str, float] = {}
+    live_as_of: dict[str, str] = {}
+    feed_as_of: str | None = None
     for prod in ("CO", "CL"):
-        snap = get_live_snapshot(prod)
-        if snap.get("available"):
-            for k, v in (snap.get("spreads") or {}).items():
-                live[k] = v["value"]
-            now_ts = snap.get("as_of")
-    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        snap = _cached_live_snapshot(prod)
+        if not snap.get("available"):
+            continue
+        for k, v in (snap.get("spreads") or {}).items():
+            if isinstance(v, dict):
+                live[k] = float(v["value"])
+                live_as_of[k] = str(v.get("as_of") or snap.get("as_of") or "")
+            else:
+                live[k] = float(v)
+                live_as_of[k] = str(snap.get("as_of") or "")
+        if prod == "CO":
+            feed_as_of = snap.get("as_of")
+
+    now_dt = datetime.now(timezone.utc)
+    now    = now_dt.isoformat(timespec="seconds")
+
+    # Stale-feed guard: if the freshest bar we have is older than the threshold,
+    # do nothing (don't time-stop on wall-clock, don't churn mtm with the same
+    # price). Lets ops detect the stall instead of silently zombie-closing rows.
+    feed_age_min: float | None = None
+    if feed_as_of:
+        try:
+            feed_dt = datetime.fromisoformat(feed_as_of.replace(" ", "T"))
+            if feed_dt.tzinfo is None:
+                feed_dt = feed_dt.replace(tzinfo=timezone.utc)
+            feed_age_min = (now_dt - feed_dt).total_seconds() / 60.0
+        except Exception:
+            feed_age_min = None
+    if feed_age_min is not None and feed_age_min > _FEED_STALE_MINUTES:
+        log.warning(
+            "signal_log perf: live feed stale (%.1f min > %.1f min) — skipping sweep",
+            feed_age_min, _FEED_STALE_MINUTES,
+        )
+        return {"checked": 0, "closed": 0, "still_open": 0,
+                "skipped_stale_feed": True, "feed_age_min": round(feed_age_min, 1)}
 
     c = _conn()
-    checked = closed = still_open = 0
+    checked = closed = still_open = noop = 0
     try:
         rows = c.execute("SELECT * FROM signal_log WHERE status='OPEN'").fetchall()
         for s in rows:
             inst = s["instrument"]
             cur = live.get(inst)
+            bar_ts = live_as_of.get(inst) or feed_as_of
             if cur is None:
                 still_open += 1
                 continue
+            # Hygiene: if this row was already marked at this feed bar, nothing
+            # new to record. Avoids overwriting last_seen_at / mtm_at to noise.
+            if bar_ts and s["last_seen_at"] == bar_ts:
+                noop += 1
+                still_open += 1
+                continue
             checked += 1
-            sign = _sign(s["direction"])
+            sign  = _sign(s["direction"])
             entry = s["entry"]
             mtm_move = round(sign * (cur - entry), 4) if entry is not None else None
 
-            reason = None
             tgt, stp = s["target"], s["stop"]
+            tp_hit = sl_hit = False
             if s["direction"] == "BUY":
-                if tgt is not None and cur >= tgt:   reason = "target"
-                elif stp is not None and cur <= stp: reason = "stop"
+                tp_hit = tgt is not None and cur >= tgt
+                sl_hit = stp is not None and cur <= stp
             elif s["direction"] == "SELL":
-                if tgt is not None and cur <= tgt:   reason = "target"
-                elif stp is not None and cur >= stp: reason = "stop"
+                tp_hit = tgt is not None and cur <= tgt
+                sl_hit = stp is not None and cur >= stp
 
-            # Time-stop: close after TUNED_MAX_HOLD_DAYS calendar-approx days.
+            # Conservative resolution on ambiguous bars: if both are true, the
+            # spread gapped through both levels intra-bar. We don't have the
+            # tick sequence — call it a stop to avoid optimism. Pure TP/SL
+            # cases work as before.
+            reason: str | None = None
+            close_value = None
+            realised_move = None
+            if tp_hit and sl_hit:
+                reason = "stop"
+                close_value = float(stp)
+                realised_move = round(sign * (close_value - entry), 4) if entry is not None else None
+            elif tp_hit:
+                reason = "target"
+                close_value = float(tgt)
+                realised_move = round(sign * (close_value - entry), 4) if entry is not None else None
+            elif sl_hit:
+                reason = "stop"
+                close_value = float(stp)
+                realised_move = round(sign * (close_value - entry), 4) if entry is not None else None
+
+            # Time-stop: trading days, not calendar days. Mirrors paper book.
             if reason is None:
-                try:
-                    opened = datetime.fromisoformat(s["signal_at"])
-                    age_days = (datetime.now(timezone.utc) - opened).days
-                    if age_days >= TUNED_MAX_HOLD_DAYS:
-                        reason = "time_stop"
-                except Exception:
-                    pass
+                tdays = _trading_days_between(s["signal_at"], now_dt)
+                if tdays is not None and tdays >= TUNED_MAX_HOLD_DAYS:
+                    reason = "time_stop"
+                    close_value = float(cur)
+                    realised_move = mtm_move
+
+            mtm_at = bar_ts or now
 
             if reason:
                 c.execute(
-                    """UPDATE signal_log SET status='CLOSED', mtm_value=?, mtm_at=?,
-                       mtm_move=?, close_value=?, closed_at=?, close_reason=?, realised_move=?
-                       WHERE id=?""",
-                    (cur, now, mtm_move, cur, now, reason, mtm_move, s["id"]),
+                    """UPDATE signal_log
+                          SET status='CLOSED',
+                              mtm_value=?, mtm_at=?, mtm_move=?,
+                              close_value=?, closed_at=?, close_reason=?, realised_move=?,
+                              last_seen_at=?
+                        WHERE id=?""",
+                    (cur, mtm_at, mtm_move,
+                     close_value, now, reason, realised_move,
+                     bar_ts or s["last_seen_at"], s["id"]),
                 )
                 closed += 1
             else:
                 c.execute(
-                    "UPDATE signal_log SET mtm_value=?, mtm_at=?, mtm_move=? WHERE id=?",
-                    (cur, now, mtm_move, s["id"]),
+                    """UPDATE signal_log
+                          SET mtm_value=?, mtm_at=?, mtm_move=?, last_seen_at=?
+                        WHERE id=?""",
+                    (cur, mtm_at, mtm_move, bar_ts or s["last_seen_at"], s["id"]),
                 )
                 still_open += 1
         c.commit()
     finally:
         c.close()
-    return {"checked": checked, "closed": closed, "still_open": still_open}
+    return {
+        "checked": checked,
+        "closed": closed,
+        "still_open": still_open,
+        "noop": noop,
+        "feed_as_of": feed_as_of,
+        "feed_age_min": round(feed_age_min, 1) if feed_age_min is not None else None,
+    }
 
 
 def list_signals(status: str = "all", limit: int = 200) -> list[dict]:

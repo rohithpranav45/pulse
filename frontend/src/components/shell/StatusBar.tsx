@@ -35,11 +35,22 @@ export function StatusBar({
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.42, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
-      className="h-7 flex-shrink-0 bg-bg-elev/80 backdrop-blur-xl border-t border-border flex items-center px-5 gap-5 text-[10px] font-mono z-30"
+      className="h-8 flex-shrink-0 flex items-center px-5 gap-5 text-[10px] font-mono z-30 relative"
+      style={{
+        background: 'var(--topbar-grad)',
+        backdropFilter: 'blur(20px) saturate(140%)',
+        WebkitBackdropFilter: 'blur(20px) saturate(140%)',
+        borderTop: '1px solid var(--hairline)',
+      }}
     >
+      <div
+        aria-hidden
+        className="absolute top-0 left-0 right-0 h-px pointer-events-none"
+        style={{ background: 'linear-gradient(90deg, transparent, var(--border-accent) 12%, rgba(218,182,65,0.4) 50%, var(--border-accent) 88%, transparent)' }}
+      />
       <span className="flex items-center gap-1.5">
         <span className="live-dot" />
-        <span className="text-text-secondary tracking-[0.22em] text-[9px] uppercase">LIVE</span>
+        <span className="text-gold-bright tracking-[0.26em] text-[9px] uppercase font-semibold">LIVE</span>
       </span>
       <span className="w-px h-3 bg-border" />
       <Item label="M1–M2" value={m1m2 !== null ? fmt.signed(m1m2) : '—'} tone={m1m2 !== null ? (m1m2 > 0 ? 'bull' : 'bear') : undefined} />

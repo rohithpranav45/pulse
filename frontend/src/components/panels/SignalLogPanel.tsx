@@ -39,7 +39,11 @@ interface SignalRow {
   rationale: string | null;
   status: 'OPEN' | 'CLOSED';
   mtm_move: number | null;
+  realised_move: number | null;
   close_reason: string | null;
+  opened_at_session: string | null;
+  last_seen_at: string | null;
+  bar_count: number | null;
 }
 
 interface SignalsData {
@@ -65,6 +69,7 @@ function closeReasonTone(reason: string | null): 'bull' | 'bear' | 'neut' | 'mut
   if (reason === 'target') return 'bull';
   if (reason === 'stop')   return 'bear';
   if (reason === 'time_stop') return 'neut';
+  if (reason === 'flip')      return 'neut';
   return 'muted';
 }
 
@@ -89,7 +94,7 @@ function PerfCell({ s }: { s: SignalRow }) {
 
 export function SignalLogPanel() {
   const [status, setStatus] = useState<'all' | 'open' | 'closed'>('all');
-  const { data, loading, error, refetch } = usePolling<SignalsData>(
+  const { data, loading, error, refetch, lastUpdated } = usePolling<SignalsData>(
     () => api.regimeSignals(status, 200),
     30_000,
     [status],
@@ -149,9 +154,21 @@ export function SignalLogPanel() {
       subtitle="Phase 3.1 · what the framework would trade in the current market"
       accent="gold"
       right={headerRight}
+      lastSuccess={lastUpdated}
+      fetchError={error}
     >
       {loading && !data && <SkeletonRows rows={5} />}
-      {error && <div className="text-xs text-bear">error: {error.message}</div>}
+      {!loading && error && !data && (
+        <div className="text-[11px] font-mono text-text-tertiary p-4 text-center">
+          Signal log endpoint failed: <span className="text-bear">{error.message}</span>
+        </div>
+      )}
+      {!loading && !error && data && data.signals?.length === 0 && (
+        <div className="text-[11px] font-mono text-text-tertiary p-4 text-center">
+          No signals logged yet for filter "{status}". The live engine runs daily + every 15 min;
+          you can also click GENERATE to fire one now.
+        </div>
+      )}
 
       {data && (
         <>
@@ -193,9 +210,29 @@ export function SignalLogPanel() {
                 <tbody>
                   {signals.map(s => (
                     <tr key={s.id} className="border-b border-border/40 align-top hover:bg-bg-card/50">
-                      <td className="py-1.5 pr-2 text-text-tertiary whitespace-nowrap">{fmtTime(s.signal_at)}</td>
+                      <td className="py-1.5 pr-2 text-text-tertiary whitespace-nowrap">
+                        <div>{fmtTime(s.signal_at)}</div>
+                        {(s.bar_count ?? 0) > 1 && (
+                          <div
+                            className="text-[9px] text-text-muted mt-0.5"
+                            title={`Session active across ${s.bar_count} bars (last seen ${s.last_seen_at ?? '—'})`}
+                          >
+                            × {s.bar_count} bars
+                          </div>
+                        )}
+                      </td>
                       <td className="py-1.5 pr-2 max-w-[220px]">
-                        <div className="text-text-primary">{s.label || s.instrument}</div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-text-primary">{s.label || s.instrument}</span>
+                          {s.instrument?.startsWith('wti_') && (
+                            <span
+                              className="inline-flex items-center text-[8.5px] font-mono uppercase tracking-wider px-1 py-px rounded bg-neut/10 text-neut border border-neut/30 cursor-help"
+                              title="WTI per-cell models were trained on the synthetic WTI settlement built from 1-min mids (data_lake.get_wti_settlements → ESTIMATE). Live real WTI may carry a small level offset until retrained on real daily settles. Treat WTI z-scores as directional, not magnitude-calibrated."
+                            >
+                              SYNTH
+                            </span>
+                          )}
+                        </div>
                         {s.rationale && (
                           <div className="text-[9.5px] text-text-muted leading-tight mt-0.5 truncate" title={s.rationale}>
                             {s.rationale}

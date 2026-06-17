@@ -94,13 +94,83 @@ spread engine), and serves a React dashboard with a paper-trading book.
   Build files + runbook: `deploy/hf_space/` + `deploy/HF_DEPLOY.md`. (Supersedes the Oracle-ARM plan,
   which stayed capacity-blocked after 400+ retries.)
 
-### 🔄 In progress — **Phase 4: dashboard rebuild (9 tabs → 6 tabs)** (planning, 2026-06-16)
-Full plan: [`docs/DASHBOARD_REBUILD.md`](docs/DASHBOARD_REBUILD.md). Target structure: **DESK · CHARTS · REGIME ·
-PAPER · SIGNAL LOG · MARKETS**. Charts tab kept as-is per user. Cutting Signal / Intelligence /
-Fundamentals / Playbook / Spreads tabs (their useful panels relocate). One phase per session, additive
-before deletive. Local-only first; HF deploy frozen until mentor verdict on strategy direction is in.
-Next session = Phase 4.A (new DESK landing view + risk panel). Strategy + architecture changes
-deliberately deferred (mentor decision pending + demo-risk).
+### ✅ Phase 4 — dashboard rebuild (9 tabs → 6 tabs) (4.A–4.H shipped, 2026-06-17)
+Full plan: [`docs/DASHBOARD_REBUILD.md`](docs/DASHBOARD_REBUILD.md). Final structure: **DESK · CHARTS ·
+MARKETS · PAPER · REGIME · SIGNAL LOG**, hotkeys `1`–`6` contiguous (plus `Cmd/Ctrl+1..6` that
+fires even inside text inputs). Charts kept as-is per user; HF deploy frozen until mentor verdict
+on strategy direction is in.
+- **4.A** ✅ DESK landing + RiskPanel.
+- **4.B** ✅ Relocated PriceDecomposition / IndicatorDrillDown / GeoRiskCalculator → DESK; Signal tab deleted.
+- **4.C** ✅ MARKETS tab folds in Spreads & Fundamentals via lazy `<details>` sections.
+- **4.D** ✅ Playbook tab folded into the existing Regime drill modal's `AnalogsTable`; sidebar 8 → 7.
+- **4.E** ✅ (this session) Intelligence tab cut entirely. `frontend/src/views/IntelligenceView.tsx`
+  deleted (366 LOC gone — the view was self-contained, no shared panels to mop up); `Sidebar.tsx`
+  drops the `intelligence` `NAV_ITEMS` entry + `ViewKey` member + `Brain` icon import → 7 → 6
+  sidebar entries; `App.tsx` drops the import + switch case, hotkey map renumbered 1-6, coalesce
+  catches legacy `pulse.view='intelligence'` → `'desk'`. `DeskView.tsx` local `ViewKey` type
+  drops `intelligence`. `OnboardingTour.tsx` "Seven workspaces" copy → "Six workspaces" with the
+  new tab list. Bundle: 1,172 → 1,157 kB JS (–15 kB). Preview confirmed legacy redirect.
+- **4.F** ✅ (this session) Polish layer. **Cmd/Ctrl+1..6** added to the keyboard `useEffect` —
+  the modifier variant fires anywhere (including inside `<input>` / `<textarea>`), bare `1..6`
+  still only fires outside form inputs. **`?` opens a help overlay** (new `HelpOverlay` component
+  in `App.tsx`) listing every shortcut + the Cmd/Ctrl variant (auto-shows `⌘` on Mac, `Ctrl`
+  elsewhere); **`Esc` closes it**; the existing `/` ChatDock binding still intact. **Error chips
+  + live freshness chip on `Panel.tsx`**: new `lastSuccess?: number | null` + `fetchError?:
+  unknown` props render a `● N s ago` pill (or `◌` after 90s = stale) and a red `⚠ ERR` pill on
+  fetch failure; backwards-compatible — every existing Panel call still works without touching
+  the new props. Wired through the highest-traffic panels first: `HeroPick` and
+  `OpenPositionsStrip` on DESK (each now exposes `lastSuccess`/`fetchError` from `usePolling`),
+  `SignalLogPanel`. Each of those also gained an **explicit empty-state card** ("Regime endpoint
+  unreachable: …" / "Paper book endpoint failed: …" / "No signals logged yet for filter X") in
+  place of the infinite skeleton. Panel `staticMount` already gates per-panel framer-motion mount
+  animations from re-firing on poll-refresh; DeskView already opts in across the board, so the
+  "no animation on poll refresh" acceptance was already met. Theme persistence
+  (`useTheme` → `useLocalStorage('pulse.theme')` → `data-theme` on `<html>`) is unchanged.
+- **4.G** ✅ (this session) Signal Log session dedup. Schema migrated v1 → v2: dropped the per-bar
+  UNIQUE `(instrument, direction, feed_as_of, cadence)`; added `opened_at_session TEXT NOT NULL`
+  + `last_seen_at TEXT` + `bar_count INTEGER NOT NULL DEFAULT 1`; new UNIQUE
+  `(instrument, direction, opened_at_session)`. Migration `_migrate_to_v2` is the
+  create-new → copy → drop-old → rename dance wrapped in `BEGIN IMMEDIATE`/`COMMIT` so the
+  WAL-shared `pulse_cache.db` never sees a half-migrated state; backfills `opened_at_session =
+  signal_at`, `last_seen_at = COALESCE(mtm_at, signal_at)`, `bar_count = 1` for the 48 existing
+  rows. Idempotent (`ensure_schema` is safe to re-run). DB pre-migration backup at
+  `backend/db/_corrupt_backup_<ts>_pre4G/`. New `_record_signal` helper drives the insert path:
+  if an OPEN session for `(instrument, direction)` exists → `UPDATE` (bump `bar_count`, refresh
+  `last_seen_at`); if the same `feed_as_of` already drove this session → `noop` (daily +
+  intraday jobs over the same bar are safe); if an OPEN session in the *opposite* direction
+  exists → close it with `close_reason='flip'` and open a new row. `generate_live_signals`
+  return shape gained `extended` / `flipped` / `noop` counters alongside `logged`.
+  Frontend: `SignalLogPanel.tsx` `SignalRow` interface gained `opened_at_session`, `last_seen_at`,
+  `bar_count`, `realised_move`; the Time cell now shows `× N bars` when `bar_count > 1` (tooltip:
+  `last seen <ts>`); `closeReasonTone` handles the new `flip` reason → neut. Tests: `test_invariants.py`
+  gained `test_signal_log_dedup_keys` (asserts the v2 UNIQUE + the new columns; runs against a
+  temp DB, never touches the live cache). New `tests/test_signal_log_session.py` has three
+  behavioral tests — same-direction across 3 bars = 1 row with `bar_count=3`; same `feed_as_of`
+  repeated = `noop`; direction flip = 2 rows with the first row CLOSED/`flip`. **13 tests green
+  total** (10 invariants + 3 session tests), `npm run build` clean (1,162 kB JS / 40.3 kB CSS).
+  Preview SIGNAL LOG shows 6-entry sidebar + table with the new error-pill chip lit (the dev
+  Flask endpoint is offline in this preview), backfilled rows render at `bar_count=1` (badge
+  hidden) — the badge will start showing once the live engine re-fires post-migration.
+- **4.H** ✅ (this session) Calibration plot on REGIME tab. New backend endpoint
+  `GET /api/regime/calibration?include=pass|all` reads `backend/data/research/gated_trades.json`,
+  bins by `|z|` (cutoffs `0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, ∞`), and returns per-bin
+  `{z_lo, z_hi, n, reverted_frac, mean_fwd_pnl}` where reverted = `fwd_pnl > 0` over the
+  20-day walk-forward window. `include=pass` (default) restricts to trades the live engine
+  would actually have fired (`gate=pass` rows, 1,527 trades vs the 9,946 total); `all`
+  exposes the full baseline tape. Overall reverted = 60.7% across pass rows; bins are
+  monotonic 52.8% → 71% as |z| climbs, which is the well-calibrated story we want the
+  mentor to read at a glance. New `frontend/src/components/panels/CalibrationPanel.tsx`
+  renders each bin as a labelled bar with a centered 50% reference line, tone-coded
+  (bull ≥ 60% / neut 50-60% / bear < 50%) and a faint sample-size chip on the right edge;
+  hover tooltip on each bar reads exactly: `"When the model said z=X, the spread reverted
+  Y% of the time in 20 days (n trades)."` per the mentor's acceptance criterion.
+  `regimeCalibration(include)` added to `api.ts`; panel wired into `RegimeView.tsx` between
+  `RegimePickCard` and `ABComparePanel`. Panel uses the 4.F freshness/error chip props
+  (verified in preview — offline state correctly renders `⚠ ERR` + "Calibration endpoint
+  unreachable: HTTP 502" copy). Test-client hit returns `200` with the populated bins.
+  13 pytest green, `npm run build` clean (1,166 kB JS / 40.7 kB CSS).
+- **Next session** — Phase 4 fully complete locally (4.A → 4.H). Hold for mentor strategy
+  verdict before any HF redeploy; architecture changes still deferred.
 
 ### 🚨 HF Spaces regime endpoints broken (root cause found, 2026-06-16)
 - `https://rohithpranav45-pulse.hf.space/api/regime/recommendation` and `/api/regime/backtest` return

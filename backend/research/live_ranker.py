@@ -39,19 +39,20 @@ def _active_mode() -> str:
     """
     Resolve the regime mode for live inference.
 
-    Reads `PULSE_REGIME_MODE` env var ("composite" | "pooled"). Defaults to
-    "composite" (Sprint 3 behaviour). Phase 2.5 ships both — set
-    PULSE_REGIME_MODE=pooled to run the 3-cell curve-axis-only engine in
-    production. Falls back to whichever mode has trained models on disk.
+    Phase 4 (2026-06-17): production default is now "global" — the regime-as-
+    feature single-coherent-model architecture with empirical OOS residual bands
+    (see models_global.py). The previous per-cell pooled/composite models had
+    structural flaws documented in model_health.py.
 
-    Phase 2.6: `PULSE_GATED_BLEND=1` forces pooled mode internally because the
-    gated rule is defined on pooled labels.
+    Set PULSE_REGIME_MODE=pooled to fall back to the legacy 3-cell pooled
+    engine (composite is also supported). Phase 2.6: `PULSE_GATED_BLEND=1`
+    forces pooled because the gated rule is defined on pooled labels.
     """
     if _gated_blend_enabled():
         return "pooled"
-    mode = (os.environ.get("PULSE_REGIME_MODE") or "composite").strip().lower()
-    if mode not in ("composite", "pooled"):
-        mode = "composite"
+    mode = (os.environ.get("PULSE_REGIME_MODE") or "global").strip().lower()
+    if mode not in ("composite", "pooled", "global"):
+        mode = "global"
     return mode
 
 
@@ -324,17 +325,37 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
     regime_col = "regime_pooled" if mode == "pooled" else "regime"
     df       = build_features()
     spreads  = build_spread_series()
-    models   = load_models(regime_mode=mode)
-    report   = load_report(regime_mode=mode) or {}
-    # Fall back to composite if pooled mode is requested but not yet trained.
-    if mode == "pooled" and not models:
-        log.warning("pooled models not found on disk; falling back to composite")
-        mode = "composite"
-        regime_col = "regime"
+
+    # Phase 4 (2026-06-17) — `mode == "global"` uses the single-coherent-model
+    # architecture (one point model per spread, regime fed as 9 one-hot
+    # features, p10/p50/p90 derived from empirical OOS residual quantiles).
+    # Loaded separately because the shape differs from the per-cell {(spread,
+    # regime): bundle} dict the legacy paths consume.
+    global_models: dict = {}
+    if mode == "global":
+        from research.models_global import load_global_models
+        global_models = load_global_models()
+        if not global_models:
+            log.warning("global models not found on disk; falling back to pooled")
+            mode = "pooled"
+        else:
+            # Composite regime label is still used for one-hot encoding;
+            # don't need legacy per-cell models when in global mode.
+            models = {}
+            report = {}
+
+    if mode != "global":
         models   = load_models(regime_mode=mode)
         report   = load_report(regime_mode=mode) or {}
-        if gated:
-            log.warning("PULSE_GATED_BLEND=1 but no pooled models; falling back to baseline-only for gated leg")
+        # Fall back to composite if pooled mode is requested but not yet trained.
+        if mode == "pooled" and not models:
+            log.warning("pooled models not found on disk; falling back to composite")
+            mode = "composite"
+            regime_col = "regime"
+            models   = load_models(regime_mode=mode)
+            report   = load_report(regime_mode=mode) or {}
+            if gated:
+                log.warning("PULSE_GATED_BLEND=1 but no pooled models; falling back to baseline-only for gated leg")
 
     if df.empty:
         return {"available": False, "error": "feature matrix empty"}
@@ -385,10 +406,102 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
             continue
         actual = float(actual_raw)
 
-        # ── 1. Compute pooled-regime candidate (if we have features + a cell)
+        # ── 1. Compute regime candidate
         regime_candidate: dict | None = None
+
+        # Phase 4 — global model path (production default).
+        if mode == "global" and feats_ok and spread in global_models:
+            from research.models_global import predict as _global_predict
+            pred = _global_predict(global_models, spread, latest_features, regime)
+            if pred is not None:
+                point_pred = pred["point"]
+                p10 = pred["p10"]; p50 = pred["p50"]; p90 = pred["p90"]
+                resid_std = pred["resid_std"] or 1.0
+                winner    = pred["winner"]
+                n_train   = pred["n_train"]
+                r2_oos    = pred["r2_oos"]
+                r2_in     = 0.0   # not surfaced for global
+                band_hit  = pred["band_hit_rate"]
+                active_features = total_features = len(global_models[spread]["feat_cols"])
+                competition = {}
+
+                deviation = actual - point_pred
+                z_score   = deviation / resid_std if resid_std > 0 else 0.0
+                inside_band = (p10 <= actual <= p90)
+                confidence = (
+                    min(abs(z_score), 3.0) / 3.0
+                    * min(max(r2_oos or 0.0, 0.0), 1.0)
+                    * min((n_train / 100.0) ** 0.5, 1.0)
+                )
+
+                # Model-health gate (bands are coherent by construction; this
+                # still catches extrapolating fair_value vs the trailing 252d).
+                from research.model_health import check_cell
+                sp_series = spreads[spread].dropna()
+                rolling   = sp_series.tail(252) if len(sp_series) > 1 else sp_series
+                roll_mean = float(rolling.mean()) if len(rolling) else None
+                roll_std  = float(rolling.std())  if len(rolling) > 1 else None
+                synthetic_cell_report = {
+                    "n_train":       n_train,
+                    "ridge_r2_test": r2_oos,
+                    "band_hit_rate": band_hit,
+                }
+                health = check_cell(
+                    synthetic_cell_report,
+                    point=point_pred, p10=p10, p50=p50, p90=p90,
+                    current=actual,
+                    rolling_mean=roll_mean, rolling_std=roll_std,
+                )
+
+                if z_score > GATED_Z_THRESHOLD:
+                    direction = "SELL"
+                    target = round(actual + TUNED_TP_FRAC * (p50 - actual), 3)
+                    stop   = round(actual + TUNED_SL_MULT * resid_std, 3)
+                elif z_score < -GATED_Z_THRESHOLD:
+                    direction = "BUY"
+                    target = round(actual + TUNED_TP_FRAC * (p50 - actual), 3)
+                    stop   = round(actual - TUNED_SL_MULT * resid_std, 3)
+                else:
+                    direction = "NEUTRAL"; target = stop = None
+
+                if not health["ok"]:
+                    direction  = "NEUTRAL"
+                    target     = stop = None
+                    confidence = 0.0
+
+                regime_candidate = {
+                    "spread":          spread,
+                    "label":           LABELS[spread],
+                    "description":     DESCRIPTIONS[spread],
+                    "direction":       direction,
+                    "current":         round(actual, 3),
+                    "fair_value":      round(point_pred, 3),
+                    "band_low":        round(p10, 3),
+                    "band_mid":        round(p50, 3),
+                    "band_high":       round(p90, 3),
+                    "deviation":       round(deviation, 3),
+                    "z_score":         round(z_score, 3),
+                    "inside_band":     bool(inside_band),
+                    "target":          target,
+                    "stop":            stop,
+                    "confidence":      round(confidence, 4),
+                    "r2_train":        r2_in,
+                    "r2_oos":          r2_oos,
+                    "band_hit_rate":   band_hit,
+                    "n_train":         n_train,
+                    "drivers":         [],
+                    "winner_model":    winner,
+                    "active_features": active_features,
+                    "total_features":  total_features,
+                    "competition":     competition,
+                    "recommendation_source": "regime",
+                    "regime":          regime,
+                    "model_health":    health,
+                }
+
+        # ── Legacy per-cell pooled/composite candidate (skipped when in global)
         cell_key = (spread, regime)
-        if feats_ok and cell_key in models:
+        if regime_candidate is None and mode != "global" and feats_ok and cell_key in models:
             bundle = models[cell_key]
             X = feat_vals.values.reshape(1, -1)
             point_pred = float(bundle["point"].predict(X)[0])
@@ -416,6 +529,25 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
                 * min(used_r2, 1.0)
                 * min((n_train / 100.0) ** 0.5, 1.0)
             )
+            # ── Phase 4 — model-health gate (2026-06-17). Cells with broken
+            # quantile bands, negative OOS R², miscalibrated band hit-rate, or
+            # predictions that extrapolate past the trailing-252d spread range
+            # are refused at the regime layer. With PULSE_GATED_BLEND=1 the
+            # row falls through to the rolling-z baseline below; with gating
+            # off the row is dropped entirely. The full reason list is attached
+            # so the dashboard can show *why* a spread was skipped.
+            from research.model_health import check_cell
+            sp_series = spreads[spread].dropna()
+            rolling = sp_series.tail(252) if len(sp_series) > 1 else sp_series
+            roll_mean = float(rolling.mean()) if len(rolling) else None
+            roll_std  = float(rolling.std())  if len(rolling) > 1 else None
+            health = check_cell(
+                cell_report,
+                point=point_pred, p10=p10, p50=p50, p90=p90,
+                current=actual,
+                rolling_mean=roll_mean, rolling_std=roll_std,
+            )
+
             if z_score > GATED_Z_THRESHOLD:
                 direction = "SELL"
                 target    = round(actual + TUNED_TP_FRAC * (p50 - actual), 3)  # halfway to fair
@@ -427,6 +559,14 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
             else:
                 direction = "NEUTRAL"
                 target = stop = None
+
+            # Refuse the regime signal when health gates fail. Confidence is
+            # zeroed out so the row never tops the ranking even if a downstream
+            # caller ignores the health block (defensive).
+            if not health["ok"]:
+                direction  = "NEUTRAL"
+                target     = stop = None
+                confidence = 0.0
 
             drivers = cell_report.get("top_drivers", [])[:3]
 
@@ -457,6 +597,7 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
                 "competition":     competition,
                 "recommendation_source": "regime",
                 "regime":          regime,
+                "model_health":    health,
             }
 
         # ── 2. Compute the rolling-z baseline candidate (always, for gated mode)
@@ -513,15 +654,31 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
         # ── 3. Pick the winner per spread (or the only one we have)
         if gated:
             # Phase 2.6 gate: regime candidate must pass; else baseline.
+            # Phase 4 addendum: regime candidate must ALSO pass model_health.
+            # When a cell is broken (negative OOS R², incoherent quantiles,
+            # extrapolating fair_value), the gate fails and we fall through
+            # to the rolling-z baseline, which doesn't depend on the broken
+            # per-cell model.
             chosen = None
-            if regime_candidate is not None and _pooled_passes_gate(
+            regime_health_ok = (
+                regime_candidate is not None
+                and (regime_candidate.get("model_health") or {}).get("ok") is not False
+            )
+            regime_pool_pass = regime_candidate is not None and _pooled_passes_gate(
                 regime, regime_candidate.get("winner_model"), regime_candidate.get("z_score") or 0.0,
-            ):
+            )
+            if regime_candidate is not None and regime_pool_pass and regime_health_ok:
                 chosen = regime_candidate
                 chosen["gate"] = "pass"
             elif baseline_candidate is not None:
                 chosen = baseline_candidate
-                chosen["gate"] = "fail" if regime_candidate is not None else "no_pooled_cell"
+                if regime_candidate is None:
+                    chosen["gate"] = "no_pooled_cell"
+                elif not regime_health_ok:
+                    chosen["gate"] = "health_fail"
+                    chosen["regime_skipped_reasons"] = (regime_candidate.get("model_health") or {}).get("reasons")
+                else:
+                    chosen["gate"] = "fail"
             elif regime_candidate is not None:
                 # No baseline (insufficient history) — surface the regime
                 # candidate but label it clearly, since the gate is bypassed

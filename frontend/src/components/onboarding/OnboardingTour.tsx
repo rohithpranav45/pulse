@@ -31,40 +31,38 @@ const STEPS: Step[] = [
   },
   {
     target: 'nav',
-    title: 'Eight workspaces',
+    title: 'Six workspaces',
     body:
-      'Each tab is a different angle on the market: Signal (the headline view), Charts, Fundamentals, Intelligence, Term Structure, Spreads & Risk, Contracts, and a historical Playbook. Press 1–8 anywhere to jump.',
+      'Each tab is a different angle on the market: Desk (the landing view), Charts, Markets, Paper Trading, Regime, and the Signal Log. Press 1–6 anywhere to jump.',
     placement: 'right',
   },
   {
-    view: 'signal',
-    target: 'main section:nth-of-type(1)',
-    title: 'Signal cards',
+    view: 'desk',
+    title: 'Signal Drill on the Desk',
     body:
-      'Three weighted composite signals — Brent, WTI, NatGas. Score ranges −2 (strong sell) to +2 (strong buy). Click any indicator chip on a card to open a curriculum-grade reference modal.',
-    placement: 'bottom',
+      'The Desk lists weighted indicators across Brent, WTI, and NatGas. Click any indicator row to open a curriculum-grade reference modal. Score ranges −2 (strong sell) to +2 (strong buy).',
+    placement: 'center',
   },
   {
-    view: 'signal',
-    target: 'main section:nth-of-type(4)',
+    view: 'desk',
     title: 'Price Decomposition Waterfall',
     body:
       "Brent broken into its components: cost-of-carry FV, inventory adjustment, OPEC compliance, DXY, geo premium, curve momentum, macro residual. The closer 'modelled' is to 'actual', the better the model fits today.",
-    placement: 'top',
+    placement: 'center',
   },
   {
-    view: 'fundamentals',
-    target: 'main section:nth-of-type(1)',
+    view: 'markets',
+    target: 'details[data-section="inventories"]',
     title: 'EIA Surprise Tracker',
     body:
-      'Wednesday 10:30 EST is the single most market-moving regular release in oil (curriculum Ch6). Live countdown + last 15 releases + surprise→price reaction regression.',
+      'Inside MARKETS → Inventories. Wednesday 10:30 EST is the single most market-moving regular release in oil (curriculum Ch6). Live countdown + last 15 releases + surprise→price reaction regression.',
     placement: 'bottom',
   },
   {
-    view: 'playbook',
-    title: 'Historical Playbook',
+    view: 'regime',
+    title: 'Historical analogs',
     body:
-      "Four case studies from chapter 8 of your book — 2008 spike, 2014 shale crash, 2020 negative WTI, 2022 war. Each shows exactly what indicators flashed, what PULSE would've called, and the lessons.",
+      "Click the top regime pick to open the drill modal. The 'Historical analogs' section shows the closest past days by feature vector and what the spread did over the next 20 trading days — a sanity check on today's signal.",
     placement: 'center',
   },
   {
