@@ -72,6 +72,13 @@ RUN --mount=type=secret,id=HF_TOKEN,required=true \
         --include "parquet/*" --local-dir /app/Data \
     && echo "baked parquet:" && ls -1 /app/Data/parquet | head
 
+# Train the production "global" regime model artifacts (Phase 4 — see
+# backend/research/models_global.py). The model_global pkls are gitignored
+# locally per the existing models* pattern, so we train them here at build
+# time. Takes ~30 seconds on HF's CPU and writes to
+# /app/backend/data/research/models_global/.
+RUN cd /app/backend && python -m research.models_global
+
 # HF Spaces run the container as uid 1000. Make the writable paths owned by it:
 #   backend/db        — the SQLite paper book (pulled/pushed by hf_persist)
 #   .cache/huggingface — hf_hub_download cache for the runtime book sync
