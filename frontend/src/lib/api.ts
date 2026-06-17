@@ -159,6 +159,8 @@ export const api = {
   regimeBacktest:         () => getJSON('/api/regime/backtest'),
   regimeDrill:            (spread: string) => getJSON(`/api/regime/drill/${spread}`),
   regimeAB:               () => getJSON<ABReportData>('/api/regime/ab'),
+  regimeCalibration:      (include: 'pass' | 'all' = 'pass') =>
+                            getJSON(`/api/regime/calibration?include=${include}`),
   regimeABTick:           (body: any = {}) => postJSON('/api/regime/ab/tick', body),
   regimeABReset:          (scope: 'all' | 'closed' = 'all') => postJSON('/api/regime/ab/reset', { scope }),
   // Phase 3.1 — live analysis engine + signal log

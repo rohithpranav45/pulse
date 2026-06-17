@@ -181,6 +181,36 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+# Cache the live spread snapshot for a short TTL so a single MTM sweep
+# doesn't re-open the recorder DB once per trade. Keyed by product (CO/CL).
+_LIVE_SPREAD_TTL = 30.0  # seconds
+_live_spread_cache: dict[str, tuple[float, dict]] = {}
+
+
+def _live_spreads_for(product: str) -> dict:
+    """Return cached or fresh {spread_key: value} from the 15-min live feed."""
+    import time
+    now = time.time()
+    cached = _live_spread_cache.get(product)
+    if cached and (now - cached[0] < _LIVE_SPREAD_TTL):
+        return cached[1]
+    try:
+        from research.live_feed import get_live_snapshot
+        snap = get_live_snapshot(product)
+    except Exception as exc:
+        log.warning("live snapshot %s failed: %s", product, exc)
+        snap = {"available": False}
+    out: dict = {}
+    if snap.get("available"):
+        for k, v in (snap.get("spreads") or {}).items():
+            try:
+                out[k] = float(v["value"]) if isinstance(v, dict) else float(v)
+            except (TypeError, ValueError, KeyError):
+                continue
+    _live_spread_cache[product] = (now, out)
+    return out
+
+
 def _live_price(asset: str) -> Optional[float]:
     """
     Pull the latest "price" for asset.
@@ -188,13 +218,25 @@ def _live_price(asset: str) -> Optional[float]:
       • Single-asset    — "brent", "wti", "henry_hub" → from /api/prices cache
       • Spread / fly    — e.g. "brent_m1_m2", "brent_m3_m6", "brent_fly_123",
         "wti_m1_m2", "wti_m3_m6", "wti_fly_123"
-        → computed from /Data settlements via research.spread_universe.
-        This lets MTM compare apples-to-apples for regime-engine trades.
+
+    Spread price ladder (Phase 4 fix — 2026-06-17): prefer the **live 15-min
+    feed** (research.live_feed.get_live_snapshot), fall back to the daily
+    /Data settlement (spread_universe.current_values). Previously MTM only saw
+    the daily file — when the entry came from the same daily snapshot as the
+    MTM, unrealised was always 0. The 15-min feed reflects the actual market
+    the desk is trading, so unrealised now moves intra-session.
     """
     # ── Spread / fly asset keys (Brent + WTI from Sprint 3 onward) ─────────
     if asset and (
         asset.startswith("brent_") or asset.startswith("wti_m") or asset.startswith("wti_fly")
     ):
+        product = "CO" if asset.startswith("brent_") else "CL"
+        # Try live feed first.
+        live = _live_spreads_for(product)
+        v = live.get(asset)
+        if v is not None:
+            return float(v)
+        # Fall back to daily settlement (Oracle / mentor laptop / weekend).
         try:
             from research.spread_universe import current_values
             vals = current_values()
@@ -203,7 +245,7 @@ def _live_price(asset: str) -> Optional[float]:
                 return float(v)
         except Exception as exc:
             log.warning("spread price lookup failed for %s: %s", asset, exc)
-            return None
+        return None
     # ── Single-asset live price (Brent/WTI/HH) ─────────────────────────────
     try:
         from db.cache import get_cached

@@ -15,9 +15,9 @@ type TickerData = Record<string, Quote>;
 function TimeChip({ tz, label }: { tz: string; label: string }) {
   const now = useClock();
   return (
-    <div className="flex flex-col items-center px-2">
-      <span className="text-[9px] font-mono tracking-widest text-text-muted uppercase">{label}</span>
-      <span className="text-[11px] font-mono text-text-secondary tabular">{fmt.time(now, tz)}</span>
+    <div className="flex flex-col items-center px-2.5">
+      <span className="text-[8.5px] font-mono tracking-[0.24em] text-text-muted uppercase">{label}</span>
+      <span className="text-[11px] font-mono text-text-secondary tabular leading-tight">{fmt.time(now, tz)}</span>
     </div>
   );
 }
@@ -32,7 +32,7 @@ function MarketStatus() {
   else status = { label: 'CLOSED', tone: 'neut' };
   return (
     <Chip tone={status.tone} icon={<span className={status.tone === 'bull' ? 'live-dot' : ''} />}>
-      MARKET · {status.label}
+      MKT · {status.label}
     </Chip>
   );
 }
@@ -52,12 +52,12 @@ function IconButton({
     <motion.button
       onClick={onClick}
       title={title}
-      whileHover={{ y: -1, scale: 1.05 }}
-      whileTap={{ scale: 0.95 }}
+      whileHover={{ y: -1, scale: 1.06 }}
+      whileTap={{ scale: 0.94 }}
       transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
       className={clsx(
-        'p-2 rounded-md text-text-tertiary hover:text-gold transition-colors',
-        'hover:bg-bg-hover/60',
+        'p-2 rounded-md text-text-tertiary hover:text-gold-bright transition-colors',
+        'hover:bg-gold/8',
         className,
       )}
     >
@@ -90,39 +90,80 @@ export function TopBar({ ticker, onRefresh, refreshing }: { ticker: TickerData |
       initial={{ opacity: 0, y: -8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-      className="h-16 flex-shrink-0 bg-bg-elev/85 backdrop-blur-xl flex items-center px-5 gap-6 relative z-30"
-      style={{ borderBottom: '1px solid var(--hairline)' }}
+      className="h-16 flex-shrink-0 flex items-center px-5 gap-6 relative z-30"
+      style={{
+        background: 'var(--topbar-grad)',
+        backdropFilter: 'blur(20px) saturate(140%)',
+        WebkitBackdropFilter: 'blur(20px) saturate(140%)',
+        borderBottom: '1px solid var(--hairline)',
+      }}
     >
       {/* hairline gold accent at the bottom edge */}
       <div
         aria-hidden
         className="absolute bottom-0 left-0 right-0 h-px pointer-events-none"
-        style={{ background: 'linear-gradient(90deg, transparent, rgba(212,175,55,0.28) 20%, rgba(212,175,55,0.45) 50%, rgba(212,175,55,0.28) 80%, transparent)' }}
+        style={{ background: 'linear-gradient(90deg, transparent, var(--border-accent) 14%, rgba(218,182,65,0.6) 50%, var(--border-accent) 86%, transparent)' }}
       />
+      {/* subtle scanline gradient overlay */}
+      <div
+        aria-hidden
+        className="absolute inset-0 pointer-events-none opacity-40"
+        style={{ background: 'radial-gradient(ellipse 30% 100% at 0% 50%, rgba(218,182,65,0.05), transparent 70%)' }}
+      />
+
       {/* Logo */}
-      <div className="flex items-center gap-3 flex-shrink-0">
+      <div className="flex items-center gap-3 flex-shrink-0 relative">
         <motion.div
           whileHover={{ rotate: -6, scale: 1.06 }}
           transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="w-9 h-9 rounded-lg bg-gradient-to-br from-gold to-gold-bright flex items-center justify-center shadow-lg shadow-gold/30"
+          className="relative w-10 h-10 rounded-xl flex items-center justify-center"
+          style={{
+            background: 'linear-gradient(135deg, rgb(var(--gold-bright)), rgb(var(--gold)))',
+            boxShadow: '0 8px 24px -8px var(--gold-glow-strong), 0 0 0 1px rgba(218,182,65,0.30), inset 0 1px 0 rgba(255,255,255,0.20)',
+          }}
         >
-          <Activity className="w-5 h-5 text-bg" strokeWidth={2.5} />
+          <Activity className="w-5 h-5 text-bg" strokeWidth={2.6} />
+          {/* aura */}
+          <span
+            aria-hidden
+            className="absolute -inset-2 rounded-2xl pointer-events-none"
+            style={{ background: 'radial-gradient(circle, var(--gold-glow) 0%, transparent 70%)', filter: 'blur(8px)', opacity: 0.7 }}
+          />
         </motion.div>
-        <div className="flex flex-col leading-tight">
-          <span className="font-display font-extrabold tracking-[0.32em] text-base text-gold">PULSE</span>
-          <span className="font-mono text-[8px] tracking-[0.28em] text-text-muted uppercase">Energy Intelligence</span>
+        <div className="flex flex-col leading-tight relative">
+          <span
+            className="font-display font-extrabold tracking-[0.34em] text-[18px] leading-none"
+            style={{
+              background: 'linear-gradient(180deg, rgb(var(--gold-bright)) 0%, rgb(var(--gold)) 100%)',
+              WebkitBackgroundClip: 'text',
+              backgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              filter: 'drop-shadow(0 0 12px var(--gold-glow))',
+            }}
+          >
+            PULSE
+          </span>
+          <span className="font-mono text-[8px] tracking-[0.30em] text-text-muted uppercase mt-0.5">Energy · Intel · Terminal</span>
         </div>
       </div>
 
+      <span className="w-px h-8 bg-border" />
+
       {/* Ticker tape */}
-      <div className="flex-1 flex items-center gap-1 overflow-hidden">
-        {TICKER_KEYS.map(({ key, label }) => {
+      <div className="flex-1 flex items-center gap-0 overflow-hidden">
+        {TICKER_KEYS.map(({ key, label }, idx) => {
           const q = ticker?.[key];
           const chg = q?.change_pct ?? 0;
           const up = chg >= 0;
           return (
-            <div key={key} className="ticker-item border-r border-border/60 last:border-r-0 hover:bg-bg-hover/30 transition-colors">
-              <span className="text-[9px] font-mono tracking-widest text-text-tertiary uppercase">{label}</span>
+            <div
+              key={key}
+              className={clsx(
+                'ticker-item hover:bg-gold/5 transition-colors group',
+                idx !== 0 && 'border-l border-border/40',
+              )}
+            >
+              <span className="text-[8.5px] font-mono tracking-[0.22em] text-text-muted uppercase group-hover:text-text-tertiary transition-colors">{label}</span>
               <motion.span
                 key={q?.price ?? '—'}
                 initial={{ opacity: 0.6 }}
@@ -132,8 +173,14 @@ export function TopBar({ ticker, onRefresh, refreshing }: { ticker: TickerData |
               >
                 {q ? fmt.price(q.price) : '—'}
               </motion.span>
-              <span className={clsx('text-[10px] font-mono tabular px-1', up ? 'text-bull' : 'text-bear')}>
-                {q?.change_pct !== undefined ? fmt.pct(q.change_pct) : ''}
+              <span
+                className={clsx(
+                  'text-[10px] font-mono font-semibold tabular px-1.5 py-0.5 rounded',
+                  up ? 'text-bull bg-bull/8' : 'text-bear bg-bear/8',
+                  q?.change_pct === undefined && 'opacity-0',
+                )}
+              >
+                {up ? '▲' : '▼'} {q?.change_pct !== undefined ? `${Math.abs(q.change_pct).toFixed(2)}%` : ''}
               </span>
             </div>
           );
@@ -144,12 +191,12 @@ export function TopBar({ ticker, onRefresh, refreshing }: { ticker: TickerData |
       <div className="flex items-center gap-2 flex-shrink-0">
         <HealthPill />
         <MarketStatus />
-        <div className="flex border-l border-border pl-3 ml-1">
+        <div className="flex border-l border-border pl-2 ml-1">
           <TimeChip tz="America/New_York" label="NYC" />
           <TimeChip tz="Europe/London" label="LON" />
           <TimeChip tz="Asia/Singapore" label="SGP" />
         </div>
-        <div className="flex items-center gap-1 pl-2 border-l border-border ml-1">
+        <div className="flex items-center gap-0.5 pl-2 border-l border-border ml-1">
           <ThemeToggle />
           <IconButton onClick={onRefresh} title="Refresh all data (R)">
             <RefreshCw className={clsx('w-4 h-4', refreshing && 'animate-spin')} />

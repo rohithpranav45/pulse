@@ -67,3 +67,38 @@ def test_ab_cost_table_matches_walkforward():
 
 def test_ab_cost_default_matches_walkforward():
     assert ab_test.COST_DEFAULT_RT == walkforward.COST_DEFAULT_RT
+
+
+# ── Phase 4.G — signal_log session dedup ───────────────────────────────────────
+# The Signal Log used to UNIQUE on (instrument, direction, feed_as_of, cadence),
+# which produced one row per 15-min bar per persistent opportunity. The session
+# dedup migration replaces it with (instrument, direction, opened_at_session).
+# If a future change reintroduces the old key, the log floods again.
+
+def test_signal_log_dedup_keys():
+    """The only UNIQUE on signal_log must be (instrument, direction, opened_at_session)."""
+    import sqlite3
+    import tempfile
+
+    from research import signal_log as sl
+
+    # Run ensure_schema against a fresh DB so we don't depend on the live cache.
+    with tempfile.TemporaryDirectory() as td:
+        db_path = f"{td}/cache.db"
+        original = sl._DB_PATH
+        sl._DB_PATH = db_path
+        try:
+            sl.ensure_schema()
+            c = sqlite3.connect(db_path)
+            try:
+                sql = c.execute(
+                    "SELECT sql FROM sqlite_master WHERE type='table' AND name='signal_log'"
+                ).fetchone()[0]
+                assert "instrument, direction, opened_at_session" in sql, sql
+                assert "feed_as_of, cadence" not in sql, sql
+                cols = {r[1] for r in c.execute("PRAGMA table_info(signal_log)").fetchall()}
+                assert {"opened_at_session", "bar_count", "last_seen_at"}.issubset(cols)
+            finally:
+                c.close()
+        finally:
+            sl._DB_PATH = original

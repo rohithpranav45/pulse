@@ -18,23 +18,31 @@ export function Stat({
     tone === 'bull' ? 'text-bull' :
     tone === 'bear' ? 'text-bear' :
     tone === 'neut' ? 'text-neut' :
-    tone === 'gold' ? 'text-gold' :
+    tone === 'gold' ? 'text-gold-bright' :
     'text-text-primary';
+  const glow =
+    tone === 'bull' ? 'drop-shadow(0 0 12px var(--bull-ring))' :
+    tone === 'bear' ? 'drop-shadow(0 0 12px var(--bear-ring))' :
+    tone === 'neut' ? 'drop-shadow(0 0 12px var(--neut-ring))' :
+    tone === 'gold' ? 'drop-shadow(0 0 14px var(--gold-glow))' :
+    undefined;
   return (
     <div className={clsx(
-      'flex flex-col gap-1',
+      'flex flex-col gap-1.5',
       align === 'right' && 'items-end',
       align === 'center' && 'items-center',
     )}>
-      <div className="text-[9.5px] font-mono tracking-[0.18em] text-text-tertiary uppercase">{label}</div>
-      <div className={clsx(
-        'text-[22px] font-display font-bold tabular leading-none',
-        'transition-colors duration-300',
-        toneColor,
-      )}>
+      <div className="text-[9px] font-mono tracking-[0.22em] text-text-muted uppercase">{label}</div>
+      <div
+        className={clsx(
+          'text-[24px] font-display font-extrabold tabular leading-none transition-colors duration-300',
+          toneColor,
+        )}
+        style={glow ? { filter: glow } : undefined}
+      >
         {value}
       </div>
-      {sub && <div className="text-[10px] font-mono text-text-muted tabular leading-tight">{sub}</div>}
+      {sub && <div className="text-[10px] font-mono text-text-tertiary tabular leading-tight">{sub}</div>}
     </div>
   );
 }

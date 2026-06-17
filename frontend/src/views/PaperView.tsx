@@ -11,7 +11,7 @@ import { usePolling } from '@/lib/hooks';
 import { staggerContainer, staggerTight, fadeUp, scaleIn } from '@/lib/motion';
 import {
   Play, TrendingUp, TrendingDown,
-  ShieldCheck, AlertOctagon, Wallet, Activity, Trash2,
+  ShieldCheck, AlertOctagon, Wallet, Activity, Trash2, Zap,
 } from 'lucide-react';
 
 /**
@@ -611,6 +611,99 @@ function PerformancePanel({ perf, onClear }: { perf: Performance | null; onClear
 }
 
 
+// ─── Run-engine button: fires ab_test.tick() on demand ─────────────────────
+
+function RunEngineButton({ onPushed }: { onPushed: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [flash, setFlash] = useState<'ok' | 'err' | null>(null);
+  const [summary, setSummary] = useState<string | null>(null);
+
+  const fire = async () => {
+    setBusy(true); setFlash(null); setSummary(null);
+    try {
+      const out = await api.regimeABTick();
+      const data = (out as any)?.data ?? out;
+      const pooledPushed = data?.pushed?.pooled?.length ?? 0;
+      const gatedPushed  = data?.pushed?.gated?.length  ?? 0;
+      const errs = data?.errors?.length ?? 0;
+      if (errs > 0 && pooledPushed + gatedPushed === 0) {
+        setFlash('err');
+        setSummary(`engine errored (${errs}); see logs`);
+      } else {
+        setFlash('ok');
+        setSummary(`pushed ${pooledPushed} pooled · ${gatedPushed} gated`);
+      }
+      onPushed();
+      setTimeout(() => { setFlash(null); setSummary(null); }, 5000);
+    } catch (e: any) {
+      setFlash('err'); setSummary(e?.message || String(e));
+      setTimeout(() => { setFlash(null); setSummary(null); }, 5000);
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <Panel
+      title="Live Engine"
+      subtitle="manual A/B tick · pushes pooled + gated arms at live prices"
+      accent="gold"
+      bodyClassName="!p-3"
+      staticMount
+      right={
+        <span className="text-[9px] font-mono uppercase tracking-widest text-text-tertiary">
+          daily auto-push · 24h cadence
+        </span>
+      }
+    >
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex flex-col gap-1">
+          <span className="text-[10px] font-mono uppercase tracking-widest text-text-muted">
+            Fire the regime engine now
+          </span>
+          <span className="text-[11px] font-mono text-text-tertiary">
+            Generates a fresh recommendation and opens paper positions on both A/B arms at current spread prices.
+          </span>
+        </div>
+        <div className="flex items-center gap-3">
+          <AnimatePresence>
+            {flash && summary && (
+              <motion.span
+                key={summary}
+                initial={{ opacity: 0, x: -4 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0 }}
+                className={clsx(
+                  'text-[11px] font-mono',
+                  flash === 'ok' ? 'text-bull' : 'text-bear',
+                )}
+              >
+                {flash === 'ok' ? '✓ ' : '✕ '}{summary}
+              </motion.span>
+            )}
+          </AnimatePresence>
+          <motion.button
+            onClick={fire}
+            disabled={busy}
+            whileHover={!busy ? { y: -1 } : {}}
+            whileTap={!busy ? { scale: 0.97 } : {}}
+            transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+            className={clsx(
+              'flex items-center gap-2 px-4 py-2 rounded-md font-mono uppercase tracking-widest text-[11px] font-bold transition-colors',
+              busy
+                ? 'bg-gold/40 text-bg cursor-wait'
+                : 'bg-gold text-bg hover:bg-gold-bright shadow-md',
+            )}
+            title="Manually trigger ab_test.tick() — pushes today's recommendation to both A/B arms"
+          >
+            <Zap className={clsx('w-3.5 h-3.5', busy && 'animate-pulse')} />
+            {busy ? 'firing…' : 'Run engine now'}
+          </motion.button>
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+
 // ─── Top-level view ────────────────────────────────────────────────────────
 
 export function PaperView({ tradeIdea }: { tradeIdea: any }) {
@@ -650,6 +743,11 @@ export function PaperView({ tradeIdea }: { tradeIdea: any }) {
       initial="hidden"
       animate="show"
     >
+      {/* Manual A/B engine trigger — for demos and missed daily ticks */}
+      <motion.div variants={fadeUp}>
+        <RunEngineButton onPushed={bump} />
+      </motion.div>
+
       {/* Hero KPI strip — at-a-glance counters */}
       <motion.div
         variants={staggerTight}

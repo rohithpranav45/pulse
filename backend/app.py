@@ -1223,6 +1223,75 @@ def regime_walkforward_route():
                     "timestamp": _now()})
 
 
+@app.route("/api/regime/calibration")
+def regime_calibration_route():
+    """
+    Phase 4.H — calibration plot. Bin gated_trades.json by |z|; report the
+    mean-reversion fraction (fwd_pnl > 0) per bin so the user can read
+    "when the engine flagged z = X, the spread reverted Y% of the time
+    within the 20-day window (n trades)."
+
+    Read-only; gated_trades.json is the same tape the walk-forward emits, so
+    no model is hit. Source is filtered to gate=pass rows by default (what
+    the live engine would have fired); pass ?include=all to include the
+    full backtest tape.
+    """
+    import json as _json
+    import os as _os
+
+    def _calib():
+        include = (request.args.get("include") or "pass").lower()
+        path = _os.path.join(
+            _os.path.dirname(__file__), "data", "research", "gated_trades.json"
+        )
+        if not _os.path.exists(path):
+            return {"available": False, "error": "gated_trades.json not found — run the walk-forward first"}
+        with open(path, "r", encoding="utf-8") as f:
+            trades = _json.load(f)
+
+        rows = [
+            t for t in trades
+            if t.get("z") is not None and t.get("fwd_pnl") is not None
+            and (include == "all" or t.get("gate") == "pass")
+        ]
+        if not rows:
+            return {"available": False, "error": f"no trades match include={include}"}
+
+        # Bin on |z|. Buckets land on the conviction thresholds the engine
+        # actually trades around (1.5σ gate, 2σ band, 2.5σ stop, 3σ extreme).
+        edges = [1.5, 2.0, 2.5, 3.0, 3.5, 4.0]
+        bins = []
+        for lo, hi in zip([0.0] + edges, edges + [float("inf")]):
+            in_bin = [t for t in rows if lo <= abs(t["z"]) < hi]
+            n = len(in_bin)
+            if n == 0:
+                continue
+            reverted = sum(1 for t in in_bin if t["fwd_pnl"] > 0)
+            mean_pnl = sum(t["fwd_pnl"] for t in in_bin) / n
+            bins.append({
+                "z_lo":           lo,
+                "z_hi":           None if hi == float("inf") else hi,
+                "n":              n,
+                "reverted_frac":  reverted / n,
+                "mean_fwd_pnl":   round(mean_pnl, 4),
+            })
+
+        n_total    = len(rows)
+        n_reverted = sum(1 for t in rows if t["fwd_pnl"] > 0)
+        return {
+            "available":           True,
+            "include":             include,
+            "horizon_days":        20,
+            "n_total":             n_total,
+            "overall_reverted":    n_reverted / n_total if n_total else None,
+            "bins":                bins,
+            "source":              "backend/data/research/gated_trades.json",
+        }
+
+    return jsonify({"data": safe_fetch(_calib, {"available": False}),
+                    "timestamp": _now()})
+
+
 @app.route("/api/regime/ab")
 def regime_ab_route():
     """
@@ -1318,7 +1387,7 @@ def regime_signals_generate_route():
     from research.signal_log import generate_live_signals
     out = generate_live_signals(
         cadence=body.get("cadence", "daily"),
-        include_wti=bool(body.get("include_wti", False)),
+        include_wti=bool(body.get("include_wti", True)),
     )
     return jsonify({"data": out, "timestamp": _now()})
 

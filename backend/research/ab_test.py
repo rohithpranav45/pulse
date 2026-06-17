@@ -96,15 +96,50 @@ def tick(*, ab_session: Optional[str] = None) -> dict:
     """
     Run one A/B generation step. Idempotent within a session (dedup on open
     (asset, direction, ab_mode)) so safe to call multiple times per day.
+
+    Phase 4 fix (2026-06-17): overlays the live 15-min feed (when available)
+    so each arm fires at the *current* spread value, not the most recent daily
+    settlement. Without this, signals generated mid-cycle use a price the
+    paper book's live MTM has already moved away from — instant TP/SL trips
+    show up the next minute. Live overlay → entry, target, stop and unrealised
+    are all on the same intraday clock.
     """
     from research.live_ranker import get_recommendation
+    from research.live_feed   import get_live_snapshot
     from paper_trading import push_trade, open_position_exists
 
     session = ab_session or datetime.now(timezone.utc).date().isoformat()
 
+    # Best-effort live overlay — both products. Falls back to daily settlement
+    # when the feed is unreachable (Oracle deploy, weekend, share down).
+    live_actuals: dict[str, float] = {}
+    live_curve = None
+    live_as_of = None
+    for prod in ("CO", "CL"):
+        try:
+            snap = get_live_snapshot(prod)
+        except Exception as exc:
+            log.warning("ab_test.tick: live snapshot %s failed: %s", prod, exc)
+            continue
+        if not snap.get("available"):
+            continue
+        for k, v in (snap.get("spreads") or {}).items():
+            try:
+                live_actuals[k] = float(v["value"]) if isinstance(v, dict) else float(v)
+            except (TypeError, ValueError, KeyError):
+                continue
+        if prod == "CO":
+            live_curve = (snap.get("curve") or {}).get("m1_m12")
+            live_as_of = snap.get("as_of")
+    overlay_kwargs: dict = {}
+    if live_actuals:
+        overlay_kwargs["live_actuals"] = live_actuals
+    if live_curve is not None:
+        overlay_kwargs["live_curve_m1m12"] = live_curve
+
     arms = (
-        ("pooled", {"force_mode": "pooled", "force_gated": False}),
-        ("gated",  {"force_mode": "pooled", "force_gated": True}),
+        ("pooled", {"force_mode": "pooled", "force_gated": False, **overlay_kwargs}),
+        ("gated",  {"force_mode": "pooled", "force_gated": True,  **overlay_kwargs}),
     )
 
     summary: dict = {
