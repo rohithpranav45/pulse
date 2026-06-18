@@ -284,7 +284,8 @@ def get_current_regime() -> dict:
 
 def get_recommendation(*, force_mode: str | None = None, force_gated: bool | None = None,
                        live_actuals: dict | None = None,
-                       live_curve_m1m12: float | None = None) -> dict:
+                       live_curve_m1m12: float | None = None,
+                       live_feature_overlay: dict | None = None) -> dict:
     """
     Run inference on all 6 spreads under the current regime, rank by composite
     confidence, return #1 opportunity + every spread.
@@ -307,6 +308,16 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
     A/B harness + dashboard cards are unaffected. The slow regime features
     (inventory / COT / vol / macro) still come from the latest historical row;
     only the fast state (spread level + curve-axis regime) is overlaid live.
+
+    Phase 4 (2026-06-18, live feature overlay): pass `live_feature_overlay` — a
+    {feature_col: value} map of today's FAST features (brent_close, m1_m12,
+    curvature, *_lag1, wti_brent_spread, calendar cols …) from
+    `live_features.build_overlay` — to score the model on today's market state
+    instead of the stale daily row. Without it, fair_value is predicted from the
+    last daily settle (frozen 2026-05-26) while `actual` is live, which inflates
+    z-scores past the |z|>8 sanity gate. Additive: default None reproduces the
+    prior behaviour bit-for-bit; slow features absent from the overlay stay
+    carried from the latest historical row.
     """
     from research.features        import build_features, predictors_for
     from research.spread_universe import build_spread_series, INSTRUMENTS, LABELS, DESCRIPTIONS
@@ -361,6 +372,16 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
         return {"available": False, "error": "feature matrix empty"}
 
     latest_features = df.iloc[-1]
+    # Phase 4 (2026-06-18) — overlay today's fast features onto the (possibly
+    # stale) latest daily row so the model predicts fair value from today's
+    # market state, not the last daily settle. Additive: no overlay → unchanged.
+    overlaid_features: list[str] = []
+    if live_feature_overlay:
+        latest_features = latest_features.copy()
+        for col, val in live_feature_overlay.items():
+            if col in latest_features.index and val is not None and np.isfinite(val):
+                latest_features[col] = float(val)
+                overlaid_features.append(col)
     # Forward-fill spreads up to 3 business days so WTI cells still have a
     # "today" reading when the synth file lags Brent's latest settle by a
     # session. Mirrors the ffill(limit=3) inside build_features() so feature
@@ -374,7 +395,7 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
     # The curve axis is defined on Brent M1-M12 (regimes.classify_curve), so a
     # single live curve value re-buckets the regime; inventory + vol carry from
     # the latest historical row (slow features). Pooled regime == curve bucket.
-    live_overlay = (live_actuals is not None) or (live_curve_m1m12 is not None)
+    live_overlay = (live_actuals is not None) or (live_curve_m1m12 is not None) or bool(live_feature_overlay)
     if live_curve_m1m12 is not None and np.isfinite(live_curve_m1m12):
         from research.regimes import classify_curve, classify_inv, classify_vol
         curve_b = classify_curve(float(live_curve_m1m12))
@@ -754,6 +775,7 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
         "regime":                regime,
         "regime_mode":           mode,
         "live":                  bool(live_overlay),  # Phase 3.1 — ran on live feed vs daily settle
+        "overlaid_features":     overlaid_features,   # Phase 4 — fast features scored live
         "gated_blend":           bool(gated),
         "gated_summary":         gated_summary,
         "size_mode":             size_mode if gated else None,  # Phase 2.7

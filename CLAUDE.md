@@ -7,7 +7,7 @@ spread engine), and serves a React dashboard with a paper-trading book.
 - **Stack:** Flask 3 · React 18 + Vite + Tailwind · SQLite (cache + paper book) ·
   DuckDB/Parquet over a 3.5 GB `/Data` desk feed · sklearn + XGBoost/LightGBM/CatBoost
 - **Run (local):** `python start.py` from the repo root → http://127.0.0.1:5000
-- **Last updated:** 2026-06-16 (Phase 4 — dashboard rebuild planned · HF regime root-cause found)
+- **Last updated:** 2026-06-18 (Phase 4 — live feature overlay shipped; live z-scores back in-distribution)
 - **Live:** https://rohithpranav45-pulse.hf.space (free HF Space, A/B book accumulating 24/7 — **regime endpoints currently failing**, see §1 below)
 
 > 🧭 **Three docs, one per tense:**
@@ -172,6 +172,32 @@ on strategy direction is in.
 - **Next session** — Phase 4 fully complete locally (4.A → 4.H). Hold for mentor strategy
   verdict before any HF redeploy; architecture changes still deferred.
 
+### ✅ Live feature overlay — fixes stale-feature blow-up (2026-06-18)
+The live engine scored the global model on `df.iloc[-1]` — the latest *daily* feature row,
+frozen at **2026-05-26** (the /Data daily file stopped advancing). Only the z-score numerator
+(live spread) + regime one-hot were live; the **feature vector predicting fair value was 3 weeks
+stale**, so fair value reflected late-May while `actual` was today → z-scores blew out to **−11σ /
+−7σ** and tripped the `|z|>8` sanity gate. Root symptom, not a model bug.
+- **New `backend/research/live_features.py`** — `build_overlay(snap_co, snap_cl=None)` recomputes
+  today's **fast** features from the live snapshots: `brent_close, m1_m12, m1_m12_sq, curvature,
+  m1_m2_lag1/m3_m6_lag1/fly_lag1, wti_close, wti_m1_m12, wti_brent_spread (=wti_c1−brent_c1, matches
+  features.py sign), wti_*_lag1, sin_doy, cos_doy, days_to_expiry`. **Slow** features (inv/COT/cracks/
+  real_rate/ovx_vix/realised_vol_20d/brent_ret_5d) stay carried-stale and are reported honestly in a
+  `feature_overlay` meta block — no live source on this feed, and a 3-week carry on a weekly series is
+  a far smaller error than on the front price. `*_lag1` cols map to the freshest live spread level.
+- **Wiring:** `live_ranker.get_recommendation` gained an additive `live_feature_overlay` kwarg —
+  default `None` reproduces the daily/A-B path **bit-for-bit**; when present it merges the overlay onto
+  a copy of `latest_features` before `predict()`. `live_engine.get_live_recommendation` builds the
+  overlay and passes it; the overlay propagates automatically to `/api/regime/live`,
+  `signal_log.generate_live_signals`, and `intraday_replay` (all call `get_live_recommendation`).
+  Response carries `overlaid_features` + `live_feed.feature_overlay`.
+- **Verified on the live 06-18 feed (laptop sees `I:\`):** brent_m1_m2 fair **$2.91 → $0.24**
+  (live spread $0.20), z **−11.29 → −0.16**; wti_m1_m2 z **−6.89 → +0.48**. All four spreads now
+  in-distribution; top credible signal = **wti_fly_123 SELL z=+2.10 (LightGBM)** instead of the absurd
+  −11σ. The `|z|>8` gate no longer fires spuriously.
+- **Tests:** new `tests/test_live_features.py` (6 tests — overlay correctness, lag mapping, WTI sign,
+  calendar formula, unavailable-snapshot no-op, describe_overlay). **23 pytest green** (17 + 6).
+
 ### 🚨 HF Spaces regime endpoints broken (root cause found, 2026-06-16)
 - `https://rohithpranav45-pulse.hf.space/api/regime/recommendation` and `/api/regime/backtest` return
   `{"available": false}` silently. `/api/regime/drill/<spread>` surfaces the real error:
@@ -306,6 +332,7 @@ pulse/
 | `models.py` | 7-model per-cell competition + quantile bands |
 | `live_ranker.py` | classify → predict → rank; **applies the tuned exit rule** (TP/SL/time-stop). Phase 3.1: additive `live_actuals`/`live_curve_m1m12` overrides |
 | `live_feed.py` | Phase 3.1 — reads the live 15-min bar share, builds real spreads + curve by expiry ordering |
+| `live_features.py` | Phase 4 (06-18) — overlays today's fast features (price/curve/lags/calendar) onto the stale daily row so the model scores on the live market; slow features carried-stale + reported |
 | `live_engine.py` | Phase 3.1 — overlays the live snapshot onto the ranker → "what would it trade now" |
 | `signal_log.py` | Phase 3.1 — persists every live opportunity + subsequent-performance MTM (`signal_log` table) |
 | `walkforward.py` | expanding-window backtest; writes trade tapes + `walkforward_report.json` |
