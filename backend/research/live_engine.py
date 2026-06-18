@@ -48,8 +48,9 @@ def get_live_recommendation(*, include_wti: bool = False) -> dict:
     augmented with a `live_feed` block, or {"available": False, ...} if the feed
     is unreachable / empty.
     """
-    from research.live_feed   import get_live_snapshot
-    from research.live_ranker import get_recommendation
+    from research.live_feed     import get_live_snapshot
+    from research.live_features import build_overlay, CARRIED_STALE_COLS
+    from research.live_ranker   import get_recommendation
 
     snap_co = get_live_snapshot("CO")
     if not snap_co.get("available"):
@@ -72,7 +73,13 @@ def get_live_recommendation(*, include_wti: bool = False) -> dict:
             for k, v in (snap_cl.get("spreads") or {}).items():
                 live_actuals[k] = v["value"]
 
-    rec = get_recommendation(live_actuals=live_actuals, live_curve_m1m12=live_curve)
+    # Phase 4 (2026-06-18) — overlay today's fast features so the model predicts
+    # fair value from today's market, not the (stale) latest daily settle. WTI
+    # legs are only overlaid when the WTI snapshot was actually pulled.
+    overlay = build_overlay(snap_co, snap_cl if include_wti else None)
+
+    rec = get_recommendation(live_actuals=live_actuals, live_curve_m1m12=live_curve,
+                             live_feature_overlay=overlay)
     if not rec.get("available"):
         rec["live"] = True
         return rec
@@ -93,6 +100,13 @@ def get_live_recommendation(*, include_wti: bool = False) -> dict:
         "spreads":      live_actuals,
         "products":     ["CO"] + (["CL"] if (include_wti and snap_cl and snap_cl.get("available")) else []),
         "legs_co":      snap_co.get("legs"),
+        # Phase 4 — which fast features were scored live (honest provenance:
+        # everything else carried from the latest daily row).
+        "feature_overlay": {
+            "overlaid":      sorted(rec.get("overlaid_features", [])),
+            "n_overlaid":    len(rec.get("overlaid_features", [])),
+            "carried_stale": CARRIED_STALE_COLS,
+        },
     }
     rec["live"] = True
     rec["as_of_live"] = snap_co.get("as_of")
