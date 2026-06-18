@@ -39,20 +39,22 @@ def _active_mode() -> str:
     """
     Resolve the regime mode for live inference.
 
-    Phase 4 (2026-06-17): production default is now "global" — the regime-as-
-    feature single-coherent-model architecture with empirical OOS residual bands
-    (see models_global.py). The previous per-cell pooled/composite models had
-    structural flaws documented in model_health.py.
+    Default is "pooled" — the cell-based per-(spread, regime) engine. The REGIME
+    tab's backtest panel reads the per-cell report (backtest_report_pooled.json),
+    which only exists for the cell-based modes, so the dashboard renders fully in
+    this mode. (2026-06-17 had briefly defaulted to "global"; reverted 2026-06-18
+    at the user's request — the global model has no per-cell backtest report, which
+    blanked /api/regime/backtest. The strategy rebuild is happening elsewhere in
+    the new RV Desk, not in this regime path.)
 
-    Set PULSE_REGIME_MODE=pooled to fall back to the legacy 3-cell pooled
-    engine (composite is also supported). Phase 2.6: `PULSE_GATED_BLEND=1`
-    forces pooled because the gated rule is defined on pooled labels.
+    Set PULSE_REGIME_MODE=global / composite to override. Phase 2.6:
+    `PULSE_GATED_BLEND=1` forces pooled because the gated rule is on pooled labels.
     """
     if _gated_blend_enabled():
         return "pooled"
-    mode = (os.environ.get("PULSE_REGIME_MODE") or "global").strip().lower()
+    mode = (os.environ.get("PULSE_REGIME_MODE") or "pooled").strip().lower()
     if mode not in ("composite", "pooled", "global"):
-        mode = "global"
+        mode = "pooled"
     return mode
 
 
