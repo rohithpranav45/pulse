@@ -78,6 +78,148 @@ def _replay(series: pd.Series, fair: float, sigma: float, z_entry: float,
     return trades
 
 
+_CAVEATS = [
+    "~6 calendar days is not a backtest. The strategy horizon is 20 trading days; the "
+    "30-day time-stop can never trigger in-window, so trades that don't hit TP/SL are left "
+    "OPEN with UNREALIZED PnL.",
+    "Models are daily-trained — fair value + sigma are held constant across the window "
+    "(mild look-ahead: a true walk-forward re-fits fair each day).",
+    "Exits are close-based; intrabar high/low touches are not modeled. Sample is tiny, so "
+    "treat every number as illustrative only.",
+    "WTI fair values come from SYNTH-trained models (CLAUDE.md gotcha 11) — treat wti_* as indicative.",
+]
+
+
+def _trade_json(t: dict) -> dict:
+    """Serialize one replay trade (Timestamps → ISO strings) for the API."""
+    return {
+        "dir":    t["dir"],
+        "t_in":   str(t["t_in"]),
+        "entry":  round(float(t["entry"]), 3),
+        "target": round(float(t["tgt"]), 3),
+        "stop":   round(float(t["stop"]), 3),
+        "t_out":  str(t["t_out"]),
+        "exit":   round(float(t["exit"]), 3),
+        "reason": t["reason"],
+        "pnl":    round(float(t["pnl"]), 3),
+    }
+
+
+def _trade_metrics(trades: list[dict]) -> dict | None:
+    """Aggregate gross/net metrics for a trade list. pf=None means no losing
+    trades (infinite profit factor — the frontend renders this as ∞)."""
+    from research.walkforward import COST_PER_SPREAD_RT, COST_DEFAULT_RT
+    if not trades:
+        return None
+    pnls   = [t["pnl"] for t in trades]
+    wins   = [p for p in pnls if p > 0]
+    losses = [p for p in pnls if p < 0]
+    closed = [t for t in trades if t["reason"] != "open"]
+    opn    = [t for t in trades if t["reason"] == "open"]
+    gross  = sum(pnls)
+    cost   = sum(COST_PER_SPREAD_RT.get(t["spread"], COST_DEFAULT_RT) for t in trades)
+    gl     = abs(sum(losses))
+    pf     = (sum(wins) / gl) if gl > 0 else None
+    return {
+        "trades":   len(trades),
+        "closed":   len(closed),
+        "open":     len(opn),
+        "wins":     len(wins),
+        "losses":   len(losses),
+        "win_rate": round(100 * len(wins) / len(pnls), 1),
+        "gross":    round(gross, 3),
+        "cost":     round(cost, 3),
+        "net":      round(gross - cost, 3),
+        "pf":       (round(pf, 2) if pf is not None else None),
+        "mean":     round(gross / len(pnls), 3),
+        "best":     round(max(pnls), 3),
+        "worst":    round(min(pnls), 3),
+    }
+
+
+def run_replay(*, include_wti: bool = True) -> dict:
+    """
+    Structured intraday replay for the API / dashboard (SIGNAL LOG tab).
+
+    Same engine + tuned exit rule as the CLI `main()`, but returns a JSON-able
+    dict instead of printing. `available=False` when the live feed is down.
+    Read-only — does not persist anything.
+    """
+    from research.live_feed       import latest_feed_file, _open_feed_local
+    from research.live_engine     import get_live_recommendation
+    from research.live_ranker     import (TUNED_TP_FRAC, TUNED_SL_MULT,
+                                          TUNED_EXCLUDED_SPREADS, GATED_Z_THRESHOLD)
+    from research.spread_universe import LABELS
+
+    f = latest_feed_file()
+    rec = get_live_recommendation(include_wti=include_wti)
+    if not rec.get("available"):
+        return {"available": False, "error": rec.get("error"),
+                "feed_file": str(f) if f else None}
+
+    params: dict[str, dict] = {}
+    for r in rec.get("ranked", []):
+        sp = r.get("spread")
+        if sp in TUNED_EXCLUDED_SPREADS:
+            continue
+        fair, cur, z = r.get("fair_value"), r.get("current"), r.get("z_score")
+        if fair is None or cur is None or not z:
+            continue
+        params[sp] = {"fair": fair, "sigma": (cur - fair) / z, "z_latest": z}
+
+    conn = _open_feed_local(f)
+    spreads_out: list[dict] = []
+    all_trades: list[dict] = []
+    win_start = win_end = None
+    try:
+        for sp, p in params.items():
+            series = _build_15min_series(conn, sp)
+            if series is None or len(series) < 2:
+                continue
+            tr = _replay(series, p["fair"], p["sigma"], GATED_Z_THRESHOLD,
+                         TUNED_TP_FRAC, TUNED_SL_MULT)
+            for t in tr:
+                t["spread"] = sp
+            all_trades += tr
+            s0, s1 = series.index[0], series.index[-1]
+            win_start = s0 if (win_start is None or s0 < win_start) else win_start
+            win_end   = s1 if (win_end   is None or s1 > win_end)   else win_end
+            spreads_out.append({
+                "spread":     sp,
+                "label":      LABELS[sp],
+                "is_wti":     sp.startswith("wti_"),
+                "fair":       round(float(p["fair"]), 3),
+                "sigma":      round(float(p["sigma"]), 4),
+                "z_latest":   round(float(p["z_latest"]), 2),
+                "n_bars":     int(len(series)),
+                "range_low":  round(float(series.min()), 3),
+                "range_high": round(float(series.max()), 3),
+                "last":       round(float(series.iloc[-1]), 3),
+                "trades":     [_trade_json(t) for t in tr],
+                "metrics":    _trade_metrics(tr),
+            })
+    finally:
+        conn.close()
+
+    from datetime import datetime, timezone
+    return {
+        "available":   True,
+        "feed_file":   str(f),
+        "regime":      rec.get("regime"),
+        "regime_mode": rec.get("regime_mode"),
+        "gated":       rec.get("gated_blend"),
+        "window":      {"start": str(win_start) if win_start is not None else None,
+                        "end":   str(win_end)   if win_end   is not None else None},
+        "tuned_rule":  {"entry_z": GATED_Z_THRESHOLD, "tp_frac": TUNED_TP_FRAC,
+                        "sl_mult": TUNED_SL_MULT,
+                        "note": "TP halfway-to-fair · SL 2.5σ · close-based · re-entry allowed"},
+        "spreads":     spreads_out,
+        "overall":     _trade_metrics(all_trades),
+        "caveats":     _CAVEATS,
+        "timestamp":   datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    }
+
+
 def main() -> None:
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
