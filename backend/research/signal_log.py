@@ -65,15 +65,68 @@ log = logging.getLogger("pulse.research.signal_log")
 
 _DB_PATH = os.path.join(_BACKEND, "db", "pulse_cache.db")
 
-# Sanity gate on signal extremity. |z| > 8 has never been a real opportunity in
-# the walk-forward (the max observed in 8 years of pooled_trades.json is ~5σ);
-# anything larger is model misspecification (cell with tiny resid_std and a
-# live snapshot the model never saw at training). The synth-trained WTI models
-# are the most common offender — wti_m1_m2 can score |z|≈50σ against live real
-# WTI prices on a normal session, which is obviously not a tradeable signal.
-# We log + drop these instead of opening a phantom position. The cap is loose
-# enough to keep the live brent z≈-6.85 we already track.
-_SANITY_Z_CAP = 8.0
+# Sanity gate on signal extremity. |z| beyond what a spread has ever legitimately
+# produced out-of-sample is model misspecification (a live snapshot the model
+# never saw at training, or a synth-offset WTI front), not a tradeable signal —
+# we log + drop those instead of opening a phantom position.
+#
+# Phase 4 (2026-06-18) — ADAPTIVE per-spread cap. A flat |z|>8 was one-size-fits-
+# all: it over-suppressed spreads whose OOS |z| never exceeds ~4 (wti_fly_123)
+# and under-suppressed the synth-offset WTI fronts that legitimately reach ~7
+# OOS (wti_m1_m2). We instead cap each spread at the 99.5th percentile of the
+# |z| it produced across the full walk-forward OOS tape (global_trades.json),
+# times a headroom margin, clipped to [floor, ceil]. `_SANITY_Z_CAP` stays the
+# fallback when the tape is unavailable.
+_SANITY_Z_CAP      = 8.0    # global fallback (no per-spread stat available)
+_SANITY_Z_QUANTILE = 0.995  # OOS |z| percentile that defines "as extreme as it ever legitimately got"
+_SANITY_Z_MARGIN   = 1.5    # headroom above that percentile before we call it misspec
+_SANITY_Z_FLOOR    = 4.0    # never cap tighter than this (avoid over-suppression)
+_SANITY_Z_CEIL     = 10.0   # never looser than this (the synth-WTI ceiling)
+_OOS_TAPE_PATH     = os.path.join(_BACKEND, "data", "research", "global_trades.json")
+
+_adaptive_caps_cache: dict | None = None
+
+
+def adaptive_z_caps(*, force: bool = False) -> dict[str, float]:
+    """
+    Per-spread |z| sanity cap, calibrated from the walk-forward OOS tape.
+
+      cap[spread] = clip(quantile(|z|, 0.995) * margin, floor, ceil)
+
+    where z = (actual - fair) / std(residuals_spread) — the same resid_std the
+    live z is normalised by, so the cap is directly comparable to a live z_score.
+    Cached per process (the tape is static between trains). Returns {} when the
+    tape is missing/unreadable, in which case the caller falls back to the flat
+    `_SANITY_Z_CAP`.
+    """
+    global _adaptive_caps_cache
+    if _adaptive_caps_cache is not None and not force:
+        return _adaptive_caps_cache
+    caps: dict[str, float] = {}
+    try:
+        from collections import defaultdict
+        import numpy as np
+        with open(_OOS_TAPE_PATH, encoding="utf-8") as f:
+            tape = json.load(f)
+        resid: dict[str, list] = defaultdict(list)
+        for r in tape:
+            a, fv = r.get("actual"), r.get("fair")
+            if a is None or fv is None:
+                continue
+            resid[r.get("spread")].append(float(a) - float(fv))
+        for sp, res in resid.items():
+            arr = np.asarray(res, dtype=float)
+            sd  = float(np.std(arr))
+            if not sp or len(arr) < 100 or not np.isfinite(sd) or sd <= 0:
+                continue
+            zq = float(np.quantile(np.abs(arr / sd), _SANITY_Z_QUANTILE))
+            caps[sp] = round(float(np.clip(zq * _SANITY_Z_MARGIN,
+                                           _SANITY_Z_FLOOR, _SANITY_Z_CEIL)), 3)
+    except Exception as exc:  # pragma: no cover — disk/json errors
+        log.warning("adaptive_z_caps: falling back to global cap (%s)", exc)
+        return {}
+    _adaptive_caps_cache = caps
+    return caps
 
 
 def _conn() -> sqlite3.Connection:
@@ -443,6 +496,7 @@ def generate_live_signals(*, cadence: str = "daily", include_wti: bool = True) -
     mode       = rec.get("regime_mode")
     now        = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
+    z_caps = adaptive_z_caps()  # per-spread sanity caps (empty → flat fallback)
     c = _conn()
     counts = {"opened": 0, "extended": 0, "flipped": 0, "noop": 0}
     skipped_neutral = skipped_extreme = 0
@@ -452,18 +506,19 @@ def generate_live_signals(*, cadence: str = "daily", include_wti: bool = True) -
             if direction not in ("BUY", "SELL"):
                 skipped_neutral += 1
                 continue
-            # Sanity gate — skip and warn on misspecified cells (see
-            # _SANITY_Z_CAP comment above).
+            # Sanity gate — skip and warn on misspecified cells. Per-spread cap
+            # from the OOS tape (adaptive_z_caps), flat _SANITY_Z_CAP fallback.
             z = r.get("z_score")
             try:
                 z_val = float(z) if z is not None else None
             except (TypeError, ValueError):
                 z_val = None
-            if z_val is not None and abs(z_val) > _SANITY_Z_CAP:
+            cap = z_caps.get(r.get("spread") or "", _SANITY_Z_CAP)
+            if z_val is not None and abs(z_val) > cap:
                 log.warning(
-                    "signal_log: dropping %s %s — |z|=%.2f > sanity cap %.1f "
+                    "signal_log: dropping %s %s — |z|=%.2f > sanity cap %.2f "
                     "(model misspec; fair=%.4f entry=%.4f resid_std≈%.4f)",
-                    r.get("spread"), direction, abs(z_val), _SANITY_Z_CAP,
+                    r.get("spread"), direction, abs(z_val), cap,
                     r.get("fair_value") or float("nan"),
                     r.get("current")    or float("nan"),
                     (abs((r.get("fair_value") or 0) - (r.get("current") or 0)) / abs(z_val))
@@ -531,6 +586,7 @@ def generate_live_signals(*, cadence: str = "daily", include_wti: bool = True) -
         "noop":           counts["noop"],
         "neutral":        skipped_neutral,
         "skipped_extreme": skipped_extreme,
+        "z_caps":         z_caps,  # Phase 4 — per-spread adaptive sanity caps applied
         "feed_as_of":     feed_as_of,
         "regime":         regime,
         "cadence":        cadence,

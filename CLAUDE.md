@@ -198,6 +198,20 @@ stale**, so fair value reflected late-May while `actual` was today → z-scores 
 - **Tests:** new `tests/test_live_features.py` (6 tests — overlay correctness, lag mapping, WTI sign,
   calendar formula, unavailable-snapshot no-op, describe_overlay). **23 pytest green** (17 + 6).
 
+### ✅ Adaptive per-spread sanity cap (2026-06-18)
+The signal-log sanity gate was a flat `|z|>8` — one-size-fits-all. New
+`signal_log.adaptive_z_caps()` derives a **per-spread** cap from each spread's own |z| distribution
+across the full walk-forward OOS tape (`global_trades.json`):
+`cap = clip(quantile(|z|, 0.995) × 1.5, floor 4.0, ceil 10.0)`, where `z = (actual−fair)/std(resid)`
+— the same resid_std the live z is normalised by, so the cap is directly comparable to a live z_score.
+Cached per process; falls back to the flat `_SANITY_Z_CAP` when the tape is absent. Computed caps:
+brent_m1_m2 **8.02** · brent_m3_m6/fly **7.35** · wti_m1_m2 **10.0** (synth-offset headroom) ·
+wti_m3_m6 **7.33** · wti_fly_123 **6.27** (tighter — that spread never exceeds ~4σ OOS). The flat 8
+both over-suppressed wti_fly_123 and under-suppressed wti_m1_m2; the adaptive cap fixes both.
+`generate_live_signals` uses `z_caps.get(spread, _SANITY_Z_CAP)` per row and returns the applied
+`z_caps`. **Tests:** 3 added to `tests/test_signal_log_session.py` (per-spread + bounded, tight<wide,
+missing-tape fallback). **26 pytest green** (23 + 3).
+
 ### 🚨 HF Spaces regime endpoints broken (root cause found, 2026-06-16)
 - `https://rohithpranav45-pulse.hf.space/api/regime/recommendation` and `/api/regime/backtest` return
   `{"available": false}` silently. `/api/regime/drill/<spread>` surfaces the real error:

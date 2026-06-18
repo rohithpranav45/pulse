@@ -374,3 +374,36 @@ def test_direction_flip_closes_prior_session_and_opens_new(fresh_db):
     assert opened["status"] == "OPEN"
     assert opened["direction"] == "SELL"
     assert opened["bar_count"] == 1
+
+
+# ── Phase 4 (2026-06-18) — adaptive per-spread sanity cap ────────────────────
+
+def test_adaptive_z_caps_are_per_spread_and_bounded():
+    """adaptive_z_caps() derives a |z| cap per spread from the OOS tape; each cap
+    must sit inside [floor, ceil]. Skips cleanly if the tape isn't on this
+    machine (research output, not always present)."""
+    caps = sl.adaptive_z_caps(force=True)
+    if not caps:
+        pytest.skip("global_trades.json not present on this machine")
+    for sp, cap in caps.items():
+        assert sl._SANITY_Z_FLOOR <= cap <= sl._SANITY_Z_CEIL, (sp, cap)
+    # The whole point of "adaptive": the caps are NOT all identical (a flat
+    # cap would make every value equal). The tape has spreads at both extremes.
+    assert len(set(caps.values())) > 1
+
+
+def test_adaptive_cap_differentiates_tight_vs_wide_spreads():
+    """wti_fly_123 (OOS |z| tops out ~4) must get a TIGHTER cap than wti_m1_m2
+    (synth-offset front, OOS |z| ~7). This is exactly the per-spread behaviour
+    the flat |z|>8 cap could not express."""
+    caps = sl.adaptive_z_caps(force=True)
+    if not caps or "wti_fly_123" not in caps or "wti_m1_m2" not in caps:
+        pytest.skip("global_trades.json not present / missing WTI spreads")
+    assert caps["wti_fly_123"] < caps["wti_m1_m2"]
+
+
+def test_adaptive_cap_falls_back_to_flat_when_tape_missing(monkeypatch):
+    """If the OOS tape can't be read, adaptive_z_caps() returns {} and the
+    generation loop falls back to the flat _SANITY_Z_CAP (never raises)."""
+    monkeypatch.setattr(sl, "_OOS_TAPE_PATH", os.path.join("/nonexistent", "x.json"))
+    assert sl.adaptive_z_caps(force=True) == {}
