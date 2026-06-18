@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "pulse-dashboard",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--prefix", "frontend", "--", "--host", "127.0.0.1", "--port", "8080"],
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["frontend/node_modules/vite/bin/vite.js", "frontend", "--host", "127.0.0.1", "--port", "8080"],
       "port": 8080
     }
   ]

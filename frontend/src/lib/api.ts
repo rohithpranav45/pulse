@@ -168,6 +168,7 @@ export const api = {
   regimeSignals:          (status: 'all' | 'open' | 'closed' = 'all', limit = 200) =>
                             getJSON(`/api/regime/signals?status=${status}&limit=${limit}`),
   regimeSignalsGenerate:  (body: any = {}) => postJSON('/api/regime/signals/generate', body),
+  regimeIntradayReplay:   () => getJSON('/api/regime/intraday_replay'),
   // Paper trading
   paperPositions:  () => getJSON<PaperPosition[]>('/api/paper/positions'),
   paperPerformance:() => getJSON<PaperPerformanceData>('/api/paper/performance'),

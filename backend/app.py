@@ -1353,6 +1353,23 @@ def regime_live_route():
     return jsonify({"data": safe_fetch(_live, {"available": False}), "timestamp": _now()})
 
 
+@app.route("/api/regime/intraday_replay")
+def regime_intraday_replay_route():
+    """
+    In-window sanity replay of the live engine over the recorder's 15-min bar
+    history (the only intraday feed we have). Walks the REAL spread path with the
+    engine's overlay-corrected fair value + the tuned exit rule (TP halfway-to-
+    fair · SL 2.5σ · close-based). Read-only — does not persist.
+
+    NOT a statistically valid backtest — see the `caveats` field; the response is
+    explicitly labelled a diagnostic, not a performance claim.
+    """
+    def _replay():
+        from research.intraday_replay import run_replay
+        return run_replay(include_wti=request.args.get("wti", "1") != "0")
+    return jsonify({"data": safe_fetch(_replay, {"available": False}), "timestamp": _now()})
+
+
 @app.route("/api/regime/signals")
 def regime_signals_route():
     """
