@@ -1370,6 +1370,19 @@ def regime_intraday_replay_route():
     return jsonify({"data": safe_fetch(_replay, {"available": False}), "timestamp": _now()})
 
 
+@app.route("/api/regime/shock")
+def regime_shock_route():
+    """
+    Shock-absorption monitor: today's GMM stress read (P(stress), onset,
+    circuit-breaker state) + the validated absorption metrics + a P(stress)
+    history that shows the detector caught the real oil shocks out-of-sample.
+    """
+    def _shock():
+        from research.shock_engine import dashboard_payload
+        return dashboard_payload()
+    return jsonify({"data": safe_fetch(_shock, {"available": False}), "timestamp": _now()})
+
+
 @app.route("/api/regime/signals")
 def regime_signals_route():
     """
