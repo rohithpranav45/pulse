@@ -728,6 +728,20 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
     ranked.sort(key=lambda x: x["confidence"], reverse=True)
     top = ranked[0] if ranked else None
 
+    # ── Phase 2 (2026-06-19) — gated decorrelated selection ──────────────────
+    # The desk's actual book = the top-conviction opportunities with redundant
+    # (correlated) bets dropped, so we never double up on the same underlying
+    # curve move. Additive: `top`/`ranked` are untouched, so every existing
+    # consumer (A/B harness, signal_log, dashboard cards) is bit-for-bit
+    # unaffected; new consumers read the `portfolio` block. Never let selection
+    # break the core recommendation.
+    portfolio = None
+    try:
+        from research.gated_select import select_decorrelated
+        portfolio = select_decorrelated(ranked)
+    except Exception as exc:  # pragma: no cover — defensive
+        log.warning("decorrelated selection failed: %s", exc)
+
     method_blurb = (
         "Pooled curve-axis regime (CONTANGO/NEUTRAL/BACK)"
         if mode == "pooled"
@@ -798,6 +812,7 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
         },
         "top":                   top,
         "ranked":                ranked,
+        "portfolio":             portfolio,   # Phase 2 — gated decorrelated book
         "method":                f"Per-(spread, regime) winner from 7-model competition (Ridge/Lasso/ElasticNet/Huber/XGBoost/LightGBM/CatBoost — Phase 2.8.1); Quantile p10/p90 bands; trained ≤ 2026-03-31; {method_blurb}.",
         "timestamp":             datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }

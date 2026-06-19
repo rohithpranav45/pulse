@@ -11,7 +11,7 @@ import { usePolling } from '@/lib/hooks';
 import { staggerContainer, staggerTight, fadeUp, scaleIn } from '@/lib/motion';
 import {
   Play, TrendingUp, TrendingDown,
-  ShieldCheck, AlertOctagon, Wallet, Activity, Trash2, Zap,
+  ShieldCheck, AlertOctagon, Wallet, Activity, Trash2, Zap, Bot,
 } from 'lucide-react';
 
 /**
@@ -76,6 +76,51 @@ type Performance = {
   worst_trade:{ id: number; pnl: number; asset: string } | null;
   equity_curve: { trade_id: number; closed_at: string; cum_pnl: number }[];
 };
+
+// ─── Auto-desk provenance helpers ───────────────────────────────────────────
+
+const isAuto = (p: Position) => p.source === 'auto_desk';
+
+/** Small chip marking a row the live auto-desk opened (vs a manual/A-B push). */
+function AutoBadge({ source }: { source: string | null }) {
+  if (source !== 'auto_desk') return null;
+  return (
+    <span
+      title="Opened automatically by the live auto-trade desk"
+      className="ml-2 inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-mono font-bold uppercase tracking-widest bg-accent-blue/15 text-accent-blue border border-accent-blue/30"
+    >
+      <Bot className="w-2.5 h-2.5" /> auto
+    </span>
+  );
+}
+
+type SrcFilter = 'all' | 'auto' | 'manual';
+
+function SourceFilter({ value, onChange, autoCount, total }:
+  { value: SrcFilter; onChange: (v: SrcFilter) => void; autoCount: number; total: number }) {
+  const opts: { k: SrcFilter; label: string }[] = [
+    { k: 'all', label: `All · ${total}` },
+    { k: 'auto', label: `Auto-desk · ${autoCount}` },
+    { k: 'manual', label: `Manual · ${total - autoCount}` },
+  ];
+  return (
+    <div className="inline-flex rounded-md border border-border/60 overflow-hidden">
+      {opts.map(o => (
+        <button
+          key={o.k}
+          onClick={() => onChange(o.k)}
+          className={clsx(
+            'px-2.5 py-1 text-[10px] font-mono uppercase tracking-widest transition-colors',
+            value === o.k ? 'bg-accent-blue/20 text-accent-blue' : 'text-text-tertiary hover:bg-bg-hover/40',
+          )}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 
 // ─── Suggested trade card ───────────────────────────────────────────────────
 
@@ -270,6 +315,7 @@ function OpenPositions({ rows, onClose }: { rows: Position[]; onClose: (id: numb
                     <td>
                       <span className="uppercase font-semibold text-text-primary">{t.asset}</span>
                       <Chip tone={dirTone as any} className="ml-2">{t.direction}</Chip>
+                      <AutoBadge source={t.source} />
                       {legs.length > 0 && (
                         <span className="ml-2 text-[9px] font-mono uppercase tracking-widest text-gold/70">
                           · {legs.length}-LEG
@@ -392,6 +438,7 @@ function ClosedHistory({ rows }: { rows: Position[] }) {
                     <span className={clsx('ml-2 text-[9px]', t.direction === 'LONG' ? 'text-bull' : 'text-bear')}>
                       {t.direction}
                     </span>
+                    <AutoBadge source={t.source} />
                   </td>
                   <td className="text-right text-text-secondary">
                     ${t.entry_price.toFixed(2)} → ${t.exit_price?.toFixed(2)}
@@ -711,13 +758,26 @@ export function PaperView({ tradeIdea }: { tradeIdea: any }) {
   const bump = useCallback(() => setRefreshTick(t => t + 1), []);
 
   // Poll positions every 15s, perf every 30s. Bump tick on push/close for instant refresh.
+  // The generated API types mark fields optional that this view treats as present;
+  // adapt the fetchers' return types to the local row/perf shapes.
   const { data: positions, refetch: refetchPos } =
-    usePolling<Position[]>(api.paperPositions, 15_000, [refreshTick]);
+    usePolling<Position[]>(api.paperPositions as unknown as () => Promise<Position[]>,
+      15_000, [refreshTick]);
   const { data: perf, refetch: refetchPerf } =
-    usePolling<Performance>(api.paperPerformance, 30_000, [refreshTick]);
+    usePolling<Performance>(api.paperPerformance as unknown as () => Promise<Performance>,
+      30_000, [refreshTick]);
 
-  const open   = useMemo(() => (positions ?? []).filter(p => p.status === 'OPEN'), [positions]);
-  const closed = useMemo(() => (positions ?? []).filter(p => p.status === 'CLOSED'), [positions]);
+  const [srcFilter, setSrcFilter] = useState<SrcFilter>('all');
+  const matchesSrc = useCallback(
+    (p: Position) => srcFilter === 'all' || (srcFilter === 'auto' ? isAuto(p) : !isAuto(p)),
+    [srcFilter],
+  );
+
+  const allOpen   = useMemo(() => (positions ?? []).filter(p => p.status === 'OPEN'), [positions]);
+  const allClosed = useMemo(() => (positions ?? []).filter(p => p.status === 'CLOSED'), [positions]);
+  const open   = useMemo(() => allOpen.filter(matchesSrc), [allOpen, matchesSrc]);
+  const closed = useMemo(() => allClosed.filter(matchesSrc), [allClosed, matchesSrc]);
+  const autoOpenCount = useMemo(() => allOpen.filter(isAuto).length, [allOpen]);
 
   const handleClose = useCallback(async (id: number) => {
     try { await api.paperClose(id); } finally { bump(); }
@@ -730,9 +790,9 @@ export function PaperView({ tradeIdea }: { tradeIdea: any }) {
 
   const handlePush = useCallback(async (_size: number) => { bump(); }, [bump]);
 
-  // Live count of open trades for the header chip
-  const openCount = open.length;
-  const closedCount = closed.length;
+  // Hero KPIs reflect the whole book (not the source filter, which only scopes the tables).
+  const openCount = allOpen.length;
+  const closedCount = allClosed.length;
   const realisedTotal = perf?.total_pnl ?? 0;
   const realisedTone = realisedTotal >= 0 ? 'bull' : 'bear';
 
@@ -810,6 +870,19 @@ export function PaperView({ tradeIdea }: { tradeIdea: any }) {
       {/* Suggested trade — push */}
       <motion.div variants={fadeUp}>
         <SuggestedTrade idea={tradeIdea} onPush={handlePush} />
+      </motion.div>
+
+      {/* Source filter — scopes the open/closed tables to auto-desk vs manual rows */}
+      <motion.div variants={fadeUp} className="flex items-center justify-between gap-3 flex-wrap">
+        <span className="text-[10px] font-mono uppercase tracking-widest text-text-muted">
+          Filter book by source
+        </span>
+        <SourceFilter
+          value={srcFilter}
+          onChange={setSrcFilter}
+          autoCount={autoOpenCount}
+          total={allOpen.length}
+        />
       </motion.div>
 
       {/* Open positions */}

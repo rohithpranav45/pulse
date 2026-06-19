@@ -187,19 +187,65 @@ def breaker_active(p_stress: pd.Series, *, onset_gate: float = ONSET_GATE,
 _DETECTOR: "StressDetector | None" = None
 _FEATS_CACHE: pd.DataFrame | None = None
 
+# Live-feed stress read (2026-06-19, Phase 4). To react INTRADAY instead of off
+# the last daily settle, we score the fitted detector on a series of consecutive
+# daily Brent-front closes resampled from the 15-min live feed. We only do this
+# once the recorder has accumulated enough history for a clean 20-day realised-
+# vol window — a naive splice of today's live price onto the weeks-stale settle
+# series would count the gap as one daily return and spuriously spike vol. Until
+# then we honestly fall back to the daily-settle read (auto-upgrades as the feed
+# grows).
+LIVE_STRESS_LOOKBACK_DAYS = 45    # daily closes to pull from the feed
+MIN_LIVE_STRESS_ROWS      = 6     # usable feature rows (post-dropna) before we trust the live read
+
 
 def live_stress_state(settle: pd.DataFrame | None = None, *,
-                      fit_until: str = "2019-01-01", refit: bool = False) -> dict:
+                      fit_until: str = "2019-01-01", refit: bool = False,
+                      use_live_feed: bool = False) -> dict:
     """
     Today's stress read for the dashboard + the live desk's entry gate. Returns
     P(stress), onset, the circuit-breaker state, and an explainable label.
     The detector is fit causally (default burn-in 2016→2019) and cached.
+
+    `use_live_feed=True` scores the detector on the live feed's recent daily
+    closes (Phase 4 — so the breaker reacts intraday). Falls back to the daily-
+    settle read with `live_fallback_reason` set when the feed is unreachable or
+    has too little history for a clean 20-day vol window.
     """
     global _DETECTOR, _FEATS_CACHE
     if _DETECTOR is None or refit:
         _FEATS_CACHE = build_stress_features(settle)
         _DETECTOR = StressDetector().fit(_FEATS_CACHE, fit_until=fit_until)
-    feats = build_stress_features(settle) if settle is not None else _FEATS_CACHE
+
+    live = False
+    fallback_reason: str | None = None
+    feats: pd.DataFrame | None = None
+
+    if use_live_feed:
+        ldf = None
+        try:
+            from research.live_feed import recent_daily_frame
+            ldf = recent_daily_frame("CO", days=LIVE_STRESS_LOOKBACK_DAYS)
+        except Exception as exc:  # pragma: no cover — defensive (feed I/O)
+            fallback_reason = f"live feed error: {exc}"
+        if ldf is not None:
+            try:
+                lf = build_stress_features(ldf)
+            except Exception as exc:
+                lf, fallback_reason = None, f"live feature build failed: {exc}"
+            if lf is not None and len(lf) >= MIN_LIVE_STRESS_ROWS:
+                feats, live = lf, True
+            else:
+                fallback_reason = (
+                    f"insufficient live history ({0 if lf is None else len(lf)} usable "
+                    f"daily rows < {MIN_LIVE_STRESS_ROWS}; recorder still accumulating)"
+                )
+        elif fallback_reason is None:
+            fallback_reason = "no live feed frame available"
+
+    if feats is None:
+        feats = build_stress_features(settle) if settle is not None else _FEATS_CACHE
+
     ps = _DETECTOR.p_stress(feats)
     onset = stress_onset(ps)
     p = float(ps.iloc[-1]); o = float(onset.iloc[-1])
@@ -211,6 +257,9 @@ def live_stress_state(settle: pd.DataFrame | None = None, *,
         "breaker_active": bool(o >= ONSET_GATE),
         "label":          label,
         "onset_gate":     ONSET_GATE,
+        "live":           live,
+        "source":         "live_feed" if live else "daily_settle",
+        "live_fallback_reason": fallback_reason if not live else None,
         "note":           ("Shock onset detected — pausing NEW entries; open trades run under stops."
                            if o >= ONSET_GATE else
                            "No shock onset — normal trading."),

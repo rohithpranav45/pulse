@@ -16,11 +16,14 @@
  *   </motion.div>
  */
 
-import type { Variants, Transition } from 'framer-motion';
+import type { Variants, Easing } from 'framer-motion';
 
-export const easeStandard: Transition['ease'] = [0.22, 1, 0.36, 1];
-export const easeEnter:    Transition['ease'] = [0.16, 1, 0.3, 1];
-export const easeExit:     Transition['ease'] = [0.4, 0, 1, 1];
+// framer-motion v11's `Transition` is a union without `ease` on every member,
+// so the old `Transition['ease']` indexed access no longer resolves. The shared
+// cubic-bezier curves are `Easing` (a BezierDefinition tuple) directly.
+export const easeStandard: Easing = [0.22, 1, 0.36, 1];
+export const easeEnter:    Easing = [0.16, 1, 0.3, 1];
+export const easeExit:     Easing = [0.4, 0, 1, 1];
 
 /** Fade + small lift. Default panel mount animation. */
 export const fadeUp: Variants = {

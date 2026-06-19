@@ -253,6 +253,58 @@ def _spread_at_common_ts(
     return value, ts
 
 
+def recent_daily_frame(product: str = "CO", *, days: int = 40,
+                       feed_dir: Path | None = None):
+    """
+    Daily last-close frame (front c1 + back c12) for one product, resampled from
+    the 15-min live feed. Index = bar date, columns = {c1, c12}.
+
+    This is the bridge for a LIVE-feed-driven stress read: it gives the shock
+    detector a series of *consecutive daily* Brent-front closes on the same scale
+    as the historical daily settlements, so realised-vol features can be computed
+    without the fake one-day jump a naive splice onto the (weeks-stale) settle
+    series would produce. Returns None when the feed is unreachable / has no
+    usable closes; the caller falls back to the daily-settle read.
+
+    NB: reads only the latest feed file (consistent with the rest of this module);
+    while the recorder appends to one file this captures the full live history.
+    """
+    import pandas as pd
+
+    f = latest_feed_file(feed_dir)
+    if f is None:
+        return None
+    conn = _open_feed_local(f)
+    try:
+        contracts = list_contracts(conn, product.upper())
+        if not contracts:
+            return None
+
+        def _daily(table: str):
+            rows = conn.execute(f'SELECT timestamp, close FROM "{table}"').fetchall()
+            if not rows:
+                return None
+            s = pd.Series({pd.Timestamp(str(ts)): float(c) for ts, c in rows}).sort_index()
+            # Last close per calendar day = that day's settle proxy.
+            return s.groupby(s.index.normalize()).last()
+
+        c1 = _daily(contracts[0][0])
+        if c1 is None or c1.empty:
+            return None
+        df = pd.DataFrame({"c1": c1})
+        if len(contracts) >= _MAX_ORDINAL:
+            c12 = _daily(contracts[_MAX_ORDINAL - 1][0])
+            if c12 is not None:
+                df["c12"] = c12
+        df = df.dropna().tail(days)
+        return df if not df.empty else None
+    except sqlite3.DatabaseError as exc:
+        log.warning("recent_daily_frame(%s): %s", product, exc)
+        return None
+    finally:
+        conn.close()
+
+
 def get_live_snapshot(product: str = "CO", feed_dir: Path | None = None) -> dict:
     """
     Build a live market snapshot for one product from the most-recent feed file.
