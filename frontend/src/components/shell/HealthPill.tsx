@@ -40,7 +40,10 @@ function ageStr(s: number | null): string {
 }
 
 export function HealthPill() {
-  const { data } = usePolling<HealthPayload>(api.healthDetail, 30_000);
+  // The generated HealthDetailData widens `overall` to `string`; this component
+  // works with the narrower local union, so adapt the fetcher's return type.
+  const { data } = usePolling<HealthPayload>(
+    api.healthDetail as unknown as () => Promise<HealthPayload>, 30_000);
   const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement | null>(null);
 

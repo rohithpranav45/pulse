@@ -1123,6 +1123,32 @@ _scheduler.add_job(
     next_run_time=_dt.now() + timedelta(minutes=7), id="_live_signal_intraday",
 )
 
+# Phase 3 — live auto-trade desk. Reconcile the paper book to the gated,
+# decorrelated live recommendation: auto-open the selected trades during market
+# hours (5d/wk), pause new entries on a shock onset, let the 60s MTM sweep own
+# every exit. Off when the feed is unreachable (PULSE_LIVE_SIGNALS_DISABLED) or
+# explicitly disabled (PULSE_AUTO_DESK_DISABLED=1). Bar-aligned 15-min cadence.
+def _auto_desk_tick():
+    if _live_signals_disabled():
+        return
+    try:
+        from research.auto_desk import run_auto_desk
+        s = run_auto_desk(dry_run=False)
+        if s.get("ran"):
+            log.info(
+                "auto-desk: market_open=%s breaker=%s opened=%d flipped=%d held=%d skipped=%d",
+                s.get("market_open"), s.get("breaker_active"),
+                len(s.get("opened", [])), len(s.get("flipped", [])),
+                s.get("n_held_auto", 0), len(s.get("skipped", [])),
+            )
+    except Exception as exc:
+        log.warning("auto-desk tick failed: %s", exc)
+
+_scheduler.add_job(
+    _auto_desk_tick, "interval", seconds=900,
+    next_run_time=_dt.now() + timedelta(minutes=8), id="_auto_desk_tick",
+)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Flask routes
@@ -1419,6 +1445,33 @@ def regime_signals_generate_route():
         cadence=body.get("cadence", "daily"),
         include_wti=bool(body.get("include_wti", True)),
     )
+    return jsonify({"data": out, "timestamp": _now()})
+
+
+@app.route("/api/regime/autodesk")
+def regime_autodesk_route():
+    """
+    Phase 3 — live auto-trade desk preview (read-only). Returns what the desk
+    WOULD do right now: the gated/decorrelated selected book, the market-hours +
+    shock circuit-breaker gates, and the open/flip/hold plan against the paper
+    book. Takes no action (dry_run). The scheduler fires the real tick; POST
+    /api/regime/autodesk/run forces one.
+    """
+    def _preview():
+        from research.auto_desk import run_auto_desk
+        return run_auto_desk(dry_run=True)
+    return jsonify({"data": safe_fetch(_preview, {"ran": False}), "timestamp": _now()})
+
+
+@app.route("/api/regime/autodesk/run", methods=["POST"])
+def regime_autodesk_run_route():
+    """
+    Force one live auto-desk tick (opens/flips paper trades from the decorrelated
+    book, gated by market hours + the shock breaker). The scheduler runs this
+    every 15 min automatically; this is for smoke tests / a manual desk push.
+    """
+    from research.auto_desk import run_auto_desk
+    out = run_auto_desk(dry_run=False)
     return jsonify({"data": out, "timestamp": _now()})
 
 

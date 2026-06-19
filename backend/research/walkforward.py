@@ -109,6 +109,11 @@ _BASELINE_TRADES_FILE = Path(__file__).parent.parent / "data" / "research" / "ba
 _GLOBAL_TRADES_FILE   = Path(__file__).parent.parent / "data" / "research" / "global_trades.json"
 _POOLED_SOFT_TRADES_FILE    = Path(__file__).parent.parent / "data" / "research" / "pooled_soft_trades.json"
 _COMPOSITE_SOFT_TRADES_FILE = Path(__file__).parent.parent / "data" / "research" / "composite_soft_trades.json"
+# Phase 5 — multi-horizon sweep (2.8.7) + feature-selection legs.
+_HORIZON_TRADES_FILE  = Path(__file__).parent.parent / "data" / "research" / "horizon_trades.json"
+_FEATSEL_TRADES_FILE  = Path(__file__).parent.parent / "data" / "research" / "featsel_trades.json"
+# Phase 6 — data-driven HMM/change-point regime leg (2.8.9). Headline-K tape.
+_HMM_TRADES_FILE      = Path(__file__).parent.parent / "data" / "research" / "hmm_trades.json"
 
 # Phase 2.8.4 — regime axes used as one-hot features in the "global" leg.
 # Composite label decomposes into 3 axes; the one-hot expansion is 3+3+3=9
@@ -231,11 +236,20 @@ def _train_cells_through(
     joined: pd.DataFrame,
     cutoff: pd.Timestamp,
     regime_mode: str = "composite",
+    *,
+    regime_col: str | None = None,
+    regime_list: list[str] | None = None,
+    enable_boosters: bool | None = None,
 ) -> dict:
     """
     Train one model per (spread, regime) on rows ≤ cutoff for the given mode.
     Returns dict keyed by (spread, regime) → {pipe, q10, q50, q90, resid_std, winner, n_train}.
     Cells with n_train < MIN_SAMPLES are skipped.
+
+    Phase 6 (2.8.9) — `regime_col` / `regime_list` / `enable_boosters` optionally
+    override the regime *source* so a data-driven detector (regime_hmm) can drive
+    the same per-cell competition. Defaults (all None) reproduce the
+    composite/pooled behaviour bit-for-bit.
     """
     from research.models          import (
         _fit_ridge, _fit_lasso, _fit_elastic, _fit_huber,
@@ -247,8 +261,10 @@ def _train_cells_through(
     from research.spread_universe import INSTRUMENTS
     from research.regimes         import REGIMES, REGIMES_POOLED
 
-    regime_list = REGIMES_POOLED if regime_mode == "pooled" else REGIMES
-    regime_col  = "regime_pooled" if regime_mode == "pooled" else "regime"
+    if regime_list is None:
+        regime_list = REGIMES_POOLED if regime_mode == "pooled" else REGIMES
+    if regime_col is None:
+        regime_col = "regime_pooled" if regime_mode == "pooled" else "regime"
 
     linear_fitters = {
         "Ridge":      _fit_ridge,
@@ -262,8 +278,12 @@ def _train_cells_through(
     # anyway — boosters in composite-mode walk-forward never feed the headline
     # gated_blend Sharpe. The standalone composite training in models.py still
     # competes all 7 candidates (that's the deployed model on /api/regime).
+    # Phase 6: the HMM leg is the pooled analog (few dense cells) so it enables
+    # boosters too, via the explicit `enable_boosters` override.
+    if enable_boosters is None:
+        enable_boosters = (regime_mode == "pooled")
     booster_fitters: dict = {}
-    if regime_mode == "pooled":
+    if enable_boosters:
         if _HAS_XGB:
             booster_fitters["XGBoost"] = _fit_xgb
         if _HAS_LGBM:
@@ -328,15 +348,21 @@ def _evaluate_window(
     start: pd.Timestamp,
     end: pd.Timestamp,
     regime_mode: str = "composite",
+    *,
+    regime_col: str | None = None,
 ) -> list[dict]:
     """
     For each business day d in (start, end], for each spread, generate one
     record: (date, spread, regime, actual, fair, z, direction, fwd_20d_pnl).
+
+    Phase 6 (2.8.9) — `regime_col` optionally overrides the column the day's
+    regime is read from (default None reproduces composite/pooled behaviour).
     """
     from research.spread_universe import INSTRUMENTS
 
     window = joined[(joined.index > start) & (joined.index <= end)]
-    regime_col = "regime_pooled" if regime_mode == "pooled" else "regime"
+    if regime_col is None:
+        regime_col = "regime_pooled" if regime_mode == "pooled" else "regime"
     trades: list[dict] = []
 
     for d, row in window.iterrows():
@@ -432,12 +458,17 @@ def _regime_one_hot(row: pd.Series) -> dict:
 def _train_global_through(
     joined: pd.DataFrame,
     cutoff: pd.Timestamp,
+    base_feats_by_spread: dict[str, list[str]] | None = None,
 ) -> dict:
     """
     Phase 2.8.4 — train ONE model per spread on rows ≤ cutoff. Regime is fed
     as 9 one-hot axis columns instead of partitioning the training data.
     Returns dict keyed by spread → {point, q10, q50, q90, resid_std, winner,
                                     n_train, feat_cols, cv_r2}.
+
+    Phase 5 (2.8.7-featsel) — `base_feats_by_spread` optionally overrides the
+    per-spread base predictor list (the regime one-hots are always appended).
+    Default None reproduces the Phase 2.8.4 global leg bit-for-bit.
     """
     from research.models          import (
         _fit_ridge, _fit_lasso, _fit_elastic, _fit_huber,
@@ -467,7 +498,10 @@ def _train_global_through(
 
     out: dict = {}
     for spread in INSTRUMENTS:
-        base_feats = predictors_for(spread)
+        if base_feats_by_spread is not None and spread in base_feats_by_spread:
+            base_feats = list(base_feats_by_spread[spread])
+        else:
+            base_feats = predictors_for(spread)
         feat_cols  = base_feats + _REGIME_OH_COLS
         sub = train_df.dropna(subset=base_feats + [spread])
         if len(sub) < MIN_SAMPLES:
@@ -591,16 +625,22 @@ def _produce_global_trades(
     joined: pd.DataFrame,
     spreads: pd.DataFrame,
     refit_ts: list[pd.Timestamp],
+    base_feats_by_spread: dict[str, list[str]] | None = None,
+    tag: str = "global",
 ) -> tuple[list[dict], list[dict]]:
-    """Quarterly-refit driver for the global regime-as-feature leg."""
+    """Quarterly-refit driver for the global regime-as-feature leg.
+
+    Phase 5 — `base_feats_by_spread` threads the lean (stability-selected)
+    per-spread feature lists into the per-refit training; `tag` only changes
+    the log prefix. Default args reproduce the Phase 2.8.4 global leg."""
     all_trades: list[dict] = []
     refit_meta: list[dict] = []
     for i, cutoff in enumerate(refit_ts):
         next_cutoff = refit_ts[i + 1] if i + 1 < len(refit_ts) else joined.index.max()
-        log.info("[global] Refit %d/%d  cutoff=%s  window=(%s, %s]",
-                 i + 1, len(refit_ts), cutoff.date(),
+        log.info("[%s] Refit %d/%d  cutoff=%s  window=(%s, %s]",
+                 tag, i + 1, len(refit_ts), cutoff.date(),
                  cutoff.date(), next_cutoff.date())
-        cells = _train_global_through(joined, cutoff)
+        cells = _train_global_through(joined, cutoff, base_feats_by_spread=base_feats_by_spread)
         log.info("  trained %d spreads", len(cells))
 
         window_trades = _evaluate_window_global(joined, spreads, cells, cutoff, next_cutoff)
@@ -1764,8 +1804,763 @@ def run_soft_only(modes: tuple[str, ...] = ("pooled",)) -> dict:
     return existing
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 5 — Multi-horizon sweep (2.8.7)
+# ─────────────────────────────────────────────────────────────────────────────
+# The base walk-forward trades a single 20-trading-day forward horizon. But the
+# regime/baseline models predict the *contemporaneous fair value* of the spread
+# (a mean-reversion target), so the ENTRY signal (z → direction) is identical at
+# every horizon — only the HOLD/EXIT horizon changes the realised PnL. That makes
+# the sweep a pure post-processing pass over the already-validated trade tapes:
+# for each fired trade we recompute fwd_pnl = sign × (spread[d+H] − spread[d]) at
+# H ∈ {5, 10, 20, 30} from the freshly-built spread series, then re-aggregate NET
+# of the same per-spread cost model with a horizon-aware Sharpe annualisation
+# (√(252/H)). No retraining; the signals are bit-for-bit the ones the leg fired.
+#
+# Honest caveats carried into the report:
+#   • Overlapping fills: trades fire daily, so a 30-day hold overlaps the next
+#     ~30 trades. The base walk-forward already treats each (date, spread) as an
+#     independent fill at 20d; we keep that convention so the horizons are
+#     mutually comparable (it inflates Sharpe equally across horizons — read the
+#     RANKING across H, not the absolute level).
+#   • Round-trip cost is horizon-independent (one entry + one exit regardless of
+#     hold length), so longer horizons amortise the same cost over a larger move.
+HORIZON_SWEEP = (5, 10, 20, 30)
+# A horizon's per-spread NET Sharpe is only eligible to be the "best" if it has
+# at least this many fired signals — guards against a 3-trade horizon winning on
+# noise.
+HORIZON_MIN_SIGNALS = 25
+
+
+def _spread_lookup(spreads: pd.DataFrame) -> dict[str, tuple[np.ndarray, dict]]:
+    """Per-spread (values, {normalised_date -> position}) over the dropna'd
+    series, so the horizon recompute is O(1) per (trade, horizon)."""
+    out: dict[str, tuple[np.ndarray, dict]] = {}
+    for sp in spreads.columns:
+        s = spreads[sp].dropna()
+        pos = {ts.normalize(): i for i, ts in enumerate(s.index)}
+        out[sp] = (s.values.astype(float), pos)
+    return out
+
+
+def _recompute_horizon_pnls(
+    trades: list[dict],
+    lookup: dict[str, tuple[np.ndarray, dict]],
+    horizons: tuple[int, ...] = HORIZON_SWEEP,
+) -> list[dict]:
+    """
+    For each trade row, recompute sign × (spread[d+H] − spread[d]) at every H.
+    Returns compact rows {date, spread, direction, pnl_h{H}: float|None}.
+    NEUTRAL rows carry all-None pnls (counted as no-fill downstream).
+    """
+    out: list[dict] = []
+    for t in trades:
+        sp        = t.get("spread")
+        direction = t.get("direction")
+        if sp not in lookup:
+            continue
+        sign = +1 if direction == "BUY" else (-1 if direction == "SELL" else 0)
+        try:
+            d = pd.Timestamp(t["date"]).normalize()
+        except Exception:
+            continue
+        arr, pos = lookup[sp]
+        i = pos.get(d)
+        row = {"date": t["date"], "spread": sp, "direction": direction}
+        for H in horizons:
+            key = f"pnl_h{H}"
+            if sign == 0 or i is None or i + H >= len(arr):
+                row[key] = None
+            else:
+                row[key] = round(float(sign * (arr[i + H] - arr[i])), 4)
+        out.append(row)
+    return out
+
+
+def _horizon_metrics(rows: list[dict], horizon: int, pnl_key: str) -> dict:
+    """
+    NET metrics on a horizon's recomputed PnL column. Mirrors `_metrics` but
+    (a) reads `pnl_key` instead of `fwd_pnl`, (b) annualises Sharpe by √(252/H),
+    (c) subtracts the per-spread round-trip cost (sizing_scale=1.0 on these
+    tapes). Hit-rate is on NET PnL, same as the cost-aware `_metrics`.
+    """
+    fired = [r for r in rows if r.get("direction") != "NEUTRAL" and r.get(pnl_key) is not None]
+    n_neutral = sum(1 for r in rows if r.get("direction") == "NEUTRAL")
+    if not fired:
+        return {"n_signals": 0, "n_total": len(rows), "n_neutral": n_neutral,
+                "hit_rate": None, "mean_pnl": None, "median_pnl": None,
+                "total_pnl": 0.0, "sharpe": None, "gross_sharpe": None,
+                "max_drawdown": None, "mean_cost": None, "total_cost": 0.0}
+    gross = np.array([float(r[pnl_key]) for r in fired], dtype=float)
+    costs = np.array([COST_PER_SPREAD_RT.get(r.get("spread"), COST_DEFAULT_RT) for r in fired],
+                     dtype=float)
+    pnls  = gross - costs
+    cum   = np.cumsum(pnls); peak = np.maximum.accumulate(cum)
+    max_dd = float((cum - peak).min()) if len(cum) else 0.0
+    ann = np.sqrt(252.0 / horizon)
+    mu  = float(pnls.mean()); sd = float(pnls.std(ddof=1)) if len(pnls) > 1 else 0.0
+    gmu = float(gross.mean()); gsd = float(gross.std(ddof=1)) if len(gross) > 1 else 0.0
+    return {
+        "n_signals":    len(fired),
+        "n_total":      len(rows),
+        "n_neutral":    n_neutral,
+        "hit_rate":     round(float((pnls > 0).mean()), 4),
+        "mean_pnl":     round(mu, 4),
+        "median_pnl":   round(float(np.median(pnls)), 4),
+        "total_pnl":    round(float(pnls.sum()), 4),
+        "sharpe":       round((mu / sd) * ann, 3) if sd > 0 else None,
+        "gross_sharpe": round((gmu / gsd) * ann, 3) if gsd > 0 else None,
+        "max_drawdown": round(max_dd, 4),
+        "mean_cost":    round(float(costs.mean()), 4),
+        "total_cost":   round(float(costs.sum()), 4),
+    }
+
+
+def _aggregate_horizon(
+    rows_by_source: dict[str, list[dict]],
+    horizons: tuple[int, ...] = HORIZON_SWEEP,
+) -> dict:
+    """Build the horizon_sweep report block from recomputed per-source rows."""
+    from research.spread_universe import INSTRUMENTS
+
+    by_source: dict[str, dict] = {}
+    for source, rows in rows_by_source.items():
+        overall_by_h = {str(H): _horizon_metrics(rows, H, f"pnl_h{H}") for H in horizons}
+        by_spread: dict[str, dict] = {}
+        for sp in INSTRUMENTS:
+            sp_rows = [r for r in rows if r.get("spread") == sp]
+            if not sp_rows:
+                continue
+            by_spread[sp] = {str(H): _horizon_metrics(sp_rows, H, f"pnl_h{H}") for H in horizons}
+        # Best NET-Sharpe horizon per spread (eligible only if ≥ MIN_SIGNALS).
+        best: dict[str, dict] = {}
+        for sp, perh in by_spread.items():
+            ref20 = (perh.get("20") or {}).get("sharpe")
+            elig = [(H, perh[str(H)]["sharpe"]) for H in horizons
+                    if perh[str(H)]["sharpe"] is not None
+                    and (perh[str(H)]["n_signals"] or 0) >= HORIZON_MIN_SIGNALS]
+            if not elig:
+                best[sp] = {"horizon": None, "net_sharpe": None,
+                            "default_20d_net_sharpe": ref20, "delta_vs_20d": None}
+                continue
+            bh, bs = max(elig, key=lambda kv: kv[1])
+            best[sp] = {
+                "horizon":                bh,
+                "net_sharpe":             bs,
+                "default_20d_net_sharpe": ref20,
+                "delta_vs_20d":           round(bs - ref20, 3) if ref20 is not None else None,
+            }
+        by_source[source] = {
+            "overall_by_horizon":     overall_by_h,
+            "by_spread":              by_spread,
+            "best_horizon_by_spread": best,
+        }
+    return {
+        "horizons":   list(horizons),
+        "sources":    list(rows_by_source.keys()),
+        "min_signals_for_best": HORIZON_MIN_SIGNALS,
+        "cost_model": dict(COST_PER_SPREAD_RT),
+        "note": (
+            "Phase 5 (2.8.7) — exit-horizon sweep. Entry signal (z→direction) is "
+            "horizon-independent (models predict contemporaneous fair value); only the "
+            "hold/exit horizon varies the realised PnL. Pure post-processing over the "
+            "validated baseline/global trade tapes — no retraining. NET of the same "
+            "per-spread RT cost (horizon-independent: one round trip). Sharpe annualised "
+            "√(252/H). Overlapping-fill convention matches the base walk-forward, so read "
+            "the RANKING of horizons per spread, not the absolute Sharpe level."
+        ),
+        "by_source":  by_source,
+    }
+
+
+def run_horizon_only(
+    horizons: tuple[int, ...] = HORIZON_SWEEP,
+    sources: tuple[str, ...] = ("baseline", "global"),
+) -> dict:
+    """
+    Phase 5 (2.8.7) — recompute every fired signal's PnL at H ∈ horizons over
+    the persisted baseline/global trade tapes and merge a `horizon_sweep` block
+    into walkforward_report.json. No model retraining: the spread series is
+    rebuilt and forward moves re-read at each horizon. Pure additive leg.
+    """
+    from research.spread_universe import build_spread_series
+
+    existing = load_report()
+    if existing is None:
+        raise RuntimeError(
+            "walkforward_report.json missing — run the full walk-forward first, "
+            "then re-run with --horizon-only."
+        )
+
+    tape_files = {
+        "baseline": _BASELINE_TRADES_FILE,
+        "global":   _GLOBAL_TRADES_FILE,
+        "pooled":   _POOLED_TRADES_FILE,
+        "gated":    _GATED_TRADES_FILE,
+    }
+
+    log.info("Building spread universe for horizon recompute...")
+    spreads = build_spread_series()
+    lookup  = _spread_lookup(spreads)
+
+    rows_by_source: dict[str, list[dict]] = {}
+    persisted_tape: list[dict] = []
+    for src in sources:
+        path = tape_files.get(src)
+        if path is None or not path.exists():
+            log.warning("  horizon: tape for source %r missing (%s) — skipping", src, path)
+            continue
+        with open(path) as f:
+            tape = json.load(f)
+        rows = _recompute_horizon_pnls(tape, lookup, horizons)
+        rows_by_source[src] = rows
+        for r in rows:
+            persisted_tape.append({**r, "source": src})
+        log.info("  horizon[%s]: %d tape rows → %d recomputed", src, len(tape), len(rows))
+
+    if not rows_by_source:
+        raise RuntimeError("horizon sweep: no source tapes found to post-process")
+
+    block = _aggregate_horizon(rows_by_source, horizons)
+    existing["horizon_sweep"] = block
+
+    cfg = existing.setdefault("config", {})
+    cfg["horizon_sweep"] = {"horizons": list(horizons), "sources": list(rows_by_source.keys())}
+
+    try:
+        _HORIZON_TRADES_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(_HORIZON_TRADES_FILE, "w") as f:
+            json.dump(persisted_tape, f, default=str)
+        log.info("  saved %s (%d rows)", _HORIZON_TRADES_FILE.name, len(persisted_tape))
+    except Exception as exc:  # pragma: no cover — disk-only failure
+        log.warning("  failed to save %s: %s", _HORIZON_TRADES_FILE.name, exc)
+
+    existing["generated_at"] = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    _REPORT_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(_REPORT_FILE, "w") as f:
+        json.dump(existing, f, indent=2, default=str)
+    log.info("Saved walk-forward report (horizon sweep merged) → %s", _REPORT_FILE)
+    return existing
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 5 — Feature selection (Lasso stability selection)
+# ─────────────────────────────────────────────────────────────────────────────
+# The global leg trains one model per spread on all 22 (Brent) / 24 (WTI) base
+# features + 9 regime one-hots. Many are correlated commodity series; if a leaner
+# set holds the NET Sharpe it's strictly more interpretable. We pick the lean set
+# with textbook STABILITY SELECTION (Meinshausen & Bühlmann 2010): fit a scaled
+# Lasso per spread at every walk-forward refit cutoff and record which base
+# features survive (|coef| > tol). A feature's SELECTION FREQUENCY across the 34
+# refits is its stability; we keep features stable in ≥ 50% of refits (floor:
+# the top-6 by mean |coef| so no spread is starved). The 9 regime one-hots are
+# always retained — they're the regime information the global leg exists to carry,
+# and they're cheap. We then re-run the global walk-forward on the lean per-spread
+# sets and compare NET Sharpe vs full-global and baseline.
+FEATSEL_FREQ_THRESH = 0.5
+FEATSEL_MIN_KEEP    = 6
+FEATSEL_COEF_TOL    = 1e-6
+
+
+def _stability_select(
+    joined: pd.DataFrame,
+    refit_ts: list[pd.Timestamp],
+    spreads_list: list[str] | None = None,
+    freq_thresh: float = FEATSEL_FREQ_THRESH,
+    min_keep: int = FEATSEL_MIN_KEEP,
+) -> dict:
+    """
+    Lasso stability selection per spread across all refit cutoffs. Returns
+    {spread -> {selected, n_selected, n_base, freq{feat->frac}, mean_abs_coef,
+                n_refits}}. The Lasso design includes the regime one-hots (so a
+    base feature's coefficient is conditional on regime, matching the global
+    leg) but selection is scored only over base features — one-hots are always
+    retained downstream.
+    """
+    from research.models          import _fit_lasso
+    from research.features        import predictors_for
+    from research.spread_universe import INSTRUMENTS
+
+    spreads_list = spreads_list if spreads_list is not None else list(INSTRUMENTS)
+    out: dict[str, dict] = {}
+
+    for spread in spreads_list:
+        base_feats = predictors_for(spread)
+        counts   = {f: 0   for f in base_feats}
+        coef_sum = {f: 0.0 for f in base_feats}
+        n_refits = 0
+        for cutoff in refit_ts:
+            train_df = joined[joined.index <= cutoff].copy()
+            oh = train_df.apply(_regime_one_hot, axis=1, result_type="expand")
+            for col in _REGIME_OH_COLS:
+                train_df[col] = oh[col].astype(int) if col in oh.columns else 0
+            feat_cols = base_feats + _REGIME_OH_COLS
+            sub = train_df.dropna(subset=base_feats + [spread])
+            if len(sub) < MIN_SAMPLES:
+                continue
+            X = sub[feat_cols].values
+            y = sub[spread].values
+            try:
+                pipe = _fit_lasso(X, y)
+                coefs = pipe.named_steps["model"].coef_
+            except Exception:
+                continue
+            n_refits += 1
+            for j, f in enumerate(base_feats):   # base feats are the leading cols
+                c = abs(float(coefs[j]))
+                coef_sum[f] += c
+                if c > FEATSEL_COEF_TOL:
+                    counts[f] += 1
+        if n_refits == 0:
+            out[spread] = {"selected": list(base_feats), "n_selected": len(base_feats),
+                           "n_base": len(base_feats), "freq": {}, "mean_abs_coef": {},
+                           "n_refits": 0,
+                           "note": "no refit trained (insufficient rows) — fell back to full base set"}
+            continue
+        freq = {f: round(counts[f] / n_refits, 4) for f in base_feats}
+        mean_abs = {f: round(coef_sum[f] / n_refits, 6) for f in base_feats}
+        selected = [f for f in base_feats if freq[f] >= freq_thresh]
+        if len(selected) < min_keep:
+            selected = sorted(base_feats, key=lambda f: mean_abs[f], reverse=True)[:min_keep]
+        # Preserve the canonical base-feature order for reproducibility.
+        selected = [f for f in base_feats if f in set(selected)]
+        out[spread] = {
+            "selected":      selected,
+            "n_selected":    len(selected),
+            "n_base":        len(base_feats),
+            "freq":          freq,
+            "mean_abs_coef": mean_abs,
+            "n_refits":      n_refits,
+        }
+    return out
+
+
+def run_featsel_only() -> dict:
+    """
+    Phase 5 — stability-select a lean per-spread feature set, re-run the global
+    walk-forward on it, and merge `feature_selection` + `global_lean` blocks into
+    walkforward_report.json. Mirrors --global-only's merge pattern.
+    """
+    from research.features        import build_features
+    from research.spread_universe import build_spread_series
+
+    existing = load_report()
+    if existing is None:
+        raise RuntimeError(
+            "walkforward_report.json missing — run the full walk-forward first, "
+            "then re-run with --featsel-only."
+        )
+
+    log.info("Building feature matrix + spread universe...")
+    features = build_features()
+    spreads  = build_spread_series()
+    joined   = features.join(spreads, how="inner")
+
+    refit_ts = [pd.Timestamp(d) for d in REFIT_DATES]
+    refit_ts = [t for t in refit_ts if t >= joined.index.min() and t <= joined.index.max()]
+
+    log.info("Phase 5 — Lasso stability selection across %d refits...", len(refit_ts))
+    sel = _stability_select(joined, refit_ts)
+    base_feats_by_spread = {sp: sel[sp]["selected"] for sp in sel}
+    for sp, info in sel.items():
+        log.info("  [%s] kept %d/%d base feats: %s",
+                 sp, info["n_selected"], info["n_base"], info["selected"])
+
+    log.info("Phase 5 — lean global walk-forward...")
+    lean_trades, lean_meta = _produce_global_trades(
+        joined, spreads, refit_ts, base_feats_by_spread=base_feats_by_spread, tag="global_lean"
+    )
+    lean_block = _aggregate_global(lean_trades, lean_meta)
+    lean_block["regime_mode"] = "global_lean"
+    lean_block["feature_set"] = {
+        "method":   "Lasso stability selection (≥{:.0%} of refits, floor top-{} by mean |coef|); 9 regime one-hots always retained.".format(
+            FEATSEL_FREQ_THRESH, FEATSEL_MIN_KEEP),
+        "per_spread_base_feats": base_feats_by_spread,
+        "one_hot":  list(_REGIME_OH_COLS),
+    }
+    lean_net = _net_block(lean_trades)
+
+    base_by_spread = existing.get("baseline_by_spread") or {}
+    base_overall   = existing.get("baseline_overall")   or {}
+    base_net       = (existing.get("costs") or {}).get("baseline_net") or {}
+    full_global       = existing.get("global") or {}
+    full_global_net   = (existing.get("costs") or {}).get("global_net") or {}
+
+    existing["global_lean"] = lean_block
+    existing["feature_selection"] = {
+        "method": (
+            "Stability selection (Meinshausen & Bühlmann): scaled Lasso fit per spread "
+            "at every refit cutoff over the global design (base feats + 9 regime one-hots); "
+            "a base feature is kept if its non-zero-coef SELECTION FREQUENCY across the "
+            f"{len(refit_ts)} refits is ≥ {FEATSEL_FREQ_THRESH:.0%} (floor: top-{FEATSEL_MIN_KEEP} "
+            "by mean |coef|). Regime one-hots always retained. The lean sets are then re-run "
+            "through the global walk-forward → `global_lean`."
+        ),
+        "freq_thresh": FEATSEL_FREQ_THRESH,
+        "min_keep":    FEATSEL_MIN_KEEP,
+        "per_spread":  sel,
+    }
+    existing["lift_global_lean_vs_baseline"] = _lift(lean_block, base_by_spread, base_overall)
+    if full_global.get("by_spread"):
+        existing["lift_global_lean_vs_global"] = _lift(
+            lean_block, full_global.get("by_spread", {}), full_global.get("overall", {})
+        )
+
+    costs = existing.setdefault("costs", {})
+    costs["global_lean_net"] = lean_net
+    costs["lift_global_lean_vs_baseline_net"] = _lift(
+        lean_net, base_net.get("by_spread", {}), base_net.get("overall", {})
+    )
+    if full_global_net.get("by_spread"):
+        costs["lift_global_lean_vs_global_net"] = _lift(
+            lean_net, full_global_net.get("by_spread", {}), full_global_net.get("overall", {})
+        )
+
+    cfg = existing.setdefault("config", {})
+    modes = cfg.get("regime_modes") or []
+    if "global_lean" not in modes:
+        cfg["regime_modes"] = list(modes) + ["global_lean"]
+
+    try:
+        _FEATSEL_TRADES_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(_FEATSEL_TRADES_FILE, "w") as f:
+            json.dump(lean_trades, f, default=str)
+        log.info("  saved %s (%d rows)", _FEATSEL_TRADES_FILE.name, len(lean_trades))
+    except Exception as exc:  # pragma: no cover — disk-only failure
+        log.warning("  failed to save %s: %s", _FEATSEL_TRADES_FILE.name, exc)
+
+    existing["generated_at"] = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    _REPORT_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(_REPORT_FILE, "w") as f:
+        json.dump(existing, f, indent=2, default=str)
+    log.info("Saved walk-forward report (feature-selection leg merged) → %s", _REPORT_FILE)
+    return existing
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 6 — data-driven HMM / change-point regimes (2.8.9)
+# ─────────────────────────────────────────────────────────────────────────────
+# The Phase 2 grid splits the curve axis on HARD trader thresholds
+# (CONTANGO ≤ −$2 < NEUTRAL ≤ +$5 < BACK). This leg asks whether a *fitted*
+# regime detector — a Gaussian mixture + causal sticky-HMM over the curve level
+# and its 5-day change (research.regime_hmm) — discovers curve regimes that beat
+# both the regime-unaware baseline and the hard-threshold pooled/global variants
+# on NET Sharpe.
+#
+# It is the pooled-mode analog: K dense data-driven curve cells per spread
+# instead of the 3 hard buckets. Same 7-model competition, same 20-day horizon,
+# same NET cost model, same 34 quarterly refits. At each refit the GMM is fit on
+# the training slice (≤ cutoff) and the forward window is labelled CAUSALLY (the
+# forward filter at day d sees only data ≤ d). States are relabelled ordinally by
+# curve level (R0 = deepest contango) so a cell trained for (spread, R1) at refit
+# t is looked up correctly in t's window.
+N_HMM_STATES_SWEEP = (2, 3, 4)   # state-count sensitivity sweep
+N_HMM_HEADLINE     = 3           # matched to the 3 hard curve buckets
+
+
+def _produce_hmm_trades(
+    joined: pd.DataFrame,
+    spreads: pd.DataFrame,
+    refit_ts: list[pd.Timestamp],
+    n_states: int = N_HMM_HEADLINE,
+    *,
+    stay: float = None,  # type: ignore[assignment]
+) -> tuple[list[dict], list[dict]]:
+    """
+    Quarterly-refit driver for the data-driven HMM regime leg with `n_states`.
+    Per refit: fit the detector on rows ≤ cutoff, label the whole series causally,
+    train one cell per (spread, R-state), evaluate the forward window. Returns
+    (trades, refit_meta) where each refit_meta row carries the detector's
+    state-summary (curve-level means + implied boundaries vs the −$2/+$5 cuts).
+    """
+    from research.regime_hmm import CurveRegimeHMM, HMM_STAY_DEFAULT
+
+    if stay is None:
+        stay = HMM_STAY_DEFAULT
+
+    all_trades: list[dict] = []
+    refit_meta: list[dict] = []
+    tag = f"hmm{n_states}"
+    for i, cutoff in enumerate(refit_ts):
+        next_cutoff = refit_ts[i + 1] if i + 1 < len(refit_ts) else joined.index.max()
+        log.info("[%s] Refit %d/%d  cutoff=%s  window=(%s, %s]",
+                 tag, i + 1, len(refit_ts), cutoff.date(),
+                 cutoff.date(), next_cutoff.date())
+        train = joined[joined.index <= cutoff]
+        try:
+            det = CurveRegimeHMM(n_states=n_states, stay=stay).fit(train)
+        except Exception as exc:
+            log.warning("  HMM fit failed at %s: %s — skipping refit", cutoff.date(), exc)
+            continue
+        labels = det.label_series(joined)            # causal ordinal labels
+        jl = joined.copy()
+        jl["regime_hmm"] = labels
+
+        cells = _train_cells_through(
+            jl, cutoff,
+            regime_col="regime_hmm", regime_list=det.state_labels,
+            enable_boosters=True,
+        )
+        window_trades = _evaluate_window(
+            jl, spreads, cells, cutoff, next_cutoff, regime_col="regime_hmm"
+        )
+        log.info("  trained %d cells  evaluated %d records", len(cells), len(window_trades))
+
+        winners: dict[str, int] = {}
+        for _, c in cells.items():
+            winners[c["winner"]] = winners.get(c["winner"], 0) + 1
+        summ = det.state_summary()
+        refit_meta.append({
+            "cutoff":         cutoff.strftime("%Y-%m-%d"),
+            "window_end":     next_cutoff.strftime("%Y-%m-%d"),
+            "n_cells":        len(cells),
+            "winners":        winners,
+            "n_records":      len(window_trades),
+            "state_summary":  summ,
+        })
+        all_trades.extend(window_trades)
+    return all_trades, refit_meta
+
+
+def _aggregate_hmm(trades: list[dict], refit_meta: list[dict], n_states: int) -> dict:
+    """Aggregate the HMM leg into the standard mode-block schema (no curve-axis
+    rollup — the regime labels are R0…R{K-1}, not CONTANGO/NEUTRAL/BACK)."""
+    # Mean detector boundaries across refits — the data-driven analog of the
+    # hard −$2/+$5 cuts, reported once at the leg level.
+    bounds_by_pos: dict[int, list[float]] = {}
+    means_acc: dict[str, list[float]] = {}
+    for m in refit_meta:
+        summ = m.get("state_summary") or {}
+        for j, b in enumerate(summ.get("implied_boundaries") or []):
+            bounds_by_pos.setdefault(j, []).append(b)
+        for st, v in (summ.get("state_curve_means") or {}).items():
+            means_acc.setdefault(st, []).append(v)
+    mean_bounds = [round(float(np.mean(vs)), 3) for _, vs in sorted(bounds_by_pos.items())]
+    mean_means  = {st: round(float(np.mean(vs)), 3) for st, vs in means_acc.items()}
+    return {
+        "regime_mode":  f"hmm{n_states}",
+        "n_states":     n_states,
+        "overall":      _metrics(trades),
+        "by_spread":    _by(trades, "spread"),
+        "by_regime":    _by(trades, "regime"),
+        "by_winner":    _by(trades, "winner"),
+        "by_direction": _by(trades, "direction"),
+        "refits":       refit_meta,
+        "n_trades":     len(trades),
+        "detector": {
+            "method":             "Gaussian mixture + causal sticky-HMM forward filter over [m1_m12, curve_chg_5d]; states relabelled ordinally by curve level. Fit per-refit on ≤cutoff; forward window labelled causally.",
+            "features":           list(__import__("research.regime_hmm", fromlist=["CURVE_HMM_FEATURES"]).CURVE_HMM_FEATURES),
+            "mean_curve_means":   mean_means,
+            "mean_boundaries":    mean_bounds,
+            "hard_thresholds":    [-2.0, 5.0],
+            "note":               "Phase 6 (2.8.9) — data-driven curve regimes replacing the hard −$2/+$5 trader thresholds. mean_boundaries are the average implied cut points across refits.",
+        },
+    }
+
+
+def run_hmm_only(states: tuple[int, ...] = N_HMM_STATES_SWEEP,
+                 headline: int = N_HMM_HEADLINE) -> dict:
+    """
+    Phase 6 (2.8.9) — fit the data-driven HMM regime detector, run the per-cell
+    walk-forward over its discovered regimes for each K in `states`, and merge an
+    `hmm` block into walkforward_report.json. Mirrors --global-only's merge
+    pattern: composite/pooled/baseline/gated/global blocks are untouched.
+
+    The `headline` K (default 3, matched to the 3 hard curve buckets) is the
+    primary block wired into the costs/lift tables; the other K's are kept under
+    `hmm["state_sweep"]` as a state-count sensitivity check.
+    """
+    from research.features        import build_features
+    from research.spread_universe import build_spread_series
+
+    existing = load_report()
+    if existing is None:
+        raise RuntimeError(
+            "walkforward_report.json missing — run the full walk-forward first, "
+            "then re-run with --hmm-only."
+        )
+    if headline not in states:
+        states = tuple(sorted(set(states) | {headline}))
+
+    log.info("Building feature matrix + spread universe...")
+    features = build_features()
+    spreads  = build_spread_series()
+    joined   = features.join(spreads, how="inner")
+    log.info("  features: %d rows  spreads: %d rows  joined: %d rows",
+             len(features), len(spreads), len(joined))
+
+    refit_ts = [pd.Timestamp(d) for d in REFIT_DATES]
+    refit_ts = [t for t in refit_ts if t >= joined.index.min() and t <= joined.index.max()]
+
+    base_by_spread = existing.get("baseline_by_spread") or {}
+    base_overall   = existing.get("baseline_overall")   or {}
+    base_net       = (existing.get("costs") or {}).get("baseline_net") or {}
+
+    blocks: dict[int, dict] = {}
+    nets:   dict[int, dict] = {}
+    headline_trades: list[dict] = []
+    for K in states:
+        log.info("Phase 6 — HMM leg, K=%d states...", K)
+        trades, meta = _produce_hmm_trades(joined, spreads, refit_ts, n_states=K)
+        blocks[K] = _aggregate_hmm(trades, meta, K)
+        nets[K]   = _net_block(trades)
+        if K == headline:
+            headline_trades = trades
+
+    # Headline block (matched-cardinality K) drives the costs/lift wiring.
+    hmm_block = blocks[headline]
+    hmm_net   = nets[headline]
+    # State-count sensitivity: overall gross/NET Sharpe per K.
+    state_sweep = {
+        str(K): {
+            "n_states":     K,
+            "gross_sharpe": blocks[K]["overall"].get("sharpe"),
+            "net_sharpe":   nets[K]["overall"].get("sharpe"),
+            "n_signals":    nets[K]["overall"].get("n_signals"),
+            "mean_boundaries": blocks[K]["detector"].get("mean_boundaries"),
+        }
+        for K in states
+    }
+    hmm_block["state_sweep"] = state_sweep
+    hmm_block["headline_states"] = headline
+
+    existing["hmm"] = hmm_block
+    existing["lift_hmm_vs_baseline"] = _lift(hmm_block, base_by_spread, base_overall)
+
+    costs = existing.setdefault("costs", {})
+    costs["hmm_net"] = hmm_net
+    costs["lift_hmm_vs_baseline_net"] = _lift(
+        hmm_net, base_net.get("by_spread", {}), base_net.get("overall", {})
+    )
+    # Lift vs the hard-threshold pooled + global legs (the direct comparators).
+    pooled_net = costs.get("pooled_net") or {}
+    global_net = costs.get("global_net") or {}
+    if pooled_net.get("by_spread"):
+        costs["lift_hmm_vs_pooled_net"] = _lift(
+            hmm_net, pooled_net.get("by_spread", {}), pooled_net.get("overall", {})
+        )
+    if global_net.get("by_spread"):
+        costs["lift_hmm_vs_global_net"] = _lift(
+            hmm_net, global_net.get("by_spread", {}), global_net.get("overall", {})
+        )
+
+    cfg = existing.setdefault("config", {})
+    modes = cfg.get("regime_modes") or []
+    if "hmm" not in modes:
+        cfg["regime_modes"] = list(modes) + ["hmm"]
+    cfg["hmm"] = {"states": list(states), "headline_states": headline}
+
+    # Persist the headline-K tape so future cost re-aggregations don't retrain.
+    try:
+        _HMM_TRADES_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(_HMM_TRADES_FILE, "w") as f:
+            json.dump(headline_trades, f, default=str)
+        log.info("  saved %s (%d rows)", _HMM_TRADES_FILE.name, len(headline_trades))
+    except Exception as exc:  # pragma: no cover — disk-only failure
+        log.warning("  failed to save %s: %s", _HMM_TRADES_FILE.name, exc)
+
+    existing["generated_at"] = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    _REPORT_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(_REPORT_FILE, "w") as f:
+        json.dump(existing, f, indent=2, default=str)
+    log.info("Saved walk-forward report (HMM leg merged) → %s", _REPORT_FILE)
+    return existing
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    if "--hmm-only" in sys.argv:
+        rpt = run_hmm_only()
+        hmm = rpt["hmm"]
+        hmm_net  = rpt["costs"]["hmm_net"]["overall"]
+        base_net = rpt["costs"]["baseline_net"]["overall"]
+        pool_net = (rpt["costs"].get("pooled_net") or {}).get("overall") or {}
+        gl_net   = (rpt["costs"].get("global_net") or {}).get("overall") or {}
+        gate_net = (rpt["costs"].get("gated_blend_net") or {}).get("overall") or {}
+        det = hmm["detector"]
+        print()
+        print("=== Phase 6 (2.8.9) — data-driven HMM / change-point regimes ===")
+        print(f"  headline K           {hmm['headline_states']} states (matched to 3 hard curve buckets)")
+        print(f"  detector features    {det['features']}")
+        print(f"  mean curve means $   {det['mean_curve_means']}")
+        print(f"  mean boundaries $    {det['mean_boundaries']}   (hard thresholds: -2 / +5)")
+        print(f"  records              {hmm['n_trades']:>6}")
+        print(f"  signals fired        {hmm['overall']['n_signals']:>6}")
+        print(f"  hit rate             {hmm['overall']['hit_rate']}")
+        print(f"  GROSS Sharpe         {hmm['overall']['sharpe']}")
+        print(f"  NET   Sharpe         {hmm_net['sharpe']}")
+        print(f"  max drawdown (gross) {hmm['overall']['max_drawdown']}")
+        print()
+        print("=== State-count sensitivity (overall NET Sharpe) ===")
+        for K, row in hmm["state_sweep"].items():
+            print(f"  K={K}  net={ (row['net_sharpe'] if row['net_sharpe'] is not None else 0.0):+.3f}"
+                  f"  gross={row['gross_sharpe']}  n={row['n_signals']}  bounds={row['mean_boundaries']}")
+        print()
+        print("=== NET-Sharpe verdict — HMM vs hard-threshold variants ===")
+        print(f"  baseline             {base_net['sharpe']:+.3f}")
+        if pool_net: print(f"  pooled (hard 3-bucket){pool_net['sharpe']:+.3f}")
+        if gate_net: print(f"  gated_blend          {gate_net['sharpe']:+.3f}")
+        if gl_net:   print(f"  global (regime-feat) {gl_net['sharpe']:+.3f}")
+        print(f"  hmm (data-driven K={hmm['headline_states']}){hmm_net['sharpe']:+.3f}")
+        print()
+        print("=== Per-spread NET Sharpe — HMM vs pooled vs baseline ===")
+        hnet_sp = rpt["costs"]["hmm_net"]["by_spread"]
+        pnet_sp = (rpt["costs"].get("pooled_net") or {}).get("by_spread", {})
+        bnet_sp = rpt["costs"]["baseline_net"]["by_spread"]
+        for sp in sorted(set(list(hnet_sp.keys()) + list(bnet_sp.keys()))):
+            h = (hnet_sp.get(sp) or {}).get("sharpe")
+            p = (pnet_sp.get(sp) or {}).get("sharpe")
+            b = (bnet_sp.get(sp) or {}).get("sharpe")
+            print(f"  {sp:<14}  hmm={h}  pooled={p}  baseline={b}")
+        sys.exit(0)
+
+    if "--horizon-only" in sys.argv:
+        rpt = run_horizon_only()
+        hs = rpt["horizon_sweep"]
+        print()
+        print("=== Phase 5 (2.8.7) -- Multi-horizon sweep (NET Sharpe, annualised sqrt(252/H)) ===")
+        print(f"  horizons {hs['horizons']}   sources {hs['sources']}")
+        for src, blk in hs["by_source"].items():
+            print(f"\n  [{src}] overall NET Sharpe by horizon:")
+            for H in hs["horizons"]:
+                m = blk["overall_by_horizon"][str(H)]
+                print(f"    {H:>3}d  net={ (m['sharpe'] if m['sharpe'] is not None else 0.0):+.3f}"
+                      f"  hit={m['hit_rate']}  n={m['n_signals']}")
+            print(f"  [{src}] best NET-Sharpe horizon per spread (vs 20d default):")
+            for sp, b in blk["best_horizon_by_spread"].items():
+                print(f"    {sp:<14} best={b['horizon']}d net={b['net_sharpe']}"
+                      f"  (20d={b['default_20d_net_sharpe']}  Δ={b['delta_vs_20d']})")
+        sys.exit(0)
+
+    if "--featsel-only" in sys.argv:
+        rpt = run_featsel_only()
+        lean = rpt["global_lean"]["overall"]
+        lean_net = rpt["costs"]["global_lean_net"]["overall"]
+        gl      = (rpt.get("global") or {}).get("overall") or {}
+        gl_net  = (rpt["costs"].get("global_net") or {}).get("overall") or {}
+        base_net = rpt["costs"]["baseline_net"]["overall"]
+        print()
+        print("=== Phase 5 — Feature selection (Lasso stability) ===")
+        for sp, info in rpt["feature_selection"]["per_spread"].items():
+            print(f"  {sp:<14} kept {info['n_selected']:>2}/{info['n_base']}  -> {info['selected']}")
+        print()
+        print("=== NET-Sharpe verdict — lean global vs full global vs baseline ===")
+        print(f"  baseline             {base_net['sharpe']:+.3f}")
+        print(f"  global (full feats)  {(gl_net.get('sharpe') or 0.0):+.3f}")
+        print(f"  global_lean          {(lean_net.get('sharpe') or 0.0):+.3f}")
+        print(f"  (gross: full={gl.get('sharpe')}  lean={lean.get('sharpe')})")
+        print()
+        print("=== Per-spread NET Sharpe — lean vs full global vs baseline ===")
+        lsp = rpt["costs"]["global_lean_net"]["by_spread"]
+        gsp = (rpt["costs"].get("global_net") or {}).get("by_spread", {})
+        bsp = rpt["costs"]["baseline_net"]["by_spread"]
+        for sp in sorted(set(list(lsp.keys()) + list(gsp.keys()))):
+            l = (lsp.get(sp) or {}).get("sharpe")
+            g = (gsp.get(sp) or {}).get("sharpe")
+            b = (bsp.get(sp) or {}).get("sharpe")
+            print(f"  {sp:<14} lean={l}  full={g}  baseline={b}")
+        sys.exit(0)
+
     if "--soft-only" in sys.argv:
         soft_modes: tuple[str, ...] = ("pooled",)
         if "--composite" in sys.argv:

@@ -170,6 +170,9 @@ export const api = {
   regimeSignalsGenerate:  (body: any = {}) => postJSON('/api/regime/signals/generate', body),
   regimeIntradayReplay:   () => getJSON('/api/regime/intraday_replay'),
   regimeShock:            () => getJSON('/api/regime/shock'),
+  // Phase 3/4 — live auto-trade desk
+  regimeAutodesk:         () => getJSON('/api/regime/autodesk'),
+  regimeAutodeskRun:      (body: any = {}) => postJSON('/api/regime/autodesk/run', body),
   // Paper trading
   paperPositions:  () => getJSON<PaperPosition[]>('/api/paper/positions'),
   paperPerformance:() => getJSON<PaperPerformanceData>('/api/paper/performance'),
