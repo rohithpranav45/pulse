@@ -161,6 +161,62 @@ def shock_guard(z, p_stress, *, z_extreme: float = Z_EXTREME, stress_gate: float
     return float(mult) if mult.ndim == 0 else mult
 
 
+# ── Production circuit-breaker (validated 2026-06-19) ───────────────────────
+# Validated on the gated tape under the REAL exit rule (2.5σ stop): pausing NEW
+# entries when stress is RISING (onset over 5d ≥ 0.25) cut max drawdown −14%
+# (−149 → −128) and lifted Sharpe (1.53 → 1.62). Gating on stress LEVEL instead
+# of onset was worse — it gives up the profitable sustained-stress mean-reversion.
+ONSET_WINDOW = 5
+ONSET_GATE   = 0.25
+
+
+def stress_onset(p_stress: pd.Series, window: int = ONSET_WINDOW) -> pd.Series:
+    """Rising-stress signal: the increase in P(stress) over `window` days, floored at 0."""
+    return (p_stress - p_stress.shift(window)).clip(lower=0)
+
+
+def breaker_active(p_stress: pd.Series, *, onset_gate: float = ONSET_GATE,
+                   window: int = ONSET_WINDOW) -> bool:
+    """True when the desk should PAUSE NEW entries (violent shock onset). Open
+    positions keep running under their stops — we only stop *adding* risk."""
+    onset = stress_onset(p_stress, window)
+    return bool(len(onset) and np.isfinite(onset.iloc[-1]) and onset.iloc[-1] >= onset_gate)
+
+
+# Module-level cache so the dashboard/live engine don't refit the GMM every call.
+_DETECTOR: "StressDetector | None" = None
+_FEATS_CACHE: pd.DataFrame | None = None
+
+
+def live_stress_state(settle: pd.DataFrame | None = None, *,
+                      fit_until: str = "2019-01-01", refit: bool = False) -> dict:
+    """
+    Today's stress read for the dashboard + the live desk's entry gate. Returns
+    P(stress), onset, the circuit-breaker state, and an explainable label.
+    The detector is fit causally (default burn-in 2016→2019) and cached.
+    """
+    global _DETECTOR, _FEATS_CACHE
+    if _DETECTOR is None or refit:
+        _FEATS_CACHE = build_stress_features(settle)
+        _DETECTOR = StressDetector().fit(_FEATS_CACHE, fit_until=fit_until)
+    feats = build_stress_features(settle) if settle is not None else _FEATS_CACHE
+    ps = _DETECTOR.p_stress(feats)
+    onset = stress_onset(ps)
+    p = float(ps.iloc[-1]); o = float(onset.iloc[-1])
+    label = "STRESS" if p >= 0.5 else "ELEVATED" if p >= 0.25 else "CALM"
+    return {
+        "as_of":          str(feats.index[-1].date()),
+        "p_stress":       round(p, 4),
+        "onset":          round(o, 4),
+        "breaker_active": bool(o >= ONSET_GATE),
+        "label":          label,
+        "onset_gate":     ONSET_GATE,
+        "note":           ("Shock onset detected — pausing NEW entries; open trades run under stops."
+                           if o >= ONSET_GATE else
+                           "No shock onset — normal trading."),
+    }
+
+
 if __name__ == "__main__":
     import warnings; warnings.filterwarnings("ignore")
     feats = build_stress_features()
