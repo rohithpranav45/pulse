@@ -75,7 +75,7 @@ export function SpreadChart({
       title={title}
       subtitle={subtitle ?? `${series.length} sessions · ${unit}`}
       source="yfinance_daily"
-      dataTimestamp={series[series.length - 1]?.date ?? series[series.length - 1]?.t}
+      dataTimestamp={series[series.length - 1]?.date}
       right={
         z !== null && (
           <Chip tone={tone}>

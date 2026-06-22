@@ -39,20 +39,22 @@ def _active_mode() -> str:
     """
     Resolve the regime mode for live inference.
 
-    Phase 4 (2026-06-17): production default is now "global" — the regime-as-
-    feature single-coherent-model architecture with empirical OOS residual bands
-    (see models_global.py). The previous per-cell pooled/composite models had
-    structural flaws documented in model_health.py.
+    Default is "pooled" — the cell-based per-(spread, regime) engine. The REGIME
+    tab's backtest panel reads the per-cell report (backtest_report_pooled.json),
+    which only exists for the cell-based modes, so the dashboard renders fully in
+    this mode. (2026-06-17 had briefly defaulted to "global"; reverted 2026-06-18
+    at the user's request — the global model has no per-cell backtest report, which
+    blanked /api/regime/backtest. The strategy rebuild is happening elsewhere in
+    the new RV Desk, not in this regime path.)
 
-    Set PULSE_REGIME_MODE=pooled to fall back to the legacy 3-cell pooled
-    engine (composite is also supported). Phase 2.6: `PULSE_GATED_BLEND=1`
-    forces pooled because the gated rule is defined on pooled labels.
+    Set PULSE_REGIME_MODE=global / composite to override. Phase 2.6:
+    `PULSE_GATED_BLEND=1` forces pooled because the gated rule is on pooled labels.
     """
     if _gated_blend_enabled():
         return "pooled"
-    mode = (os.environ.get("PULSE_REGIME_MODE") or "global").strip().lower()
+    mode = (os.environ.get("PULSE_REGIME_MODE") or "pooled").strip().lower()
     if mode not in ("composite", "pooled", "global"):
-        mode = "global"
+        mode = "pooled"
     return mode
 
 
@@ -97,6 +99,31 @@ def _gated_blend_enabled() -> bool:
     """Read PULSE_GATED_BLEND env var. Accepts 1/true/yes (case-insensitive)."""
     raw = (os.environ.get("PULSE_GATED_BLEND") or "").strip().lower()
     return raw in ("1", "true", "yes", "on")
+
+
+def _perspread_gate_enabled() -> bool:
+    """
+    Phase 8 — read PULSE_PERSPREAD_GATE. Default ON: the production gate is now
+    per-spread (the regime leg fires only for spreads whose OOS NET Sharpe beat
+    baseline; everything else falls to the rolling-z baseline). Set to
+    0/false/no/off to revert to the uniform Phase 2.6 global gate.
+    """
+    raw = (os.environ.get("PULSE_PERSPREAD_GATE") or "1").strip().lower()
+    return raw not in ("0", "false", "no", "off")
+
+
+def _perspread_enabled_set() -> set | None:
+    """
+    Phase 8 — the spreads the walk-forward enabled at its most recent refit
+    boundary (`per_spread_gate.enabled_latest` in walkforward_report.json). This
+    is the config live inference applies going forward — read fresh per call so a
+    regenerated report takes effect without a restart (same pattern as the Kelly
+    lookup). Returns None when the report lacks the block, so callers degrade to
+    the global gate. Decision logic + reader live in gate_config (shared with the
+    walk-forward leg, so the two can't drift).
+    """
+    from research.gate_config import latest_enabled_from_report
+    return latest_enabled_from_report(_WF_REPORT)
 
 
 def _gated_size_mode() -> str:
@@ -284,7 +311,8 @@ def get_current_regime() -> dict:
 
 def get_recommendation(*, force_mode: str | None = None, force_gated: bool | None = None,
                        live_actuals: dict | None = None,
-                       live_curve_m1m12: float | None = None) -> dict:
+                       live_curve_m1m12: float | None = None,
+                       live_feature_overlay: dict | None = None) -> dict:
     """
     Run inference on all 6 spreads under the current regime, rank by composite
     confidence, return #1 opportunity + every spread.
@@ -307,6 +335,16 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
     A/B harness + dashboard cards are unaffected. The slow regime features
     (inventory / COT / vol / macro) still come from the latest historical row;
     only the fast state (spread level + curve-axis regime) is overlaid live.
+
+    Phase 4 (2026-06-18, live feature overlay): pass `live_feature_overlay` — a
+    {feature_col: value} map of today's FAST features (brent_close, m1_m12,
+    curvature, *_lag1, wti_brent_spread, calendar cols …) from
+    `live_features.build_overlay` — to score the model on today's market state
+    instead of the stale daily row. Without it, fair_value is predicted from the
+    last daily settle (frozen 2026-05-26) while `actual` is live, which inflates
+    z-scores past the |z|>8 sanity gate. Additive: default None reproduces the
+    prior behaviour bit-for-bit; slow features absent from the overlay stay
+    carried from the latest historical row.
     """
     from research.features        import build_features, predictors_for
     from research.spread_universe import build_spread_series, INSTRUMENTS, LABELS, DESCRIPTIONS
@@ -315,6 +353,10 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
     gated    = _gated_blend_enabled() if force_gated is None else bool(force_gated)
     size_mode = _gated_size_mode() if gated else "full"
     kelly_map = _kelly_lookup_from_report() if (gated and size_mode == "kelly") else {}
+    # Phase 8 — per-spread gate. None → the uniform Phase 2.6 global gate (env
+    # opt-out, or no per_spread_gate block in the report yet). A set → the regime
+    # leg fires only for those spreads; every other spread falls to baseline.
+    perspread_enabled = _perspread_enabled_set() if (gated and _perspread_gate_enabled()) else None
     if force_mode is not None:
         mode = force_mode if force_mode in ("composite", "pooled") else _active_mode()
         # Gated rule is defined on pooled labels — overrides any composite forcing.
@@ -361,6 +403,16 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
         return {"available": False, "error": "feature matrix empty"}
 
     latest_features = df.iloc[-1]
+    # Phase 4 (2026-06-18) — overlay today's fast features onto the (possibly
+    # stale) latest daily row so the model predicts fair value from today's
+    # market state, not the last daily settle. Additive: no overlay → unchanged.
+    overlaid_features: list[str] = []
+    if live_feature_overlay:
+        latest_features = latest_features.copy()
+        for col, val in live_feature_overlay.items():
+            if col in latest_features.index and val is not None and np.isfinite(val):
+                latest_features[col] = float(val)
+                overlaid_features.append(col)
     # Forward-fill spreads up to 3 business days so WTI cells still have a
     # "today" reading when the synth file lags Brent's latest settle by a
     # session. Mirrors the ffill(limit=3) inside build_features() so feature
@@ -374,7 +426,7 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
     # The curve axis is defined on Brent M1-M12 (regimes.classify_curve), so a
     # single live curve value re-buckets the regime; inventory + vol carry from
     # the latest historical row (slow features). Pooled regime == curve bucket.
-    live_overlay = (live_actuals is not None) or (live_curve_m1m12 is not None)
+    live_overlay = (live_actuals is not None) or (live_curve_m1m12 is not None) or bool(live_feature_overlay)
     if live_curve_m1m12 is not None and np.isfinite(live_curve_m1m12):
         from research.regimes import classify_curve, classify_inv, classify_vol
         curve_b = classify_curve(float(live_curve_m1m12))
@@ -664,9 +716,14 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
                 regime_candidate is not None
                 and (regime_candidate.get("model_health") or {}).get("ok") is not False
             )
-            regime_pool_pass = regime_candidate is not None and _pooled_passes_gate(
+            # Phase 8 — split the gate into (a) the mirrored global predicate and
+            # (b) the per-spread enable layer, so we can tell "global gate failed"
+            # apart from "global gate passed but this spread isn't enabled".
+            global_gate_pass = regime_candidate is not None and _pooled_passes_gate(
                 regime, regime_candidate.get("winner_model"), regime_candidate.get("z_score") or 0.0,
             )
+            from research.gate_config import per_spread_gate_passes
+            regime_pool_pass = per_spread_gate_passes(spread, perspread_enabled, global_gate_pass)
             if regime_candidate is not None and regime_pool_pass and regime_health_ok:
                 chosen = regime_candidate
                 chosen["gate"] = "pass"
@@ -677,6 +734,10 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
                 elif not regime_health_ok:
                     chosen["gate"] = "health_fail"
                     chosen["regime_skipped_reasons"] = (regime_candidate.get("model_health") or {}).get("reasons")
+                elif global_gate_pass and not regime_pool_pass:
+                    # Phase 8 — the cell would have fired under the old uniform
+                    # gate, but this spread's regime leg never beat baseline OOS.
+                    chosen["gate"] = "spread_disabled"
                 else:
                     chosen["gate"] = "fail"
             elif regime_candidate is not None:
@@ -705,6 +766,20 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
     ranked.sort(key=lambda x: x["confidence"], reverse=True)
     top = ranked[0] if ranked else None
 
+    # ── Phase 2 (2026-06-19) — gated decorrelated selection ──────────────────
+    # The desk's actual book = the top-conviction opportunities with redundant
+    # (correlated) bets dropped, so we never double up on the same underlying
+    # curve move. Additive: `top`/`ranked` are untouched, so every existing
+    # consumer (A/B harness, signal_log, dashboard cards) is bit-for-bit
+    # unaffected; new consumers read the `portfolio` block. Never let selection
+    # break the core recommendation.
+    portfolio = None
+    try:
+        from research.gated_select import select_decorrelated
+        portfolio = select_decorrelated(ranked)
+    except Exception as exc:  # pragma: no cover — defensive
+        log.warning("decorrelated selection failed: %s", exc)
+
     method_blurb = (
         "Pooled curve-axis regime (CONTANGO/NEUTRAL/BACK)"
         if mode == "pooled"
@@ -726,6 +801,14 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
                 "source":         src,
                 "notional_scale": r.get("notional_scale", 1.0),
             }
+        # Phase 8 — per-spread gate context for the dashboard.
+        perspread_method = (
+            f"Per-spread gate ON — regime leg fires only for {sorted(perspread_enabled)} "
+            "(spreads whose OOS NET Sharpe beat baseline); every other spread uses the "
+            "252d rolling-z baseline."
+            if perspread_enabled is not None
+            else "Uniform global gate (per-spread gate off / no config) — regime on every BACK cell that passes."
+        )
         gated_summary = {
             "enabled":          True,
             "regime":           GATED_REGIME,
@@ -733,6 +816,9 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
             "z_threshold":      GATED_Z_THRESHOLD,
             "n_regime":         n_regime,
             "n_baseline":       n_baseline,
+            # Phase 8 per-spread gate
+            "per_spread_gate":  (sorted(perspread_enabled) if perspread_enabled is not None else None),
+            "per_spread_method": perspread_method,
             "method":           "Pooled signal taken only when regime_pooled=='BACK' AND winner_model ∈ {Lasso, Huber} AND |z|≥0.5σ; else 252d rolling-z baseline.",
             # Phase 2.7 sizing context
             "size_mode":        size_mode,
@@ -754,6 +840,7 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
         "regime":                regime,
         "regime_mode":           mode,
         "live":                  bool(live_overlay),  # Phase 3.1 — ran on live feed vs daily settle
+        "overlaid_features":     overlaid_features,   # Phase 4 — fast features scored live
         "gated_blend":           bool(gated),
         "gated_summary":         gated_summary,
         "size_mode":             size_mode if gated else None,  # Phase 2.7
@@ -774,6 +861,7 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
         },
         "top":                   top,
         "ranked":                ranked,
+        "portfolio":             portfolio,   # Phase 2 — gated decorrelated book
         "method":                f"Per-(spread, regime) winner from 7-model competition (Ridge/Lasso/ElasticNet/Huber/XGBoost/LightGBM/CatBoost — Phase 2.8.1); Quantile p10/p90 bands; trained ≤ 2026-03-31; {method_blurb}.",
         "timestamp":             datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
