@@ -511,6 +511,27 @@ lifts. **Two questions, two answers:**
   fixed gotcha 4 at the source — `walkforward.__main__` now forces UTF-8 stdout so the →/—/μ summary
   glyphs never crash a cp1252 console.
 
+### ✅ A/B panel — lead with the backtest verdict (2026-06-22)
+The A/B panel looked "broken / always blank" — because the **live forward book can't reach a verdict
+fast**: the run times out at `MAX_DAYS=14` but a trade holds up to 30 *trading* days (~6 weeks), and it
+needs ≥30 *closed*/arm — jointly unreachable, and on the sleepy free HF Space the daily tick barely fires
+(2 sessions in 7 days; the keep-alive only pings `/api/health`). So both arms sat at `n_closed=0` → null
+metrics → empty cards. **Not a bug; a cadence mismatch.** Fix = surface the answer that already exists.
+- **New `ab_test.backtest_verdict()`** — computes the pooled-vs-gated comparison **instantly from the
+  walk-forward tapes** (`pooled_trades.json` / `gated_trades.json` / `baseline_trades.json`, NET via
+  `walkforward._cost_for`), reusing the existing `_welch_t`. Verdict on **13,758 closed trades**: pooled
+  **+0.293** vs gated **+0.298** NET Sharpe, **Welch p=0.74 → statistically tied**; baseline **+0.372**
+  is the headline. Conclusion: keep the `gated` default. Cached per process; embedded in `get_report()`
+  so `/api/regime/ab` carries `backtest_verdict`.
+- **`ABComparePanel.tsx`** now **leads with a Backtest-verdict block** (pooled/gated/baseline NET Sharpe
+  tiles + the TIED/winner chip + Welch p + 13.8k-trade count), then shows the live forward book below
+  under a "slow confirmation" divider — with an honest **accumulating banner** (opened/closed counts +
+  why it's slow) instead of empty dashes. So the panel always shows a real, defensible answer on open.
+- **Tests:** new `tests/test_ab_backtest_verdict.py` (5 — verdict shape, verdict↔(welch,sharpe) consistency,
+  `get_report` embeds it, Welch helper basics; tape-gated skipif). **114 pytest green** (111 + 3 active).
+  `npm run build` + `tsc` clean. **Takeaway for the user/mentor: the pooled-vs-gated question is already
+  answered (tied; keep gated; baseline wins) — the live A/B was only ever slow confirmation of that.**
+
 ### ✅ HF Spaces — Phase 8 deployed + verified live (2026-06-22)
 - **Deployed.** PR #5 (Phase 7+8) merged to `main`; user triggered a Factory rebuild (HF does NOT
   auto-rebuild on GitHub push — it needs Settings → *Factory rebuild*, which shallow-clones the latest
