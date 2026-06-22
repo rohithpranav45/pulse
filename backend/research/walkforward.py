@@ -118,6 +118,8 @@ _HMM_TRADES_FILE      = Path(__file__).parent.parent / "data" / "research" / "hm
 _VOLTARGET_TRADES_FILE = Path(__file__).parent.parent / "data" / "research" / "voltarget_trades.json"
 # Phase 8 — per-spread gate leg (2026-06-22). Per-spread-gated blend tape.
 _PERSPREAD_GATE_TRADES_FILE = Path(__file__).parent.parent / "data" / "research" / "gated_perspread_trades.json"
+# GARCH risk-layer study (2026-06-22). Headline (GJR-GARCH vol_target) tape.
+_GARCH_TRADES_FILE = Path(__file__).parent.parent / "data" / "research" / "garch_trades.json"
 
 # Phase 2.8.4 — regime axes used as one-hot features in the "global" leg.
 # Composite label decomposes into 3 axes; the one-hot expansion is 3+3+3=9
@@ -2855,8 +2857,186 @@ def run_perspread_gate_only(headline: str = "per_spread_gate") -> dict:
     return existing
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# GARCH risk-layer study (2026-06-22) — does a conditional-vol (GARCH) forecast
+# beat the trailing-20d realised vol that Phase 7 vol-targeting uses? Post-
+# processing, no retrain (same standalone-merge pattern as --voltarget-only):
+# swap the vol frame fed to vol_target.apply_vol_target and re-run the four
+# ablation variants under realised vs plain-GARCH vs GJR-GARCH vol. Reports the
+# 1-step forecast accuracy (QLIKE) AND the trading outcome (NET Sharpe / maxDD /
+# Calmar). garch_vol.py holds the conditional-vol forecasting.
+# ─────────────────────────────────────────────────────────────────────────────
+def run_garch_only(headline_asym: bool = True) -> dict:
+    """
+    Build realised + GARCH vol frames, re-run the Phase 7 vol-target ablation
+    under each, and merge a `garch` block into walkforward_report.json. Mirrors
+    --voltarget-only's standalone-merge: every other block is untouched. Headline
+    = GJR-GARCH (asym) full vol_target overlay; its tape is persisted.
+    """
+    from research.spread_universe import build_spread_series
+    from research import vol_target as vt
+    from research import gated_select
+    from research import garch_vol
+
+    existing = load_report()
+    if existing is None:
+        raise RuntimeError(
+            "walkforward_report.json missing — run the full walk-forward first, "
+            "then re-run with --garch-only."
+        )
+    if not _GATED_TRADES_FILE.exists():
+        raise RuntimeError(f"gated tape missing ({_GATED_TRADES_FILE}) — run the full walk-forward first.")
+
+    log.info("GARCH study — building spread series + vol frames (realised / GARCH / GJR)...")
+    spreads = build_spread_series()
+    realised   = vt.spread_vol_frame(spreads)
+    garch_plain = garch_vol.garch_vol_frame(spreads, asym=False)
+    garch_gjr   = garch_vol.garch_vol_frame(spreads, asym=True)
+    fa = garch_vol.forecast_accuracy(spreads)
+
+    stress = vt.stress_series()
+    corr   = gated_select.instrument_corr_matrix()
+    with open(_GATED_TRADES_FILE) as f:
+        gated_tape = json.load(f)
+
+    def _variants_under(vol_frame) -> tuple[dict, dict, list]:
+        """Run the four ablation variants under a vol frame → ({name: summary},
+        headline_net, headline_tape)."""
+        res: dict[str, dict] = {}
+        head_net = None; head_tape: list[dict] = []
+        for name in _VOLTARGET_VARIANTS:
+            cfg = _voltarget_cfg(name)
+            sized = vt.apply_vol_target(gated_tape, spread_vol=vol_frame, stress=stress,
+                                        corr=corr, cfg=cfg)
+            net = _net_block(sized)
+            res[name] = _voltarget_summary(net)
+            if name == "vol_target":
+                head_net = net; head_tape = sized
+        return res, head_net, head_tape
+
+    realised_v, _, _              = _variants_under(realised)
+    plain_v, _, _                 = _variants_under(garch_plain)
+    gjr_v, gjr_head_net, gjr_tape = _variants_under(garch_gjr)
+
+    # Forecast-accuracy table: winner per spread by QLIKE (lower better)
+    fa_table = {}
+    roll_wins = 0
+    for sp in spreads.columns:
+        r = fa.get(sp, {})
+        if not r:
+            continue
+        best = min(("garch", "gjr", "roll"), key=lambda k: r.get(k, float("inf")))
+        fa_table[sp] = {**r, "winner": best}
+        if best == "roll":
+            roll_wins += 1
+
+    gated_raw_net = _net_block(gated_tape)
+    base_net = (existing.get("costs", {}).get("baseline_net") or {})
+    vt_real_net = (existing.get("costs", {}).get("vol_target_net") or {})
+
+    block = {
+        "regime_mode":   "garch_vol",
+        "headline":      "gjr_garch_vol_target",
+        "overall":       gjr_head_net["overall"],
+        "by_spread":     gjr_head_net["by_spread"],
+        "forecast_accuracy": {
+            "metric":    "QLIKE (1-step next-day variance; lower=better)",
+            "per_spread": fa_table,
+            "mean":      fa.get("mean"),
+            "roll_wins": roll_wins,
+            "n_spreads": len(fa_table),
+            "verdict":   ("trailing-20d wins the 1-step forecast on the mean / "
+                          f"{roll_wins}-of-{len(fa_table)} spreads — GARCH is not a better point forecaster here"),
+        },
+        "trading": {
+            "note":     "Phase 7 vol-target ablation re-run under each vol input (NET). "
+                        "decorrelated has no vol scaling → identical across inputs (sanity check).",
+            "realised_20d": realised_v,
+            "plain_garch":  plain_v,
+            "gjr_garch":    gjr_v,
+        },
+        "config": {
+            "scale": garch_vol.SCALE, "refit_every": garch_vol.REFIT_EVERY,
+            "min_train": garch_vol.MIN_TRAIN, "vol_win": vt.VOL_WIN,
+            "specs": "plain GARCH(1,1) + GJR-GARCH(1,1,1), Student-t, on daily $/bbl changes",
+        },
+        "note": (
+            "GARCH risk-layer study (2026-06-22). As a 1-step vol FORECAST, GARCH "
+            "does not beat the trailing-20d window (QLIKE). But as the SIZING input "
+            "to Phase 7 vol-targeting it materially improves the risk-adjusted book "
+            "(Calmar / Sharpe / max-DD, robust across plain & GJR) — a risk-layer "
+            "refinement, not alpha; still below the baseline headline. Post-processing "
+            "on the gated tape; same fired signals, reweighted notionals."
+        ),
+    }
+    existing["garch"] = block
+
+    costs = existing.setdefault("costs", {})
+    costs["garch_vol_target_net"] = {k: gjr_head_net[k] for k in ("overall", "by_spread")}
+    if vt_real_net.get("by_spread"):
+        existing["lift_garch_vs_voltarget"] = _lift(
+            gjr_head_net, vt_real_net.get("by_spread", {}), vt_real_net.get("overall", {}))
+    if base_net.get("by_spread"):
+        existing["lift_garch_vs_baseline"] = _lift(
+            gjr_head_net, base_net.get("by_spread", {}), base_net.get("overall", {}))
+
+    cfg = existing.setdefault("config", {})
+    modes = cfg.get("regime_modes") or []
+    if "garch_vol" not in modes:
+        cfg["regime_modes"] = list(modes) + ["garch_vol"]
+
+    try:
+        _GARCH_TRADES_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(_GARCH_TRADES_FILE, "w") as f:
+            json.dump(gjr_tape, f, default=str)
+        log.info("  saved %s (%d rows)", _GARCH_TRADES_FILE.name, len(gjr_tape))
+    except Exception as exc:  # pragma: no cover — disk-only failure
+        log.warning("  failed to save %s: %s", _GARCH_TRADES_FILE.name, exc)
+
+    existing["generated_at"] = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    _REPORT_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(_REPORT_FILE, "w") as f:
+        json.dump(existing, f, indent=2, default=str)
+    log.info("Saved walk-forward report (GARCH study merged) → %s", _REPORT_FILE)
+    return existing
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    # Windows consoles default to cp1252; our summaries print →/—/μ. Force UTF-8
+    # so the cosmetic summary never crashes after the report is already written
+    # (also covers the long-standing μ-glyph note in gotcha 4).
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:  # pragma: no cover — stdout may not support reconfigure
+        pass
+    if "--garch-only" in sys.argv:
+        rpt = run_garch_only()
+        blk = rpt["garch"]
+        print()
+        print("=== GARCH risk-layer study — 1-step vol forecast (QLIKE, lower=better) ===")
+        fa = blk["forecast_accuracy"]
+        print(f"  {'spread':<14} {'GARCH':>9} {'GJR':>9} {'roll20':>9}  winner")
+        for sp, r in fa["per_spread"].items():
+            print(f"  {sp:<14} {r['garch']:>9.4f} {r['gjr']:>9.4f} {r['roll']:>9.4f}  {r['winner']}")
+        m = fa["mean"]
+        print(f"  {'MEAN':<14} {m['garch']:>9.4f} {m['gjr']:>9.4f} {m['roll']:>9.4f}")
+        print(f"  → {fa['verdict']}")
+        print()
+        print("=== Trading outcome — vol-target ablation by vol input (NET) ===")
+        tr = blk["trading"]
+        print(f"  {'variant':<16} {'realised':>20} {'plain GARCH':>20} {'GJR-GARCH':>20}")
+        print(f"  {'':16} {'Shp / DD / Calmar':>20} {'Shp / DD / Calmar':>20} {'Shp / DD / Calmar':>20}")
+        for name in _VOLTARGET_VARIANTS:
+            def _c(d):
+                v = d[name]
+                return f"{(v['sharpe'] or 0):+.3f}/{(v['max_drawdown'] or 0):.0f}/{(v['calmar'] or 0):.2f}"
+            print(f"  {name:<16} {_c(tr['realised_20d']):>20} {_c(tr['plain_garch']):>20} {_c(tr['gjr_garch']):>20}")
+        bn = (rpt['costs'].get('baseline_net') or {}).get('overall', {})
+        print(f"\n  reference: baseline NET Sharpe {bn.get('sharpe')} (headline — GARCH does not beat it)")
+        print(f"  → {blk['note'].split('.')[1].strip()}.")
+        sys.exit(0)
+
     if "--perspread-gate-only" in sys.argv:
         rpt = run_perspread_gate_only()
         blk = rpt["per_spread_gate"]

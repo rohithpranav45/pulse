@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-06-22T02:00:54Z",
+  "generated_at": "2026-06-22T06:53:05Z",
   "method": "Walk-forward expanding-window: at each quarterly refit, retrain per-(spread, regime) cells on data \u2264 cutoff via the Ridge/Lasso/ElasticNet/Huber competition; predict daily through next cutoff; signal = \u00b10.5\u03c3 z-score; PnL = sign \u00d7 20-trading-day spread move. Run for BOTH regime modes (composite 27-cell, pooled 3-cell curve-axis-only) PLUS a Phase 2.6 gated_blend leg that takes the pooled signal only when regime_pooled=='BACK' AND winner \u2208 {Lasso, Huber} AND |z|\u22650.5\u03c3, else falls back to the 252d rolling-z baseline. Phase 2.7 sized_blend leg scales the regime-leg notional by {full=1.0, half=0.5, kelly=per-spread Kelly on prior closed regime-leg PnLs} with the baseline leg fixed at 1.0. Baseline = regime-unaware 252-day rolling z-score on the same spreads.",
   "config": {
     "forward_days": 20,
@@ -52,7 +52,8 @@
       "global_lean",
       "hmm",
       "vol_target",
-      "per_spread_gate"
+      "per_spread_gate",
+      "garch_vol"
     ],
     "gated_blend": {
       "regime": "BACK",
@@ -8160,6 +8161,115 @@
           "total_cost": 31.92
         }
       }
+    },
+    "garch_vol_target_net": {
+      "overall": {
+        "n_signals": 4834,
+        "n_total": 4834,
+        "n_neutral": 0,
+        "hit_rate": 0.6007,
+        "mean_pnl": 0.062,
+        "median_pnl": 0.0717,
+        "total_pnl": 299.5095,
+        "sharpe": 0.285,
+        "max_drawdown": -93.2633,
+        "win_pnl": 0.4113,
+        "loss_pnl": -0.4639,
+        "mean_cost": 0.0407,
+        "total_cost": 196.8101
+      },
+      "by_spread": {
+        "brent_m1_m2": {
+          "n_signals": 1207,
+          "n_total": 1207,
+          "n_neutral": 0,
+          "hit_rate": 0.5758,
+          "mean_pnl": 0.0263,
+          "median_pnl": 0.0442,
+          "total_pnl": 31.7619,
+          "sharpe": 0.161,
+          "max_drawdown": -78.5217,
+          "win_pnl": 0.3412,
+          "loss_pnl": -0.4011,
+          "mean_cost": 0.025,
+          "total_cost": 30.1309
+        },
+        "brent_m3_m6": {
+          "n_signals": 1417,
+          "n_total": 1417,
+          "n_neutral": 0,
+          "hit_rate": 0.5265,
+          "mean_pnl": -0.0428,
+          "median_pnl": 0.0277,
+          "total_pnl": -60.5803,
+          "sharpe": -0.137,
+          "max_drawdown": -123.075,
+          "win_pnl": 0.5552,
+          "loss_pnl": -0.7086,
+          "mean_cost": 0.0389,
+          "total_cost": 55.0672
+        },
+        "brent_fly_123": {
+          "n_signals": 688,
+          "n_total": 688,
+          "n_neutral": 0,
+          "hit_rate": 0.7515,
+          "mean_pnl": 0.2994,
+          "median_pnl": 0.2377,
+          "total_pnl": 206.0003,
+          "sharpe": 1.747,
+          "max_drawdown": -5.8103,
+          "win_pnl": 0.5024,
+          "loss_pnl": -0.3144,
+          "mean_cost": 0.074,
+          "total_cost": 50.9227
+        },
+        "wti_fly_123": {
+          "n_signals": 618,
+          "n_total": 618,
+          "n_neutral": 0,
+          "hit_rate": 0.6731,
+          "mean_pnl": 0.0875,
+          "median_pnl": 0.0733,
+          "total_pnl": 54.1054,
+          "sharpe": 0.67,
+          "max_drawdown": -8.3187,
+          "win_pnl": 0.2579,
+          "loss_pnl": -0.2633,
+          "mean_cost": 0.0649,
+          "total_cost": 40.135
+        },
+        "wti_m3_m6": {
+          "n_signals": 391,
+          "n_total": 391,
+          "n_neutral": 0,
+          "hit_rate": 0.6061,
+          "mean_pnl": 0.0619,
+          "median_pnl": 0.0944,
+          "total_pnl": 24.2164,
+          "sharpe": 0.44,
+          "max_drawdown": -19.1709,
+          "win_pnl": 0.3297,
+          "loss_pnl": -0.3501,
+          "mean_cost": 0.0164,
+          "total_cost": 6.4016
+        },
+        "wti_m1_m2": {
+          "n_signals": 513,
+          "n_total": 513,
+          "n_neutral": 0,
+          "hit_rate": 0.5712,
+          "mean_pnl": 0.0858,
+          "median_pnl": 0.0573,
+          "total_pnl": 44.0057,
+          "sharpe": 0.49,
+          "max_drawdown": -12.466,
+          "win_pnl": 0.3339,
+          "loss_pnl": -0.2447,
+          "mean_cost": 0.0276,
+          "total_cost": 14.1528
+        }
+      }
     }
   },
   "lift_composite_vs_baseline": {
@@ -15204,6 +15314,421 @@
       "ref_sharpe": 0.31,
       "n": 798,
       "ref_n": 798
+    }
+  },
+  "garch": {
+    "regime_mode": "garch_vol",
+    "headline": "gjr_garch_vol_target",
+    "overall": {
+      "n_signals": 4834,
+      "n_total": 4834,
+      "n_neutral": 0,
+      "hit_rate": 0.6007,
+      "mean_pnl": 0.062,
+      "median_pnl": 0.0717,
+      "total_pnl": 299.5095,
+      "sharpe": 0.285,
+      "max_drawdown": -93.2633,
+      "win_pnl": 0.4113,
+      "loss_pnl": -0.4639,
+      "mean_cost": 0.0407,
+      "total_cost": 196.8101
+    },
+    "by_spread": {
+      "brent_m1_m2": {
+        "n_signals": 1207,
+        "n_total": 1207,
+        "n_neutral": 0,
+        "hit_rate": 0.5758,
+        "mean_pnl": 0.0263,
+        "median_pnl": 0.0442,
+        "total_pnl": 31.7619,
+        "sharpe": 0.161,
+        "max_drawdown": -78.5217,
+        "win_pnl": 0.3412,
+        "loss_pnl": -0.4011,
+        "mean_cost": 0.025,
+        "total_cost": 30.1309
+      },
+      "brent_m3_m6": {
+        "n_signals": 1417,
+        "n_total": 1417,
+        "n_neutral": 0,
+        "hit_rate": 0.5265,
+        "mean_pnl": -0.0428,
+        "median_pnl": 0.0277,
+        "total_pnl": -60.5803,
+        "sharpe": -0.137,
+        "max_drawdown": -123.075,
+        "win_pnl": 0.5552,
+        "loss_pnl": -0.7086,
+        "mean_cost": 0.0389,
+        "total_cost": 55.0672
+      },
+      "brent_fly_123": {
+        "n_signals": 688,
+        "n_total": 688,
+        "n_neutral": 0,
+        "hit_rate": 0.7515,
+        "mean_pnl": 0.2994,
+        "median_pnl": 0.2377,
+        "total_pnl": 206.0003,
+        "sharpe": 1.747,
+        "max_drawdown": -5.8103,
+        "win_pnl": 0.5024,
+        "loss_pnl": -0.3144,
+        "mean_cost": 0.074,
+        "total_cost": 50.9227
+      },
+      "wti_fly_123": {
+        "n_signals": 618,
+        "n_total": 618,
+        "n_neutral": 0,
+        "hit_rate": 0.6731,
+        "mean_pnl": 0.0875,
+        "median_pnl": 0.0733,
+        "total_pnl": 54.1054,
+        "sharpe": 0.67,
+        "max_drawdown": -8.3187,
+        "win_pnl": 0.2579,
+        "loss_pnl": -0.2633,
+        "mean_cost": 0.0649,
+        "total_cost": 40.135
+      },
+      "wti_m3_m6": {
+        "n_signals": 391,
+        "n_total": 391,
+        "n_neutral": 0,
+        "hit_rate": 0.6061,
+        "mean_pnl": 0.0619,
+        "median_pnl": 0.0944,
+        "total_pnl": 24.2164,
+        "sharpe": 0.44,
+        "max_drawdown": -19.1709,
+        "win_pnl": 0.3297,
+        "loss_pnl": -0.3501,
+        "mean_cost": 0.0164,
+        "total_cost": 6.4016
+      },
+      "wti_m1_m2": {
+        "n_signals": 513,
+        "n_total": 513,
+        "n_neutral": 0,
+        "hit_rate": 0.5712,
+        "mean_pnl": 0.0858,
+        "median_pnl": 0.0573,
+        "total_pnl": 44.0057,
+        "sharpe": 0.49,
+        "max_drawdown": -12.466,
+        "win_pnl": 0.3339,
+        "loss_pnl": -0.2447,
+        "mean_cost": 0.0276,
+        "total_cost": 14.1528
+      }
+    },
+    "forecast_accuracy": {
+      "metric": "QLIKE (1-step next-day variance; lower=better)",
+      "per_spread": {
+        "brent_m1_m2": {
+          "garch": 0.0636,
+          "gjr": 0.0046,
+          "roll": 0.0387,
+          "n": 2691,
+          "winner": "gjr"
+        },
+        "brent_m3_m6": {
+          "garch": -2.483,
+          "gjr": -2.4852,
+          "roll": -2.5783,
+          "n": 2691,
+          "winner": "roll"
+        },
+        "brent_fly_123": {
+          "garch": 3.1114,
+          "gjr": 3.0423,
+          "roll": 2.5568,
+          "n": 2691,
+          "winner": "roll"
+        },
+        "wti_m1_m2": {
+          "garch": -2.5769,
+          "gjr": -2.5953,
+          "roll": -2.4127,
+          "n": 1357,
+          "winner": "gjr"
+        },
+        "wti_m3_m6": {
+          "garch": 0.3702,
+          "gjr": 0.6541,
+          "roll": -0.489,
+          "n": 1357,
+          "winner": "roll"
+        },
+        "wti_fly_123": {
+          "garch": -2.6755,
+          "gjr": -2.4806,
+          "roll": -2.5786,
+          "n": 1357,
+          "winner": "garch"
+        }
+      },
+      "mean": {
+        "garch": -0.6984,
+        "gjr": -0.6433,
+        "roll": -0.9105
+      },
+      "roll_wins": 3,
+      "n_spreads": 6,
+      "verdict": "trailing-20d wins the 1-step forecast on the mean / 3-of-6 spreads \u2014 GARCH is not a better point forecaster here"
+    },
+    "trading": {
+      "note": "Phase 7 vol-target ablation re-run under each vol input (NET). decorrelated has no vol scaling \u2192 identical across inputs (sanity check).",
+      "realised_20d": {
+        "decorrelated": {
+          "n_signals": 4834,
+          "hit_rate": 0.5962,
+          "mean_pnl": 0.0852,
+          "total_pnl": 411.9298,
+          "sharpe": 0.251,
+          "max_drawdown": -214.7445,
+          "calmar": 1.918
+        },
+        "risk_parity": {
+          "n_signals": 4834,
+          "hit_rate": 0.5989,
+          "mean_pnl": 0.0545,
+          "total_pnl": 263.4924,
+          "sharpe": 0.235,
+          "max_drawdown": -140.8516,
+          "calmar": 1.871
+        },
+        "parity_stress": {
+          "n_signals": 4834,
+          "hit_rate": 0.6014,
+          "mean_pnl": 0.0443,
+          "total_pnl": 213.9975,
+          "sharpe": 0.203,
+          "max_drawdown": -140.9792,
+          "calmar": 1.518
+        },
+        "vol_target": {
+          "n_signals": 4834,
+          "hit_rate": 0.5995,
+          "mean_pnl": 0.0467,
+          "total_pnl": 225.5601,
+          "sharpe": 0.198,
+          "max_drawdown": -111.9711,
+          "calmar": 2.014
+        }
+      },
+      "plain_garch": {
+        "decorrelated": {
+          "n_signals": 4834,
+          "hit_rate": 0.5962,
+          "mean_pnl": 0.0852,
+          "total_pnl": 411.9298,
+          "sharpe": 0.251,
+          "max_drawdown": -214.7445,
+          "calmar": 1.918
+        },
+        "risk_parity": {
+          "n_signals": 4834,
+          "hit_rate": 0.6007,
+          "mean_pnl": 0.0703,
+          "total_pnl": 339.8312,
+          "sharpe": 0.331,
+          "max_drawdown": -115.4281,
+          "calmar": 2.944
+        },
+        "parity_stress": {
+          "n_signals": 4834,
+          "hit_rate": 0.6003,
+          "mean_pnl": 0.0591,
+          "total_pnl": 285.4871,
+          "sharpe": 0.291,
+          "max_drawdown": -118.6487,
+          "calmar": 2.406
+        },
+        "vol_target": {
+          "n_signals": 4834,
+          "hit_rate": 0.6005,
+          "mean_pnl": 0.0602,
+          "total_pnl": 291.1436,
+          "sharpe": 0.277,
+          "max_drawdown": -96.0171,
+          "calmar": 3.032
+        }
+      },
+      "gjr_garch": {
+        "decorrelated": {
+          "n_signals": 4834,
+          "hit_rate": 0.5962,
+          "mean_pnl": 0.0852,
+          "total_pnl": 411.9298,
+          "sharpe": 0.251,
+          "max_drawdown": -214.7445,
+          "calmar": 1.918
+        },
+        "risk_parity": {
+          "n_signals": 4834,
+          "hit_rate": 0.5983,
+          "mean_pnl": 0.0728,
+          "total_pnl": 351.6921,
+          "sharpe": 0.343,
+          "max_drawdown": -108.09,
+          "calmar": 3.254
+        },
+        "parity_stress": {
+          "n_signals": 4834,
+          "hit_rate": 0.5989,
+          "mean_pnl": 0.0607,
+          "total_pnl": 293.5168,
+          "sharpe": 0.298,
+          "max_drawdown": -115.8034,
+          "calmar": 2.535
+        },
+        "vol_target": {
+          "n_signals": 4834,
+          "hit_rate": 0.6007,
+          "mean_pnl": 0.062,
+          "total_pnl": 299.5095,
+          "sharpe": 0.285,
+          "max_drawdown": -93.2633,
+          "calmar": 3.211
+        }
+      }
+    },
+    "config": {
+      "scale": 100.0,
+      "refit_every": 21,
+      "min_train": 252,
+      "vol_win": 20,
+      "specs": "plain GARCH(1,1) + GJR-GARCH(1,1,1), Student-t, on daily $/bbl changes"
+    },
+    "note": "GARCH risk-layer study (2026-06-22). As a 1-step vol FORECAST, GARCH does not beat the trailing-20d window (QLIKE). But as the SIZING input to Phase 7 vol-targeting it materially improves the risk-adjusted book (Calmar / Sharpe / max-DD, robust across plain & GJR) \u2014 a risk-layer refinement, not alpha; still below the baseline headline. Post-processing on the gated tape; same fired signals, reweighted notionals."
+  },
+  "lift_garch_vs_voltarget": {
+    "brent_m1_m2": {
+      "hit_rate": 0.5758,
+      "ref_hit_rate": 0.5733,
+      "mean_pnl": 0.0263,
+      "ref_mean_pnl": 0.0072,
+      "sharpe": 0.161,
+      "ref_sharpe": 0.053,
+      "n": 1207,
+      "ref_n": 1207
+    },
+    "brent_m3_m6": {
+      "hit_rate": 0.5265,
+      "ref_hit_rate": 0.5251,
+      "mean_pnl": -0.0428,
+      "ref_mean_pnl": -0.0489,
+      "sharpe": -0.137,
+      "ref_sharpe": -0.138,
+      "n": 1417,
+      "ref_n": 1417
+    },
+    "brent_fly_123": {
+      "hit_rate": 0.7515,
+      "ref_hit_rate": 0.75,
+      "mean_pnl": 0.2994,
+      "ref_mean_pnl": 0.1888,
+      "sharpe": 1.747,
+      "ref_sharpe": 1.527,
+      "n": 688,
+      "ref_n": 688
+    },
+    "wti_fly_123": {
+      "hit_rate": 0.6731,
+      "ref_hit_rate": 0.6731,
+      "mean_pnl": 0.0875,
+      "ref_mean_pnl": 0.1134,
+      "sharpe": 0.67,
+      "ref_sharpe": 0.743,
+      "n": 618,
+      "ref_n": 618
+    },
+    "wti_m3_m6": {
+      "hit_rate": 0.6061,
+      "ref_hit_rate": 0.6061,
+      "mean_pnl": 0.0619,
+      "ref_mean_pnl": 0.1171,
+      "sharpe": 0.44,
+      "ref_sharpe": 0.618,
+      "n": 391,
+      "ref_n": 391
+    },
+    "wti_m1_m2": {
+      "hit_rate": 0.5712,
+      "ref_hit_rate": 0.5712,
+      "mean_pnl": 0.0858,
+      "ref_mean_pnl": 0.0788,
+      "sharpe": 0.49,
+      "ref_sharpe": 0.348,
+      "n": 513,
+      "ref_n": 513
+    }
+  },
+  "lift_garch_vs_baseline": {
+    "brent_m1_m2": {
+      "hit_rate": 0.5758,
+      "ref_hit_rate": 0.6283,
+      "mean_pnl": 0.0263,
+      "ref_mean_pnl": 0.2075,
+      "sharpe": 0.161,
+      "ref_sharpe": 0.671,
+      "n": 1207,
+      "ref_n": 1407
+    },
+    "brent_m3_m6": {
+      "hit_rate": 0.5265,
+      "ref_hit_rate": 0.5206,
+      "mean_pnl": -0.0428,
+      "ref_mean_pnl": -0.0154,
+      "sharpe": -0.137,
+      "ref_sharpe": -0.038,
+      "n": 1417,
+      "ref_n": 1600
+    },
+    "brent_fly_123": {
+      "hit_rate": 0.7515,
+      "ref_hit_rate": 0.7468,
+      "mean_pnl": 0.2994,
+      "ref_mean_pnl": 0.2431,
+      "sharpe": 1.747,
+      "ref_sharpe": 1.262,
+      "n": 688,
+      "ref_n": 940
+    },
+    "wti_fly_123": {
+      "hit_rate": 0.6731,
+      "ref_hit_rate": 0.717,
+      "mean_pnl": 0.0875,
+      "ref_mean_pnl": 0.2307,
+      "sharpe": 0.67,
+      "ref_sharpe": 0.799,
+      "n": 618,
+      "ref_n": 583
+    },
+    "wti_m3_m6": {
+      "hit_rate": 0.6061,
+      "ref_hit_rate": 0.5815,
+      "mean_pnl": 0.0619,
+      "ref_mean_pnl": 0.1608,
+      "sharpe": 0.44,
+      "ref_sharpe": 0.31,
+      "n": 391,
+      "ref_n": 798
+    },
+    "wti_m1_m2": {
+      "hit_rate": 0.5712,
+      "ref_hit_rate": 0.5714,
+      "mean_pnl": 0.0858,
+      "ref_mean_pnl": 0.1105,
+      "sharpe": 0.49,
+      "ref_sharpe": 0.259,
+      "n": 513,
+      "ref_n": 812
     }
   }
 }
