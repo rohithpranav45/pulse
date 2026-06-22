@@ -161,6 +161,8 @@ export const api = {
   regimeAB:               () => getJSON<ABReportData>('/api/regime/ab'),
   regimeCalibration:      (include: 'pass' | 'all' = 'pass') =>
                             getJSON(`/api/regime/calibration?include=${include}`),
+  // Phase 8 — per-spread gate summary
+  regimePerspreadGate:    () => getJSON('/api/regime/perspread_gate'),
   regimeABTick:           (body: any = {}) => postJSON('/api/regime/ab/tick', body),
   regimeABReset:          (scope: 'all' | 'closed' = 'all') => postJSON('/api/regime/ab/reset', { scope }),
   // Phase 3.1 — live analysis engine + signal log
@@ -168,6 +170,11 @@ export const api = {
   regimeSignals:          (status: 'all' | 'open' | 'closed' = 'all', limit = 200) =>
                             getJSON(`/api/regime/signals?status=${status}&limit=${limit}`),
   regimeSignalsGenerate:  (body: any = {}) => postJSON('/api/regime/signals/generate', body),
+  regimeIntradayReplay:   () => getJSON('/api/regime/intraday_replay'),
+  regimeShock:            () => getJSON('/api/regime/shock'),
+  // Phase 3/4 — live auto-trade desk
+  regimeAutodesk:         () => getJSON('/api/regime/autodesk'),
+  regimeAutodeskRun:      (body: any = {}) => postJSON('/api/regime/autodesk/run', body),
   // Paper trading
   paperPositions:  () => getJSON<PaperPosition[]>('/api/paper/positions'),
   paperPerformance:() => getJSON<PaperPerformanceData>('/api/paper/performance'),

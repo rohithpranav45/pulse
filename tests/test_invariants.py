@@ -14,7 +14,7 @@ See CLAUDE.md §5 gotchas 7-9 (and history gotchas 26 / 35 / 42 / 48).
 Run from the repo root:  python -m pytest tests/test_invariants.py -v
 """
 
-from research import live_ranker, walkforward, ab_test
+from research import live_ranker, walkforward, ab_test, gate_config
 import paper_trading
 
 
@@ -36,6 +36,32 @@ def test_gate_z_threshold_matches():
 
 def test_rolling_baseline_window_matches():
     assert live_ranker.ROLLING_WIN == walkforward.ROLLING_WIN
+
+
+# ── Phase 8 per-spread gate: single source of truth ────────────────────────────
+# The per-spread gate layer must NOT be duplicated — both the walk-forward leg and
+# live inference call the SAME gate_config functions, so the live gate and the
+# backtested gate cannot drift. (The global-gate predicate above stays mirrored as
+# constants; the per-spread layer lives only in gate_config.)
+
+def test_perspread_gate_is_single_source():
+    import research.gate_config as gcmod
+    assert gcmod is gate_config
+    # walkforward builds its per-spread blend through gate_config (not a copy).
+    assert hasattr(walkforward, "_build_perspread_gated_blend")
+    # live_ranker reads the enable set through gate_config's reader.
+    assert hasattr(live_ranker, "_perspread_enabled_set")
+    # The shared predicate/decision functions exist and are callable.
+    assert callable(gate_config.per_spread_gate_passes)
+    assert callable(gate_config.decide_enabled)
+    assert callable(gate_config.latest_enabled_from_report)
+
+
+def test_perspread_gate_degrades_to_global_gate():
+    """With no per-spread config (None), the layer must reduce to the global gate
+    exactly — so a report predating Phase 8 keeps the Phase 2.6 behaviour."""
+    assert gate_config.per_spread_gate_passes("any_spread", None, True) is True
+    assert gate_config.per_spread_gate_passes("any_spread", None, False) is False
 
 
 # ── Tuned exit-rule mirror: live_ranker ↔ paper_trading ────────────────────────

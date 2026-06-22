@@ -1123,6 +1123,32 @@ _scheduler.add_job(
     next_run_time=_dt.now() + timedelta(minutes=7), id="_live_signal_intraday",
 )
 
+# Phase 3 — live auto-trade desk. Reconcile the paper book to the gated,
+# decorrelated live recommendation: auto-open the selected trades during market
+# hours (5d/wk), pause new entries on a shock onset, let the 60s MTM sweep own
+# every exit. Off when the feed is unreachable (PULSE_LIVE_SIGNALS_DISABLED) or
+# explicitly disabled (PULSE_AUTO_DESK_DISABLED=1). Bar-aligned 15-min cadence.
+def _auto_desk_tick():
+    if _live_signals_disabled():
+        return
+    try:
+        from research.auto_desk import run_auto_desk
+        s = run_auto_desk(dry_run=False)
+        if s.get("ran"):
+            log.info(
+                "auto-desk: market_open=%s breaker=%s opened=%d flipped=%d held=%d skipped=%d",
+                s.get("market_open"), s.get("breaker_active"),
+                len(s.get("opened", [])), len(s.get("flipped", [])),
+                s.get("n_held_auto", 0), len(s.get("skipped", [])),
+            )
+    except Exception as exc:
+        log.warning("auto-desk tick failed: %s", exc)
+
+_scheduler.add_job(
+    _auto_desk_tick, "interval", seconds=900,
+    next_run_time=_dt.now() + timedelta(minutes=8), id="_auto_desk_tick",
+)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Flask routes
@@ -1292,6 +1318,82 @@ def regime_calibration_route():
                     "timestamp": _now()})
 
 
+@app.route("/api/regime/perspread_gate")
+def regime_perspread_gate_route():
+    """
+    Phase 8 — per-spread gate summary for the dashboard. Reads the
+    `per_spread_gate` block from walkforward_report.json and returns a clean,
+    panel-ready shape:
+
+      • the three NET-Sharpe headlines (baseline / uniform global gate /
+        per-spread gate) so the verdict (+0.298 → +0.374 ≈ baseline) reads at a
+        glance;
+      • the per-spread decision table — for every spread, the regime-leg vs
+        baseline-leg NET Sharpe (the lift that justifies the decision) + whether
+        the per-spread gate enables it.
+
+    Read-only; no model is hit. Regenerate with
+    `python -m backend.research.walkforward --perspread-gate-only`.
+    """
+    def _psg():
+        from research.walkforward import load_report
+        rpt = load_report()
+        if not rpt:
+            return {"available": False, "error": "no walk-forward report — run the walk-forward first"}
+        block = rpt.get("per_spread_gate")
+        costs = rpt.get("costs") or {}
+        if not block:
+            return {"available": False,
+                    "error": "no per_spread_gate block — run "
+                             "`python -m backend.research.walkforward --perspread-gate-only`"}
+
+        def _sharpe(d):
+            return ((d or {}).get("overall") or {}).get("sharpe")
+
+        enabled = set(block.get("enabled_latest") or [])
+        # The regime-vs-baseline per-spread split that the decision is read from
+        # (full-sample NET; the live decision is the walk-forward per-cutoff
+        # version, but the direction matches — that's the "why").
+        bss = (costs.get("gated_blend_net") or {}).get("by_spread_source") or {}
+        from research.spread_universe import INSTRUMENTS, LABELS
+
+        per_spread = []
+        for sp in INSTRUMENTS:
+            srcs = bss.get(sp) or {}
+            rg = (srcs.get("regime")   or {}).get("sharpe")
+            bl = (srcs.get("baseline") or {}).get("sharpe")
+            n_rg = (srcs.get("regime") or {}).get("n_signals")
+            delta = (rg - bl) if (rg is not None and bl is not None) else None
+            per_spread.append({
+                "spread":          sp,
+                "label":           LABELS.get(sp, sp),
+                "enabled":         sp in enabled,
+                "regime_sharpe":   rg,
+                "baseline_sharpe": bl,
+                "delta":           round(delta, 3) if delta is not None else None,
+                "n_regime":        n_rg,
+            })
+
+        return {
+            "available":       True,
+            "enabled_latest":  sorted(enabled),
+            "n_regime":        block.get("n_regime"),
+            "n_baseline":      block.get("n_baseline"),
+            "config":          block.get("config", {}),
+            "headline": {
+                "baseline_net_sharpe":    _sharpe(costs.get("baseline_net")),
+                "global_gate_net_sharpe": _sharpe(costs.get("gated_blend_net")),
+                "perspread_net_sharpe":   _sharpe(costs.get("per_spread_gate_net")),
+            },
+            "per_spread":      per_spread,
+            "note":            block.get("note"),
+            "source":          "backend/data/research/walkforward_report.json",
+        }
+
+    return jsonify({"data": safe_fetch(_psg, {"available": False}),
+                    "timestamp": _now()})
+
+
 @app.route("/api/regime/ab")
 def regime_ab_route():
     """
@@ -1353,6 +1455,36 @@ def regime_live_route():
     return jsonify({"data": safe_fetch(_live, {"available": False}), "timestamp": _now()})
 
 
+@app.route("/api/regime/intraday_replay")
+def regime_intraday_replay_route():
+    """
+    In-window sanity replay of the live engine over the recorder's 15-min bar
+    history (the only intraday feed we have). Walks the REAL spread path with the
+    engine's overlay-corrected fair value + the tuned exit rule (TP halfway-to-
+    fair · SL 2.5σ · close-based). Read-only — does not persist.
+
+    NOT a statistically valid backtest — see the `caveats` field; the response is
+    explicitly labelled a diagnostic, not a performance claim.
+    """
+    def _replay():
+        from research.intraday_replay import run_replay
+        return run_replay(include_wti=request.args.get("wti", "1") != "0")
+    return jsonify({"data": safe_fetch(_replay, {"available": False}), "timestamp": _now()})
+
+
+@app.route("/api/regime/shock")
+def regime_shock_route():
+    """
+    Shock-absorption monitor: today's GMM stress read (P(stress), onset,
+    circuit-breaker state) + the validated absorption metrics + a P(stress)
+    history that shows the detector caught the real oil shocks out-of-sample.
+    """
+    def _shock():
+        from research.shock_engine import dashboard_payload
+        return dashboard_payload()
+    return jsonify({"data": safe_fetch(_shock, {"available": False}), "timestamp": _now()})
+
+
 @app.route("/api/regime/signals")
 def regime_signals_route():
     """
@@ -1389,6 +1521,33 @@ def regime_signals_generate_route():
         cadence=body.get("cadence", "daily"),
         include_wti=bool(body.get("include_wti", True)),
     )
+    return jsonify({"data": out, "timestamp": _now()})
+
+
+@app.route("/api/regime/autodesk")
+def regime_autodesk_route():
+    """
+    Phase 3 — live auto-trade desk preview (read-only). Returns what the desk
+    WOULD do right now: the gated/decorrelated selected book, the market-hours +
+    shock circuit-breaker gates, and the open/flip/hold plan against the paper
+    book. Takes no action (dry_run). The scheduler fires the real tick; POST
+    /api/regime/autodesk/run forces one.
+    """
+    def _preview():
+        from research.auto_desk import run_auto_desk
+        return run_auto_desk(dry_run=True)
+    return jsonify({"data": safe_fetch(_preview, {"ran": False}), "timestamp": _now()})
+
+
+@app.route("/api/regime/autodesk/run", methods=["POST"])
+def regime_autodesk_run_route():
+    """
+    Force one live auto-desk tick (opens/flips paper trades from the decorrelated
+    book, gated by market hours + the shock breaker). The scheduler runs this
+    every 15 min automatically; this is for smoke tests / a manual desk push.
+    """
+    from research.auto_desk import run_auto_desk
+    out = run_auto_desk(dry_run=False)
     return jsonify({"data": out, "timestamp": _now()})
 
 

@@ -17,8 +17,8 @@ const CHART_THEME = {
   timeScale: { borderColor: '#1c2745', timeVisible: true, secondsVisible: false },
   crosshair: {
     mode: 1,
-    vertLine: { color: 'rgba(212,175,55,0.3)', width: 1, style: 3, labelBackgroundColor: '#d4af37' },
-    horzLine: { color: 'rgba(212,175,55,0.3)', width: 1, style: 3, labelBackgroundColor: '#d4af37' },
+    vertLine: { color: 'rgba(212,175,55,0.3)', width: 1 as const, style: 3, labelBackgroundColor: '#d4af37' },
+    horzLine: { color: 'rgba(212,175,55,0.3)', width: 1 as const, style: 3, labelBackgroundColor: '#d4af37' },
   },
 };
 

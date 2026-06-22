@@ -1,4 +1,22 @@
-# ── Python ─────────────────────────────────────────────────────────────────────
+# PULSE .gitignore — minimal by design (2026-06-19).
+#
+# Policy: ONLY the 4.6 GB /Data lake and secrets (.env) are excluded — copy those
+# to a new machine directly. Plus regenerable dev tooling that is rebuilt by a
+# single standard command (node_modules -> `npm install`, __pycache__ -> Python).
+# EVERYTHING ELSE the project needs (model pkls, reports, pulse_cache.db, fetch
+# caches, parquets) IS versioned, so a fresh desk runs after:
+#     git pull  ->  copy /Data + .env  ->  (cd frontend && npm install)
+# Nothing else to hunt for.
+
+# -- Excluded by design — copied to the new desk manually ----------------------
+/Data/
+.env
+.env.*
+!.env.example
+/env
+
+# -- Regenerable dev tooling (one command rebuilds these — never committed) -----
+node_modules/
 __pycache__/
 *.py[cod]
 *.pyo
@@ -6,61 +24,25 @@ __pycache__/
 *.so
 *.egg
 *.egg-info/
-dist/
-build/
 .eggs/
-
-# ── Virtual environments ───────────────────────────────────────────────────────
 venv/
 .venv/
 env/
 ENV/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
 
-# ── Node ───────────────────────────────────────────────────────────────────────
-node_modules/
-
-# ── Environment / secrets ──────────────────────────────────────────────────────
-.env
-.env.*
-!.env.example
-# stray secrets file (must be named .env, not env — gotcha 5). Never commit.
-/env
-
-# ── Rebuildable caches (regenerate on first run — NOT migrated) ────────────────
-# These rebuild automatically, so versioning them only bloats the repo.
-# (gitignore has no inline comments — keep notes on their own lines.)
-# cot.pkl is a 66 MB COT fetch cache; kept out of git to keep .git lean.
-backend/cache/cot.pkl
-backend/data/cache/
-data/cache/*.pkl
-
-# NOTE: regime model artifacts (backend/data/research/ — the models*/ pkls,
-# reports, and research parquets) ARE versioned on purpose, so switching between
-# laptop and desk needs no manual copy. The small fetch caches that ARE already
-# tracked (fred_rate.pkl, historical.pkl) stay tracked — they're tiny.
-
-# ── SQLite paper book ──────────────────────────────────────────────────────────
-# pulse_cache.db carries the live paper book + A/B arms; it's versioned so the
-# book follows you between machines. Only the transient WAL sidecars are ignored.
+# -- Transient runtime output (logs + SQLite WAL sidecars) ----------------------
+*.log
+*.log.*
+backend/_applog.*
 backend/db/*.db-journal
 backend/db/*.db-wal
 backend/db/*.db-shm
 
-# ── Institutional desk-feed data lake (4 GB, supplied separately) ──────────────
-# Leading slash anchors this to the repo root ONLY. Without it, Windows git
-# (case-insensitive) also matched backend/data/ — which silently kept the regime
-# models out of git and forced manual copies between machines.
-/Data/
-
-# ── Claude Code local settings ─────────────────────────────────────────────────
-.claude/settings.local.json
-
-# ── Logs ───────────────────────────────────────────────────────────────────────
-*.log
-*.log.*
-logs/
-
-# ── OS / editor ────────────────────────────────────────────────────────────────
+# -- OS / editor / local settings ----------------------------------------------
 .DS_Store
 Thumbs.db
 .idea/
@@ -68,19 +50,6 @@ Thumbs.db
 *.swp
 *.swo
 *~
-
-# ── Testing ────────────────────────────────────────────────────────────────────
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-
-# ── Jupyter ────────────────────────────────────────────────────────────────────
+.claude/settings.local.json
 .ipynb_checkpoints/
-*.ipynb
-
-# ── Misc ───────────────────────────────────────────────────────────────────────
-*.bak
-*.tmp
-*.backup.*
 cloudflared.exe
