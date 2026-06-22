@@ -7,7 +7,7 @@ spread engine), and serves a React dashboard with a paper-trading book.
 - **Stack:** Flask 3 · React 18 + Vite + Tailwind · SQLite (cache + paper book) ·
   DuckDB/Parquet over a 3.5 GB `/Data` desk feed · sklearn + XGBoost/LightGBM/CatBoost
 - **Run (local):** `python start.py` from the repo root → http://127.0.0.1:5000
-- **Last updated:** 2026-06-19 (Phase 6 — 2.8.9 data-driven HMM/change-point regimes: a fitted GMM+sticky-HMM curve detector replaces the hard −$2/+$5 thresholds; NET Sharpe +0.289 trails baseline +0.372 / global +0.380, ties hard pooled +0.293 — the regime *partition* isn't the binding constraint, but the data relocates the contango cut −$2 → −$0.81)
+- **Last updated:** 2026-06-22 (Phase 8 — per-spread gate: replaces the uniform global gate (BACK × winners × |z|≥0.5 on every spread) with a **per-spread enable decision** made walk-forward — the regime leg fires for a spread only where its OOS NET Sharpe beat baseline. **Lifts the gated/regime book +0.298 → +0.374 NET Sharpe, reaching baseline parity (+0.372)** by enabling regime on exactly {wti_m1_m2, wti_fly_123} and routing every other spread to the rolling-z baseline. Doesn't beat baseline (consistent with the whole 2.8.x arc) but finally makes the regime book competitive. Shared decision logic in `gate_config.py` (live ↔ walk-forward can't drift); live default-on, `PULSE_PERSPREAD_GATE=0` reverts. Prior: Phase 7 — 2.8.10 portfolio vol-targeting halved the gated book's max-DD −281 → −112 but traded away NET Sharpe +0.298 → +0.198 / Calmar 2.55 → 2.01)
 - **Live:** https://rohithpranav45-pulse.hf.space (free HF Space, A/B book accumulating 24/7 — **regime endpoints currently failing**, see §1 below)
 
 > 🧭 **Three docs, one per tense:**
@@ -236,6 +236,13 @@ Mentor directive: take the top-conviction trades but **never double up on correl
 - **Tests:** new `tests/test_gated_select.py` (12 — greedy order, same-dir skip, opposite-dir hedge kept,
   cross-cluster both kept, all-4-fire→2 selected, NEUTRAL excluded, unsorted input, max_positions cap,
   env override, inclusive threshold, real-universe bimodal skip-if-no-/Data). **38 pytest green** (26 + 12).
+- **Dashboard (REGIME tab, `DecorrelatedBookPanel.tsx`, 2026-06-22).** Surfaces the directive as its own
+  first-class panel (under the pick card): the **selected book** (kept positions in conviction order — label,
+  direction, z, conviction) + every candidate **dropped for correlation** (struck through, with the signed
+  ρ and which held position knocked it out), a `ρ_max` + `N/M kept` header, and a footer explaining
+  signed-corr (redundant→skip, hedge→keep) + the bimodal cluster structure. Reads the existing
+  `/api/regime/recommendation` `portfolio` block (no backend change) — distinct from the AutoDeskPanel,
+  which frames the same book around live market-hours/breaker execution.
 ### ✅ Phase 3 — live auto-trade desk (2026-06-19)
 Mentor directive: "tune on live data so the dashboard auto-takes/closes trades like a desk analyst, 5d/wk
 during market hours." New **`backend/research/auto_desk.py`** reconciles the paper book to the gated,
@@ -379,8 +386,100 @@ re-run, no touch to the gate/exit invariants in `tests/test_invariants.py`.
   override threads through `_train_cells_through`/`_evaluate_window`, default-args unchanged, `_aggregate_hmm`
   shape + detector block). **75 pytest green** (66 + 9). Methodology PDF regenerated (Phase 6 section,
   +2 kB → 25.3 kB).
-- **Next (Phase 7):** 2.8.10 portfolio vol-targeting (the last open Phase 2.8.x model leg); consider
-  per-spread gate thresholds where the per-spread lift table justifies them.
+- **Next (Phase 7):** ~~2.8.10 portfolio vol-targeting~~ ✅ (below).
+
+### ✅ Phase 7 — portfolio vol-targeting (2.8.10) (2026-06-22)
+Mentor directive (last open Phase 2.8.x model leg): **scale the book's per-spread notionals to a target
+portfolio vol.** Additive **post-processing** leg over the persisted gated tape (same standalone-merge
+pattern as Phase 5/6 — no retrain, no touch to the gate/exit invariants in `tests/test_invariants.py`).
+New **`backend/research/vol_target.py`** reweights notionals by reusing the two shipped risk primitives:
+- **`shock_engine.risk_scale`** — per-position **vol-target × stress de-risk**: `vol_scale = clip(target_pos_vol
+  / forecast_vol_i, floor, cap)` (equalises each spread's $/bbl risk so a $-vol fly stops dominating a tight
+  front spread) `× (1 − derisk·P(stress))` (cuts size INTO a shock). `forecast_vol_i` = trailing 20d realised
+  $/bbl vol of the spread (causal); `P(stress)` from the GMM+sticky-HMM detector fit 2016→2019.
+- **`gated_select.select_decorrelated`** — the desk's decorrelated book (conviction = |z|; signed-corr filter).
+- **Portfolio overlay** — one factor `k = clip(target_book_vol / book_vol, 0.25, 2.0)` where `book_vol` is the
+  ex-ante vol from the kept positions' risks + the trailing corr matrix (signed by direction, so a hedge lowers
+  it). Adds exposure to a thin/hedged book, trims a full/correlated one → targets *portfolio* vol.
+- **Wiring (`--voltarget-only`, ~5 s).** `run_voltarget_only` runs four **ablation variants** (decorrelated →
+  +risk_parity → +parity_stress → +vol_target[full]) on the gated tape, each normalised to **mean notional 1.0**
+  (matched avg exposure → max-DD comparable; Sharpe/Calmar leverage-invariant). Blocks: `report["vol_target"]`
+  (+ `variants`, `config`) + `costs.vol_target_net` + lifts vs gated/baseline; tape `voltarget_trades.json`
+  (4,834 held positions, headline variant). Standalone: `python -m backend.research.vol_target`.
+- **Verdict (graded): vol-targeting is a drawdown-management tool, not an alpha tool.** On the gated tape
+  (NET, matched exposure): gated_raw Sharpe **+0.298** / maxDD **−281** / Calmar **2.55** → full vol_target
+  Sharpe **+0.198** / maxDD **−112** (**~60% DD cut**) / Calmar **2.01**. The drawdown reduction does **not**
+  pay for the return given up — on risk-adjusted return it trails the un-targeted gated book, and the
+  regime-unaware **baseline** (Calmar **4.99**, Sharpe +0.372) stays the headline. Ablation localises it:
+  **risk parity** is the biggest single DD-reducer (−215 → −141, caps the high-$-vol fly); the **portfolio
+  overlay** is the only layer that *improves* Calmar at the margin (1.52 → 2.01). Per-spread, the reweighting
+  lifts the deferred carries/flys (brent_fly 1.02→1.53, wti_m3_m6 0.02→0.62) but craters brent_m1_m2
+  (0.61→0.05 — parity up-sizes the low-$-vol front spread, whose small moves get eaten by RT cost).
+  For a **DD-constrained** mandate the overlay earns its Sharpe; for a **Sharpe-max** mandate the baseline wins.
+- **Tests:** new `tests/test_phase7_research.py` (12 — vol annualisation, book_vol quadrature + hedge-lowers-vol,
+  size_day drops NEUTRAL/missing-pnl, risk-parity equalises risk, stress de-risk, decorrelation drops correlated
+  same-dir, portfolio overlay levers thin book, apply_vol_target normalises to mean-notional-1 + feeds the cost
+  model via sizing_scale, variant-flag config, Calmar/summary; hermetic — synthetic tapes/vol/stress/corr, no
+  `/Data`). **87 pytest green** (75 + 12). Methodology PDF regenerated (Phase 7 section, +2.5 kB → 27.8 kB).
+- **Phase 2.8.x model backlog now complete** — splitting (2.8.4), softening (2.8.5), long history (2.8.8),
+  data-driven regimes (2.8.9), and vol-targeting (2.8.10) all shipped; **baseline remains the NET-Sharpe
+  headline across every variant.** Open routes: ~~per-spread gate thresholds where the per-spread lift table
+  justifies them~~ ✅ (Phase 8 below); read the live A/B verdict once ≥30 closed trades/arm accumulate.
+
+### ✅ Phase 8 — per-spread gate (2026-06-22)
+Mentor directive: the per-spread lift table shows regime conditioning helps **unevenly** across the 6
+spreads — replace the single global gate (`regime_pooled==BACK × winner∈GATED_WINNERS × |z|≥0.5`, applied
+uniformly) with **per-spread thresholds** where the lift table justifies them, walk-forward validated.
+- **The uneven signal (walk-forward `gated_blend_net.by_spread_source`, NET Sharpe regime-leg vs baseline-leg
+  per spread):** the regime leg **beats** baseline on the WTI fronts — wti_m1_m2 **+1.22 vs +0.71**,
+  wti_fly_123 **+0.97 vs +0.54** — but **loses** on every Brent spread (brent_m1_m2 +0.46 vs +0.72,
+  brent_fly_123 +0.75 vs +1.17) and both M3-M6 carries. Firing regime uniformly drags the gated book to NET
+  Sharpe +0.298, below the +0.372 baseline.
+- **New `backend/research/gate_config.py` — the single source of truth.** `decide_enabled(reg_pnls,
+  base_pnls)` = "is regime's annualised NET Sharpe > baseline's by `GATE_MARGIN` (0.0), on ≥ `GATE_MIN_N`
+  (20) regime trades?"; `enabled_at_cutoff()` resolves the enabled-spread set from per-spread close-date
+  histories (only trades closed < cutoff → no look-ahead); `per_spread_gate_passes(spread, enabled,
+  global_gate_pass)` composes the (still-mirrored) global predicate with the per-spread enable set
+  (`enabled=None` ⇒ degrades to the Phase 2.6 global gate, so a pre-Phase-8 report stays safe);
+  `latest_enabled_from_report()` reads `per_spread_gate.enabled_latest` for live inference. **The global-gate
+  predicate stays mirrored as constants in `live_ranker` ↔ `walkforward` (asserted by `test_invariants`); the
+  per-spread layer lives ONLY here and is imported by both, so they cannot drift.**
+- **Walk-forward leg (`--perspread-gate-only`, ~5 s, no retrain).** `run_perspread_gate_only()` mirrors
+  `--voltarget-only`'s standalone-merge: builds per-spread regime/baseline close-date histories from the
+  persisted `pooled_trades.json` + `baseline_trades.json`, resolves the enabled set **per refit cutoff**
+  (decision uses only trades closed before that cutoff — the `_compute_kelly_by_cutoff` pattern, genuinely
+  OOS), re-routes the blend per spread, aggregates NET. Blocks: `per_spread_gate` (+ `enabled_latest`,
+  `enabled_by_cutoff`, `by_spread_source`) + `costs.per_spread_gate_net` + lifts vs gated / baseline; tape
+  `gated_perspread_trades.json` (9,926 rows).
+- **Verdict (graded): per-spread gating closes the gap to baseline.** NET Sharpe **+0.298 (global gate) →
+  +0.374 (per-spread)** — parity with baseline **+0.372**. The final-cutoff config enables regime on exactly
+  **{wti_m1_m2, wti_fly_123}** (wti_m1_m2 since 2025, wti_fly_123 just crossed at the 2026-04-01 cutoff) and
+  routes the other four spreads to the rolling-z baseline. **Insensitive to both knobs** (NET 0.374–0.376
+  across margin 0–0.25 × min_n 10–30 → not a fitted edge). It does **not** beat baseline (consistent with the
+  whole 2.8.x arc — baseline is still the headline) but finally makes the **regime book competitive** by only
+  deploying regime conditioning where the per-spread lift table earned it.
+- **Live wiring.** `live_ranker` splits the gate into the global predicate + the per-spread enable layer:
+  reads `enabled_latest` fresh per call (regenerated report takes effect without restart, like Kelly), default
+  **on** (`PULSE_PERSPREAD_GATE=0/off` reverts to the uniform gate). New `gate="spread_disabled"` reason on
+  baseline-fallback rows where the global gate *would* have passed but the spread isn't enabled; `gated_summary`
+  surfaces `per_spread_gate` (the enabled set) + a human method blurb. Propagates automatically to
+  `/api/regime/recommendation` + `/api/regime/live` + signal_log + auto_desk (all call `get_recommendation`).
+- **Dashboard (REGIME tab).** Two surfaces: (1) `RegimePickCard.tsx` live indicator — a
+  `PER-SPREAD: WTI M1-M2 · WTI FLY` header chip shows the enabled set (tooltip = the method blurb; falls
+  back to a `UNIFORM GATE` chip when off/no config), and baseline-fallback rows whose `gate=="spread_disabled"`
+  get a distinct **`⊘ SPREAD OFF`** badge (blue) next to `BASELINE`, separate from `fail`/`health_fail`, each
+  with a reason-specific tooltip; the gated provenance note explains the layer. (2) **New
+  `PerSpreadGatePanel.tsx`** (between the pick card + calibration) — the full verdict: a 3-stat strip
+  (baseline +0.372 → global gate +0.298 → per-spread +0.374) + a per-spread decision table (each spread's
+  regime-leg vs baseline-leg NET Sharpe as comparison bars, `REGIME ON`/`baseline` chip, Δ). New endpoint
+  `GET /api/regime/perspread_gate` (reads the `per_spread_gate` block + `gated_blend_net.by_spread_source`)
+  + `api.regimePerspreadGate`. Test-client 200; `npm run build` + `tsc` clean (only pre-existing TS5101
+  `baseUrl` deprecation).
+- **Tests:** new `tests/test_perspread_gate.py` (14 — Sharpe comparison, sample floor, margin block, no-baseline
+  no-block, no-look-ahead cutoff filter, predicate composition incl. None-degrades-to-global, report reader +
+  missing-block None, env default-on/opt-out, end-to-end per-spread routing on a synthetic tape; hermetic) +
+  2 invariants (`test_perspread_gate_is_single_source`, `test_perspread_gate_degrades_to_global_gate`).
+  **103 pytest green** (87 + 16). Methodology PDF regenerated (Phase 8 section, +1.7 kB → 29.5 kB).
 
 ### 🚨 HF Spaces regime endpoints broken (root cause found, 2026-06-16)
 - `https://rohithpranav45-pulse.hf.space/api/regime/recommendation` and `/api/regime/backtest` return
@@ -462,7 +561,9 @@ open 80/443 (security list + iptables), `docker compose up -d --build`, hand ove
   binding constraint)* · ~~2.8.7 multi-horizon sweep~~ ✅ · ~~2.8.8 extend walk-forward to 2018-2026~~
   ✅ · ~~2.8.9 HMM/change-point regimes~~ ✅ *(data-driven curve regimes NET +0.289 trail baseline /
   global, tie hard pooled — regime partition isn't the binding constraint; relocates contango cut −$2 →
-  −$0.81)* · 2.8.10 portfolio vol targeting.
+  −$0.81)* · ~~2.8.10 portfolio vol targeting~~ ✅ *(halves gated max-DD −281 → −112 but trades away NET
+  Sharpe +0.298 → +0.198 / Calmar 2.55 → 2.01 — DD-management, not alpha; baseline still wins)*. **Phase
+  2.8.x model backlog complete — baseline +0.372 remains the NET-Sharpe headline across every variant.**
 
 ---
 
@@ -481,6 +582,9 @@ open 80/443 (security list + iptables), `docker compose up -d --build`, hand ove
 | Walk-forward, **feature-selection leg** (Phase 5, ~14 min) | `python -u -m backend.research.walkforward --featsel-only` |
 | Walk-forward, **HMM regime leg** (Phase 6, ~15 min) | `python -u -m backend.research.walkforward --hmm-only` |
 | HMM curve-regime detector (standalone) | `python -m backend.research.regime_hmm` |
+| Walk-forward, **vol-target leg** (Phase 7, ~5 s, no retrain) | `python -u -m backend.research.walkforward --voltarget-only` |
+| Walk-forward, **per-spread gate leg** (Phase 8, ~5 s, no retrain) | `python -u -m backend.research.walkforward --perspread-gate-only` |
+| Portfolio vol-target sizing (standalone) | `python -m backend.research.vol_target` |
 | Live snapshot from feed (Phase 3.1) | `python -m backend.research.live_feed` (set `PULSE_LIVE_FEED_DIR`) |
 | Live recommendation on current market | `python -m backend.research.live_engine` |
 | Generate + list live signals | `python -m backend.research.signal_log` · `--update --list` |
@@ -527,7 +631,9 @@ pulse/
 | `live_engine.py` | Phase 3.1 — overlays the live snapshot onto the ranker → "what would it trade now" |
 | `signal_log.py` | Phase 3.1 — persists every live opportunity + subsequent-performance MTM (`signal_log` table) |
 | `gated_select.py` | Phase 2 (06-19) — greedy signed-P&L-corr filter → the decorrelated `portfolio` block |
+| `gate_config.py` | Phase 8 (2026-06-22) — per-spread gate: shared decision logic (regime fires per spread only where its OOS NET Sharpe beat baseline) imported by both `live_ranker` + `walkforward` so the live gate and the backtested gate can't drift |
 | `regime_hmm.py` | Phase 6 (2.8.9) — data-driven curve regime detector (GMM + causal sticky-HMM over curve level + 5d change); replaces the hard −$2/+$5 thresholds for the `--hmm-only` walk-forward leg |
+| `vol_target.py` | Phase 7 (2.8.10) — portfolio vol-targeting: reweights the gated tape via `shock_engine.risk_scale` (per-position vol-target × stress de-risk) + `gated_select` decorrelation + a corr-based book overlay; feeds the `--voltarget-only` walk-forward leg |
 | `shock_engine.py` | Phase 2.8.9/10 — GMM stress detector + causal HMM + circuit-breaker (`breaker_active`) |
 | `auto_desk.py` | Phase 3 (06-19) — reconciles the paper book to `portfolio.selected` on the live feed during market hours; gates entries with the shock breaker; exits owned by `paper_trading.mark_to_market` |
 | `walkforward.py` | expanding-window backtest; writes trade tapes + `walkforward_report.json`. Phase 5: `--horizon-only` (5/10/20/30d exit-horizon sweep, post-processing) + `--featsel-only` (Lasso stability-selection lean global leg) |
@@ -539,17 +645,19 @@ pulse/
 
 ## 4. API · Env · Data
 
-**API (39 endpoints).** Groups: health · prices/charts · models · fundamentals · news/intel ·
+**API (40 endpoints).** Groups: health · prices/charts · models · fundamentals · news/intel ·
 risk/structure · paper trading (`/api/paper/*`) · **regime engine** (`/api/regime`,
 `/api/regime/recommendation`, `/api/regime/backtest`, `/api/regime/drill/<spread>`,
-`/api/regime/walkforward`, `/api/regime/ab[/tick|/reset]`) · RAG (`/api/ask`).
+`/api/regime/walkforward`, `/api/regime/calibration`, `/api/regime/perspread_gate` (Phase 8),
+`/api/regime/ab[/tick|/reset]`) · RAG (`/api/ask`).
 *New endpoint pattern:* add a Pydantic model in `backend/schemas/` → register it → return via
 `respond(...)` → run `python scripts/generate_ts_types.py`.
 
 **Env keys (`.env`, gitignored).** `EIA_API_KEY`, `FRED_API_KEY`, `GROQ_API_KEY`, `NEWSAPI_KEY`,
 `MARKETAUX_KEY`, `APIFY_API_TOKEN`, `AISSTREAM_API_KEY`, `SENTRY_DSN`/`VITE_SENTRY_DSN`,
 `BETTER_STACK_TOKEN`. Optional regime flags: `PULSE_REGIME_MODE=pooled`, `PULSE_GATED_BLEND=1`,
-`PULSE_GATED_SIZE=full|half|kelly`, `PULSE_AB_TEST_DISABLED=1`.
+`PULSE_GATED_SIZE=full|half|kelly`, `PULSE_AB_TEST_DISABLED=1`, `PULSE_PERSPREAD_GATE=0` (Phase 8 — revert
+the per-spread gate to the uniform Phase 2.6 global gate; default on).
 
 **/Data lake.** Brent C1-C31 daily settlements (real); WTI C1-C6 (synth from 1-min mids → flagged
 ESTIMATE via `data_lake.get_wti_settlements()`); 1-min mids (Brent/WTI/HO/Gasoil); spread/OHLCV xlsx.
@@ -580,7 +688,11 @@ Converted to `Data/parquet/` for DuckDB. Research caches (COT, FRED/external, cr
 
 **Regime-engine invariants** (asserted by `tests/test_invariants.py` — run `python -m pytest tests/`)
 7. **Gate rule** is mirrored: `live_ranker._pooled_passes_gate` ↔ `walkforward._pooled_passes_gate`
-   (`GATED_WINNERS`, `GATED_Z_THRESHOLD`, `ROLLING_WIN` must match bit-for-bit).
+   (`GATED_WINNERS`, `GATED_Z_THRESHOLD`, `ROLLING_WIN` must match bit-for-bit). **Phase 8: the per-spread
+   *layer* on top is NOT duplicated** — both sides import `gate_config.per_spread_gate_passes` /
+   `decide_enabled` / `latest_enabled_from_report`, so the live per-spread gate and the backtested one can't
+   drift (asserted by `test_perspread_gate_is_single_source`). Keep the per-spread logic in `gate_config.py`
+   only; don't re-implement it in `live_ranker` or `walkforward`.
 8. **Tuned exit rule** lives in `live_ranker.py` (TP/SL frac + excluded spreads) **and** `paper_trading.py`
    (`TUNED_MAX_HOLD_TRADING_DAYS` mirrors `live_ranker.TUNED_MAX_HOLD_DAYS`). The walk-forward deliberately
    still trades all 6 spreads at p50/1.5σ/20d — **do not** fold the exit rule into it (separate layers).

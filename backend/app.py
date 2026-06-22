@@ -1318,6 +1318,82 @@ def regime_calibration_route():
                     "timestamp": _now()})
 
 
+@app.route("/api/regime/perspread_gate")
+def regime_perspread_gate_route():
+    """
+    Phase 8 — per-spread gate summary for the dashboard. Reads the
+    `per_spread_gate` block from walkforward_report.json and returns a clean,
+    panel-ready shape:
+
+      • the three NET-Sharpe headlines (baseline / uniform global gate /
+        per-spread gate) so the verdict (+0.298 → +0.374 ≈ baseline) reads at a
+        glance;
+      • the per-spread decision table — for every spread, the regime-leg vs
+        baseline-leg NET Sharpe (the lift that justifies the decision) + whether
+        the per-spread gate enables it.
+
+    Read-only; no model is hit. Regenerate with
+    `python -m backend.research.walkforward --perspread-gate-only`.
+    """
+    def _psg():
+        from research.walkforward import load_report
+        rpt = load_report()
+        if not rpt:
+            return {"available": False, "error": "no walk-forward report — run the walk-forward first"}
+        block = rpt.get("per_spread_gate")
+        costs = rpt.get("costs") or {}
+        if not block:
+            return {"available": False,
+                    "error": "no per_spread_gate block — run "
+                             "`python -m backend.research.walkforward --perspread-gate-only`"}
+
+        def _sharpe(d):
+            return ((d or {}).get("overall") or {}).get("sharpe")
+
+        enabled = set(block.get("enabled_latest") or [])
+        # The regime-vs-baseline per-spread split that the decision is read from
+        # (full-sample NET; the live decision is the walk-forward per-cutoff
+        # version, but the direction matches — that's the "why").
+        bss = (costs.get("gated_blend_net") or {}).get("by_spread_source") or {}
+        from research.spread_universe import INSTRUMENTS, LABELS
+
+        per_spread = []
+        for sp in INSTRUMENTS:
+            srcs = bss.get(sp) or {}
+            rg = (srcs.get("regime")   or {}).get("sharpe")
+            bl = (srcs.get("baseline") or {}).get("sharpe")
+            n_rg = (srcs.get("regime") or {}).get("n_signals")
+            delta = (rg - bl) if (rg is not None and bl is not None) else None
+            per_spread.append({
+                "spread":          sp,
+                "label":           LABELS.get(sp, sp),
+                "enabled":         sp in enabled,
+                "regime_sharpe":   rg,
+                "baseline_sharpe": bl,
+                "delta":           round(delta, 3) if delta is not None else None,
+                "n_regime":        n_rg,
+            })
+
+        return {
+            "available":       True,
+            "enabled_latest":  sorted(enabled),
+            "n_regime":        block.get("n_regime"),
+            "n_baseline":      block.get("n_baseline"),
+            "config":          block.get("config", {}),
+            "headline": {
+                "baseline_net_sharpe":    _sharpe(costs.get("baseline_net")),
+                "global_gate_net_sharpe": _sharpe(costs.get("gated_blend_net")),
+                "perspread_net_sharpe":   _sharpe(costs.get("per_spread_gate_net")),
+            },
+            "per_spread":      per_spread,
+            "note":            block.get("note"),
+            "source":          "backend/data/research/walkforward_report.json",
+        }
+
+    return jsonify({"data": safe_fetch(_psg, {"available": False}),
+                    "timestamp": _now()})
+
+
 @app.route("/api/regime/ab")
 def regime_ab_route():
     """
