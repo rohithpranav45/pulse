@@ -99,6 +99,14 @@ daily tick barely fires (keep-alive only pings `/api/health`). **Not a bug; a ca
   backend/db/pulse_cache.db`. (Consider untracking the db long-term — it causes recurring churn.)
 - **Port-5000 zombie (gotcha 4):** killed both `start.py` (PID was 24772) and `app.py` (41816) to
   free the lock + port. A reboot also reclaims it.
+- **WAL corruption from force-kill + `git reset` (fixed 2026-06-22 09:56):** force-killing the server
+  mid-WAL-write and then `git reset --hard` overwriting `pulse_cache.db` left a **stale `-wal`/`-shm`**
+  that didn't match the reset `.db` → SQLite reported **"database disk image is malformed"** on every
+  cache op → all panels went stale/down. The `.db` itself was fine (`integrity_check: ok`, 376 paper
+  trades + 52 signals intact). **Fix:** stop server → back up `backend/db/` → delete the stale
+  `-wal`/`-shm` → restart (SQLite rebuilds clean sidecars). Backup at
+  `backend/db/_corrupt_backup_20260622_095604/`. **Lesson: never force-kill the server or `git reset`
+  while `pulse_cache.db` is live; stop it gracefully first. (Strong argument to UNTRACK the db.)**
 - **Desk vs laptop:** the **live feed** (`I:\Public\Summer Interns Energy\DB\`) is only visible from
   the **office desk** — the laptop/HF can't see it. `/Data` (3.5 GB) + model pkls + `.env` are all
   gitignored (CLAUDE.md §5) — the laptop needs them restored to run the dashboard or research legs.
