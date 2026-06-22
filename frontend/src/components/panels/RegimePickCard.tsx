@@ -81,9 +81,12 @@ type RankedOpp = {
   active_features?: number | null;
   total_features?: number | null;
   competition?: Record<string, number | null>;
-  // Phase 2.6 gated blend — which leg fired for this spread
+  // Phase 2.6 gated blend — which leg fired for this spread.
+  // Phase 8 adds 'spread_disabled': the global gate WOULD have passed, but the
+  // per-spread gate doesn't enable this spread (its regime leg never beat
+  // baseline OOS), so it falls through to the rolling-z baseline.
   recommendation_source?: 'regime' | 'baseline';
-  gate?: 'pass' | 'fail' | 'no_pooled_cell' | 'no_baseline' | 'off';
+  gate?: 'pass' | 'fail' | 'no_pooled_cell' | 'no_baseline' | 'off' | 'health_fail' | 'spread_disabled';
   regime?: string;
   // Phase 2.7 sizing — per-spread notional scale + active mode
   notional_scale?: number;
@@ -98,6 +101,11 @@ type GatedSummary = {
   n_regime: number;
   n_baseline: number;
   method: string;
+  // Phase 8 per-spread gate: the spreads whose regime leg is enabled (its OOS
+  // NET Sharpe beat baseline). null ⇒ uniform global gate (env opt-out / no
+  // walk-forward config), so every BACK cell that passes the gate fires.
+  per_spread_gate?: string[] | null;
+  per_spread_method?: string;
   // Phase 2.7 sizing context
   size_mode?: 'full' | 'half' | 'kelly';
   kelly_map?: Record<string, number> | null;
@@ -132,6 +140,16 @@ type Recommendation = {
 };
 
 
+// Compact spread key for chips, e.g. "wti_m1_m2" → "WTI M1-M2",
+// "brent_fly_123" → "BRENT FLY". Keeps the per-spread gate chip readable.
+function spreadShort(spread: string): string {
+  return spread
+    .replace(/_/g, ' ')
+    .replace(/m(\d+) m(\d+)/i, 'M$1-M$2')
+    .replace(/fly \d+/i, 'FLY')
+    .toUpperCase();
+}
+
 function regimeChipTone(regime?: string): 'bull' | 'bear' | 'neut' {
   if (!regime) return 'neut';
   // Composite labels start with the curve axis: "BACK/…" | "CONTANGO/…" | "NEUTRAL/…"
@@ -142,17 +160,36 @@ function regimeChipTone(regime?: string): 'bull' | 'bear' | 'neut' {
 }
 
 
+// Human copy for each baseline-fallback reason. Phase 8 'spread_disabled' is the
+// new one we badge distinctly: the global gate WOULD have fired, but the
+// per-spread gate keeps this spread on baseline.
+const GATE_FALLBACK_TIP: Record<string, string> = {
+  spread_disabled: 'Per-spread gate OFF for this spread — the regime cell passed the global gate (BACK · winner · |z|≥0.5) but this spread’s regime leg never beat the rolling-z baseline out-of-sample, so it stays on baseline.',
+  health_fail:     'Regime cell refused by the model-health gate (broken quantile bands / negative OOS R² / extrapolating fair value) — fell through to the 252d rolling-z baseline.',
+  fail:            'Regime cell failed the global gate (not BACK, or winner not gate-eligible, or |z|<0.5) — fell through to the 252d rolling-z baseline.',
+  no_pooled_cell:  'No pooled regime cell trained for this (spread, regime) — using the 252d rolling-z baseline.',
+  no_baseline:     'Insufficient history for a baseline — showing the regime candidate (gate bypassed).',
+};
+
 function SourceBadge({ source, gate }: { source?: string; gate?: string }) {
   if (!source) return null;
   const isRegime = source === 'regime';
-  const tone = isRegime ? 'gold' : 'neut';
-  const label = isRegime ? 'REGIME' : 'BASELINE';
-  const tip = isRegime
-    ? `Regime engine fired (gate=${gate ?? 'pass'})`
-    : `Fell through to 252d rolling-z baseline (gate=${gate ?? 'fail'})`;
+  if (isRegime) {
+    return (
+      <span title={`Regime engine fired (gate=${gate ?? 'pass'})`}>
+        <Chip tone="gold">REGIME</Chip>
+      </span>
+    );
+  }
+  // Baseline leg. Phase 8: distinguish 'spread_disabled' (per-spread gate turned
+  // this spread off) from the ordinary gate fails — a different tone + sub-label
+  // so the mentor can see WHY the regime engine deferred.
+  const disabled = gate === 'spread_disabled';
+  const tip = GATE_FALLBACK_TIP[gate ?? 'fail'] ?? `Fell through to 252d rolling-z baseline (gate=${gate ?? 'fail'})`;
   return (
-    <span title={tip}>
-      <Chip tone={tone as any}>{label}</Chip>
+    <span title={tip} className="inline-flex items-center gap-1">
+      <Chip tone="neut">BASELINE</Chip>
+      {disabled && <Chip tone="blue">⊘ SPREAD OFF</Chip>}
     </span>
   );
 }
@@ -355,12 +392,30 @@ export function RegimePickCard() {
       source="signal_engine"
       sourceNote={
         gated
-          ? `Phase 2.6 production rule: pooled engine fires only when regime_pooled='BACK' AND winner_model ∈ {Lasso, Huber} AND |z|≥0.5σ. All other (spread, day) pairs fall through to the regime-unaware 252-day rolling-z baseline. Walk-forward verifies the gate end-to-end before live trading.`
+          ? `Phase 2.6 gate: pooled engine fires only when regime_pooled='BACK' AND winner_model is gate-eligible AND |z|≥0.5σ. Phase 8 adds a PER-SPREAD layer on top: the regime leg is enabled only for spreads whose OOS NET Sharpe beat the baseline (walk-forward${summary?.per_spread_gate ? ` — currently ${summary.per_spread_gate.join(', ') || 'none'}` : ''}); every other spread (and every cell that fails the gate) falls through to the regime-unaware 252-day rolling-z baseline. Walk-forward verifies the gate end-to-end before live trading.`
           : `3-axis composite regime (curve × inventory × vol) + per-cell {Ridge / Lasso / ElasticNet / Huber} competition + Quantile p10/p90 bands. Ranks 6 spreads (3 Brent + 3 WTI) by |z| × R²_oos × √(n_train/100). #1 is surfaced for push-to-paper.`
       }
       right={
         <div className="flex items-center gap-2">
           {gated && <Chip tone="gold">GATED BLEND</Chip>}
+          {/* Phase 8 — per-spread gate: which spreads' regime leg is enabled.
+              `per_spread_gate` is an array (possibly empty) when the per-spread
+              gate is active; null ⇒ uniform global gate (env opt-out / no config). */}
+          {gated && summary && (
+            summary.per_spread_gate !== undefined && summary.per_spread_gate !== null ? (
+              <span title={summary.per_spread_method ?? `Per-spread gate: regime leg enabled only for ${summary.per_spread_gate.join(', ') || '(none)'}.`}>
+                <Chip tone="blue">
+                  {summary.per_spread_gate.length > 0
+                    ? `PER-SPREAD: ${summary.per_spread_gate.map(spreadShort).join(' · ')}`
+                    : 'PER-SPREAD: none on'}
+                </Chip>
+              </span>
+            ) : (
+              <span title="Uniform global gate (per-spread gate off / no walk-forward config) — every BACK cell that passes the gate fires.">
+                <Chip tone="muted">UNIFORM GATE</Chip>
+              </span>
+            )
+          )}
           {gated && summary?.size_mode && summary.size_mode !== 'full' && (
             <span title={`Phase 2.7: regime-leg notional sized by ${summary.size_mode}${summary.size_mode === 'kelly' ? ' (per-spread)' : ''}`}>
               <Chip tone="neut">{`SIZE ${summary.size_mode.toUpperCase()}`}</Chip>

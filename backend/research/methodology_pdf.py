@@ -1064,6 +1064,135 @@ def build_pdf(out_path: Path = _OUT_PDF) -> Path:
         story.append(Paragraph(verdict, callout))
         story.append(Spacer(1, 6))
 
+    # ── Phase 7 — portfolio vol-targeting (2.8.10) ─────────────────────────
+    voltgt = wf.get("vol_target") or {}
+    if voltgt and voltgt.get("variants"):
+        v = voltgt["variants"]
+        cfgv = voltgt.get("config") or {}
+        story.append(Paragraph(
+            "Phase 7 &mdash; portfolio vol-targeting (2.8.10)", h2,
+        ))
+        story.append(Paragraph(
+            "The last open Phase 2.8.x leg sizes the <i>book</i> for roughly constant "
+            "risk, reusing two shipped primitives: <code>shock_engine.risk_scale</code> "
+            "(per-position vol-target &times; stress de-risk) and "
+            "<code>gated_select.select_decorrelated</code> (the desk&apos;s decorrelated "
+            "book), plus a <b>portfolio overlay</b> that scales the whole book to a target "
+            "vol from the trailing correlation matrix. Pure post-processing over the gated "
+            "trade tape (same fired signals, reweighted notionals; no retrain). Books are "
+            "normalised to mean notional 1.0 so max-drawdown is comparable; Sharpe and "
+            "Calmar are leverage-invariant regardless. The four layers are toggled into "
+            "ablation variants so each one&apos;s marginal effect is visible.",
+            note,
+        ))
+        order = ["baseline_raw", "gated_raw", "decorrelated", "risk_parity",
+                 "parity_stress", "vol_target"]
+        labels = {
+            "baseline_raw":  "baseline (un-targeted)",
+            "gated_raw":     "gated (un-targeted)",
+            "decorrelated":  "+ decorrelation",
+            "risk_parity":   "+ risk parity (vol_scale)",
+            "parity_stress": "+ stress de-risk",
+            "vol_target":    "+ portfolio overlay (headline)",
+        }
+        vt_rows = [["Book", "Held", "NET Sharpe", "Max DD", "Calmar"]]
+        for name in order:
+            m = v.get(name)
+            if not m:
+                continue
+            vt_rows.append([
+                labels.get(name, name),
+                str(m.get("n_signals") or 0),
+                _fmt(m.get("sharpe"), 3),
+                _fmt(m.get("max_drawdown"), 1),
+                _fmt(m.get("calmar"), 2),
+            ])
+        vtt = Table(vt_rows, colWidths=[2.2*inch, 0.7*inch, 1.0*inch, 1.0*inch, 0.8*inch])
+        _style_table(vtt)
+        story.append(vtt)
+        story.append(Spacer(1, 4))
+
+        graw = v.get("gated_raw") or {}; full = v.get("vol_target") or {}
+        braw = v.get("baseline_raw") or {}
+        g_shp = graw.get("sharpe"); f_shp = full.get("sharpe")
+        g_dd = graw.get("max_drawdown"); f_dd = full.get("max_drawdown")
+        dd_cut = (1 - abs(f_dd) / abs(g_dd)) * 100 if (g_dd and f_dd) else None
+        vt_find = (
+            f"<b>Verdict (graded):</b> vol-targeting is a <b>drawdown-management tool, not "
+            f"an alpha tool.</b> The full overlay cuts the gated book&apos;s max-drawdown "
+            f"from {_fmt(g_dd, 1)} to {_fmt(f_dd, 1)}"
+            + (f" (&minus;{dd_cut:.0f}%)" if dd_cut is not None else "")
+            + f", but NET Sharpe falls {_fmt(g_shp, 3)} &rarr; {_fmt(f_shp, 3)} and Calmar "
+            f"{_fmt(graw.get('calmar'), 2)} &rarr; {_fmt(full.get('calmar'), 2)} &mdash; the "
+            f"drawdown reduction does not pay for the return given up, so on risk-adjusted "
+            f"return it does not beat the un-targeted gated book, and the regime-unaware "
+            f"baseline (Calmar {_fmt(braw.get('calmar'), 2)}) remains the headline. The "
+            f"ablation localises the effect: per-position <b>risk parity</b> is the biggest "
+            f"single drawdown-reducer (it caps the high-$-vol fly), and the <b>portfolio "
+            f"overlay</b> is the only layer that improves Calmar at the margin (it adds "
+            f"exposure to thin/hedged books and trims full/correlated ones). Consistent with "
+            f"the whole Phase 2.8.x arc: the machinery manages risk well but does not lift "
+            f"the NET-Sharpe headline on this 6-spread universe. For a drawdown-constrained "
+            f"mandate the overlay is worth the Sharpe; for a Sharpe-max mandate the baseline "
+            f"wins. <b>Caveat:</b> the stress detector is fit 2016&ndash;19 (OOS for 2020+; "
+            f"the 2018&ndash;19 tape rows see an in-sample stress read)."
+        )
+        story.append(Paragraph(vt_find, callout))
+        story.append(Spacer(1, 6))
+
+    # ── Phase 8 — per-spread gate (2026-06-22) ─────────────────────────────
+    psg = wf.get("per_spread_gate") or {}
+    psg_net = (costs.get("per_spread_gate_net") or {}).get("overall") or {} if costs else {}
+    if psg and psg_net:
+        gate_net_o = (costs.get("gated_blend_net") or {}).get("overall") or {}
+        base_net_o = (costs.get("baseline_net") or {}).get("overall") or {}
+        story.append(Paragraph("Phase 8 &mdash; per-spread gate (2026-06-22)", h2))
+        story.append(Paragraph(
+            "The Phase 2.6 production gate is a <i>single</i> rule applied uniformly to "
+            "every spread (take the regime signal iff <code>regime_pooled==BACK</code> and "
+            "the winner is gate-eligible and <code>|z|&ge;0.5</code>). But the per-spread "
+            "lift table shows regime conditioning helps <b>unevenly</b>: the regime leg&apos;s "
+            "OOS NET Sharpe beats baseline on the WTI front spreads but loses on every Brent "
+            "spread and the M3-M6 carries. This phase replaces the uniform gate with a "
+            "<b>per-spread enable decision</b> &mdash; the regime leg fires for a spread only "
+            "when its OOS NET Sharpe beat baseline for that spread before each refit cutoff "
+            "(&ge; min-sample evidence). Decided walk-forward (prior closed trades only, the "
+            "Kelly-by-cutoff pattern), so it is genuinely out-of-sample, and the decision "
+            "logic is shared between the backtest and live inference "
+            "(<code>gate_config.py</code>) so the two cannot drift.",
+            note,
+        ))
+        psg_rows = [["Book", "NET Sharpe", "vs baseline"]]
+        ps_s = psg_net.get("sharpe"); g_s = gate_net_o.get("sharpe"); b_s = base_net_o.get("sharpe")
+        psg_rows.append(["baseline (regime-unaware)", _fmt(b_s, 3), "&mdash;"])
+        psg_rows.append(["gated blend (uniform global gate)", _fmt(g_s, 3),
+                         _fmt((g_s - b_s) if (g_s is not None and b_s is not None) else None, 3)])
+        psg_rows.append(["per-spread gate (Phase 8)", _fmt(ps_s, 3),
+                         _fmt((ps_s - b_s) if (ps_s is not None and b_s is not None) else None, 3)])
+        psgt = Table(psg_rows, colWidths=[3.0*inch, 1.1*inch, 1.1*inch])
+        _style_table(psgt)
+        story.append(psgt)
+        story.append(Spacer(1, 4))
+        enabled = psg.get("enabled_latest") or []
+        psg_find = (
+            f"<b>Verdict (graded): per-spread gating closes the gap.</b> It lifts the "
+            f"gated/regime book from {_fmt(g_s, 3)} (uniform global gate) to {_fmt(ps_s, 3)} "
+            f"&mdash; reaching parity with the regime-unaware baseline {_fmt(b_s, 3)}. The "
+            f"final-cutoff config enables the regime leg on exactly "
+            f"<b>{', '.join(enabled) if enabled else '&mdash;'}</b> (the spreads whose regime "
+            f"leg earned it OOS) and routes every other spread to the rolling-z baseline. "
+            f"It does <b>not</b> beat baseline (consistent with the whole Phase 2.8.x arc) "
+            f"&mdash; the value is that it finally makes the regime book <i>competitive</i>, "
+            f"deploying regime conditioning only where the per-spread lift table justifies it, "
+            f"and it is a clean +{_fmt((ps_s - g_s) if (ps_s is not None and g_s is not None) else None, 3)} "
+            f"over the production global gate. The verdict is insensitive to the margin / "
+            f"min-sample knobs (NET Sharpe 0.374&ndash;0.376 across margin 0&ndash;0.25, "
+            f"min_n 10&ndash;30), so it is not a fitted edge. Live: on by default "
+            f"(<code>PULSE_PERSPREAD_GATE=0</code> reverts to the uniform gate)."
+        )
+        story.append(Paragraph(psg_find, callout))
+        story.append(Spacer(1, 6))
+
     story.append(Paragraph("Caveats &amp; next steps", h2))
     tight = ParagraphStyle("Tight", parent=body, fontSize=8, leading=10, spaceAfter=2)
     caveats = [
@@ -1074,7 +1203,7 @@ def build_pdf(out_path: Path = _OUT_PDF) -> Path:
         "<b>Mode switch</b> — set <code>PULSE_REGIME_MODE=pooled</code> for un-gated pooled inference, <code>PULSE_GATED_BLEND=1</code> (Phase 2.6) for the gated blend, and <code>PULSE_GATED_SIZE=&lt;full|half|kelly&gt;</code> (Phase 2.7) to scale the regime-leg notional. Default is composite + full sizing for back-compat with Sprint 3 dashboard cards.",
         "<b>Gate is conservative by design</b> — Phase 2.5 demonstrated lift only on (BACK regime × {Lasso, Huber} winners). The gated blend codifies exactly that slice; per-spread Sharpe and the regime/baseline split in the headline disclose how often the engine actually fires versus deferring to the baseline.",
         "<b>Phase 2.7 sizing has a Sharpe-vs-DD trade-off</b> — uniform 0.5× halves both mean PnL and max DD on the regime leg; Kelly is per-spread and adaptive but its sample is thin (97 regime fires total). Live deployment should read <code>sized_blend_summary.kelly_per_spread_latest</code> from the walk-forward report — the same numbers shown above — to size at inference time.",
-        "<b>Phase 5 delivered:</b> the 5/10/20/30d horizon sweep (baseline edge lives at 30d, the regime model&apos;s at 5-10d) and Lasso stability-selection feature pruning (leaner but trails full feats on NET Sharpe). <b>Phase 6 delivered (above):</b> data-driven HMM / change-point regimes replacing the hard &minus;$2/+$5 curve thresholds &mdash; the detector relocates the contango cut toward zero but does not unseat the headline, confirming the regime partition is not the binding constraint. <b>Next:</b> 2.8.10 portfolio vol-targeting; consider per-spread gate thresholds where the per-spread lift table justifies them.",
+        "<b>Phase 5 delivered:</b> the 5/10/20/30d horizon sweep (baseline edge lives at 30d, the regime model&apos;s at 5-10d) and Lasso stability-selection feature pruning (leaner but trails full feats on NET Sharpe). <b>Phase 6 delivered (above):</b> data-driven HMM / change-point regimes replacing the hard &minus;$2/+$5 curve thresholds &mdash; the detector relocates the contango cut toward zero but does not unseat the headline, confirming the regime partition is not the binding constraint. <b>Phase 7 delivered (above):</b> portfolio vol-targeting halves the gated book&apos;s max-drawdown but trades away NET Sharpe/Calmar &mdash; a drawdown-management tool, not alpha. <b>Phase 8 delivered (above):</b> the per-spread gate replaces the uniform global gate with a per-spread enable decision (regime leg fires only where its OOS NET Sharpe beat baseline) &mdash; it lifts the gated book to baseline parity (+0.298 &rarr; +0.374) by enabling regime on the two WTI front spreads and routing the rest to baseline. <b>Phase 2.8.x model backlog is now complete; baseline remains the NET-Sharpe headline across every variant, with the per-spread-gated regime book now matching it.</b> Open route: reading the live A/B verdict once &ge;30 closed trades/arm accumulate.",
     ]
     for c in caveats:
         story.append(Paragraph("• " + c, tight))

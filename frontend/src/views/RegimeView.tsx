@@ -1,6 +1,8 @@
 import { RegimePickCard } from '@/components/panels/RegimePickCard';
 import { ABComparePanel } from '@/components/panels/ABComparePanel';
 import { CalibrationPanel } from '@/components/panels/CalibrationPanel';
+import { PerSpreadGatePanel } from '@/components/panels/PerSpreadGatePanel';
+import { DecorrelatedBookPanel } from '@/components/panels/DecorrelatedBookPanel';
 import { ShockMonitorPanel } from '@/components/panels/ShockMonitorPanel';
 import { AutoDeskPanel } from '@/components/panels/AutoDeskPanel';
 
@@ -15,6 +17,8 @@ import { AutoDeskPanel } from '@/components/panels/AutoDeskPanel';
  * Phase 4.H: calibration panel — |z| bins vs realised 20d revert fraction.
  * Phase 2.8.9/10: shock-absorption monitor (GMM stress detector + circuit-breaker).
  * Phase 3/4: live auto-trade desk plan (gated book + market/breaker gates).
+ * Phase 8: per-spread gate verdict — regime leg enabled only where it beat baseline.
+ * Decorrelated book: the mentor directive — top non-correlated trades, no risk concentration.
  */
 export function RegimeView() {
   return (
@@ -22,6 +26,8 @@ export function RegimeView() {
       <ShockMonitorPanel />
       <AutoDeskPanel />
       <RegimePickCard />
+      <DecorrelatedBookPanel />
+      <PerSpreadGatePanel />
       <CalibrationPanel />
       <ABComparePanel />
     </div>

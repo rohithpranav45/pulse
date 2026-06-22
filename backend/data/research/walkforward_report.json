@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-06-19T09:41:27Z",
+  "generated_at": "2026-06-22T02:00:54Z",
   "method": "Walk-forward expanding-window: at each quarterly refit, retrain per-(spread, regime) cells on data \u2264 cutoff via the Ridge/Lasso/ElasticNet/Huber competition; predict daily through next cutoff; signal = \u00b10.5\u03c3 z-score; PnL = sign \u00d7 20-trading-day spread move. Run for BOTH regime modes (composite 27-cell, pooled 3-cell curve-axis-only) PLUS a Phase 2.6 gated_blend leg that takes the pooled signal only when regime_pooled=='BACK' AND winner \u2208 {Lasso, Huber} AND |z|\u22650.5\u03c3, else falls back to the 252d rolling-z baseline. Phase 2.7 sized_blend leg scales the regime-leg notional by {full=1.0, half=0.5, kelly=per-spread Kelly on prior closed regime-leg PnLs} with the baseline leg fixed at 1.0. Baseline = regime-unaware 252-day rolling z-score on the same spreads.",
   "config": {
     "forward_days": 20,
@@ -50,7 +50,9 @@
       "global",
       "pooled_soft",
       "global_lean",
-      "hmm"
+      "hmm",
+      "vol_target",
+      "per_spread_gate"
     ],
     "gated_blend": {
       "regime": "BACK",
@@ -7940,6 +7942,224 @@
         "n": 920,
         "ref_n": 942
       }
+    },
+    "vol_target_net": {
+      "overall": {
+        "n_signals": 4834,
+        "n_total": 4834,
+        "n_neutral": 0,
+        "hit_rate": 0.5995,
+        "mean_pnl": 0.0467,
+        "median_pnl": 0.0665,
+        "total_pnl": 225.5601,
+        "sharpe": 0.198,
+        "max_drawdown": -111.9711,
+        "win_pnl": 0.4083,
+        "loss_pnl": -0.4951,
+        "mean_cost": 0.04,
+        "total_cost": 193.4122
+      },
+      "by_spread": {
+        "brent_m1_m2": {
+          "n_signals": 1207,
+          "n_total": 1207,
+          "n_neutral": 0,
+          "hit_rate": 0.5733,
+          "mean_pnl": 0.0072,
+          "median_pnl": 0.0392,
+          "total_pnl": 8.7404,
+          "sharpe": 0.053,
+          "max_drawdown": -84.8627,
+          "win_pnl": 0.2805,
+          "loss_pnl": -0.3606,
+          "mean_cost": 0.0241,
+          "total_cost": 29.0335
+        },
+        "brent_m3_m6": {
+          "n_signals": 1417,
+          "n_total": 1417,
+          "n_neutral": 0,
+          "hit_rate": 0.5251,
+          "mean_pnl": -0.0489,
+          "median_pnl": 0.0315,
+          "total_pnl": -69.3432,
+          "sharpe": -0.138,
+          "max_drawdown": -140.619,
+          "win_pnl": 0.6363,
+          "loss_pnl": -0.8065,
+          "mean_cost": 0.0451,
+          "total_cost": 63.921
+        },
+        "brent_fly_123": {
+          "n_signals": 688,
+          "n_total": 688,
+          "n_neutral": 0,
+          "hit_rate": 0.75,
+          "mean_pnl": 0.1888,
+          "median_pnl": 0.1263,
+          "total_pnl": 129.8896,
+          "sharpe": 1.527,
+          "max_drawdown": -4.0803,
+          "win_pnl": 0.3347,
+          "loss_pnl": -0.2504,
+          "mean_cost": 0.0524,
+          "total_cost": 36.0814
+        },
+        "wti_fly_123": {
+          "n_signals": 618,
+          "n_total": 618,
+          "n_neutral": 0,
+          "hit_rate": 0.6731,
+          "mean_pnl": 0.1134,
+          "median_pnl": 0.0747,
+          "total_pnl": 70.067,
+          "sharpe": 0.743,
+          "max_drawdown": -7.6559,
+          "win_pnl": 0.2854,
+          "loss_pnl": -0.2409,
+          "mean_cost": 0.0632,
+          "total_cost": 39.027
+        },
+        "wti_m3_m6": {
+          "n_signals": 391,
+          "n_total": 391,
+          "n_neutral": 0,
+          "hit_rate": 0.6061,
+          "mean_pnl": 0.1171,
+          "median_pnl": 0.1106,
+          "total_pnl": 45.784,
+          "sharpe": 0.618,
+          "max_drawdown": -18.5571,
+          "win_pnl": 0.4756,
+          "loss_pnl": -0.4347,
+          "mean_cost": 0.0242,
+          "total_cost": 9.4744
+        },
+        "wti_m1_m2": {
+          "n_signals": 513,
+          "n_total": 513,
+          "n_neutral": 0,
+          "hit_rate": 0.5712,
+          "mean_pnl": 0.0788,
+          "median_pnl": 0.0575,
+          "total_pnl": 40.4223,
+          "sharpe": 0.348,
+          "max_drawdown": -21.7236,
+          "win_pnl": 0.3805,
+          "loss_pnl": -0.323,
+          "mean_cost": 0.0309,
+          "total_cost": 15.8749
+        }
+      }
+    },
+    "per_spread_gate_net": {
+      "overall": {
+        "n_signals": 6192,
+        "n_total": 9926,
+        "n_neutral": 3714,
+        "hit_rate": 0.6122,
+        "mean_pnl": 0.1387,
+        "median_pnl": 0.1048,
+        "total_pnl": 858.5813,
+        "sharpe": 0.374,
+        "max_drawdown": -282.957,
+        "win_pnl": 0.6802,
+        "loss_pnl": -0.7297,
+        "mean_cost": 0.0389,
+        "total_cost": 241.0
+      },
+      "by_spread": {
+        "brent_fly_123": {
+          "n_signals": 940,
+          "n_total": 2170,
+          "n_neutral": 1230,
+          "hit_rate": 0.7468,
+          "mean_pnl": 0.2431,
+          "median_pnl": 0.15,
+          "total_pnl": 228.56,
+          "sharpe": 1.262,
+          "max_drawdown": -16.81,
+          "win_pnl": 0.4505,
+          "loss_pnl": -0.3881,
+          "mean_cost": 0.05,
+          "total_cost": 47.0
+        },
+        "brent_m1_m2": {
+          "n_signals": 1407,
+          "n_total": 2170,
+          "n_neutral": 763,
+          "hit_rate": 0.6283,
+          "mean_pnl": 0.2075,
+          "median_pnl": 0.13,
+          "total_pnl": 291.93,
+          "sharpe": 0.671,
+          "max_drawdown": -49.28,
+          "win_pnl": 0.6725,
+          "loss_pnl": -0.6014,
+          "mean_cost": 0.03,
+          "total_cost": 42.21
+        },
+        "brent_m3_m6": {
+          "n_signals": 1614,
+          "n_total": 2170,
+          "n_neutral": 556,
+          "hit_rate": 0.5248,
+          "mean_pnl": -0.0072,
+          "median_pnl": 0.04,
+          "total_pnl": -11.62,
+          "sharpe": -0.018,
+          "max_drawdown": -170.1,
+          "win_pnl": 0.777,
+          "loss_pnl": -0.8871,
+          "mean_cost": 0.04,
+          "total_cost": 64.56
+        },
+        "wti_fly_123": {
+          "n_signals": 616,
+          "n_total": 1152,
+          "n_neutral": 516,
+          "hit_rate": 0.6932,
+          "mean_pnl": 0.212,
+          "median_pnl": 0.0732,
+          "total_pnl": 130.5658,
+          "sharpe": 0.75,
+          "max_drawdown": -25.538,
+          "win_pnl": 0.4313,
+          "loss_pnl": -0.2835,
+          "mean_cost": 0.05,
+          "total_cost": 30.8
+        },
+        "wti_m1_m2": {
+          "n_signals": 817,
+          "n_total": 1132,
+          "n_neutral": 315,
+          "hit_rate": 0.5716,
+          "mean_pnl": 0.1111,
+          "median_pnl": 0.0634,
+          "total_pnl": 90.7876,
+          "sharpe": 0.262,
+          "max_drawdown": -95.8128,
+          "win_pnl": 0.6743,
+          "loss_pnl": -0.6403,
+          "mean_cost": 0.03,
+          "total_cost": 24.51
+        },
+        "wti_m3_m6": {
+          "n_signals": 798,
+          "n_total": 1132,
+          "n_neutral": 334,
+          "hit_rate": 0.5815,
+          "mean_pnl": 0.1608,
+          "median_pnl": 0.2063,
+          "total_pnl": 128.3579,
+          "sharpe": 0.31,
+          "max_drawdown": -114.6341,
+          "win_pnl": 1.1002,
+          "loss_pnl": -1.1442,
+          "mean_cost": 0.04,
+          "total_cost": 31.92
+        }
+      }
     }
   },
   "lift_composite_vs_baseline": {
@@ -14170,6 +14390,820 @@
       "ref_sharpe": 0.973,
       "n": 920,
       "ref_n": 583
+    }
+  },
+  "vol_target": {
+    "regime_mode": "vol_target",
+    "headline": "vol_target",
+    "n_held": 4834,
+    "overall": {
+      "n_signals": 4834,
+      "n_total": 4834,
+      "n_neutral": 0,
+      "hit_rate": 0.5995,
+      "mean_pnl": 0.0467,
+      "median_pnl": 0.0665,
+      "total_pnl": 225.5601,
+      "sharpe": 0.198,
+      "max_drawdown": -111.9711,
+      "win_pnl": 0.4083,
+      "loss_pnl": -0.4951,
+      "mean_cost": 0.04,
+      "total_cost": 193.4122
+    },
+    "by_spread": {
+      "brent_m1_m2": {
+        "n_signals": 1207,
+        "n_total": 1207,
+        "n_neutral": 0,
+        "hit_rate": 0.5733,
+        "mean_pnl": 0.0072,
+        "median_pnl": 0.0392,
+        "total_pnl": 8.7404,
+        "sharpe": 0.053,
+        "max_drawdown": -84.8627,
+        "win_pnl": 0.2805,
+        "loss_pnl": -0.3606,
+        "mean_cost": 0.0241,
+        "total_cost": 29.0335
+      },
+      "brent_m3_m6": {
+        "n_signals": 1417,
+        "n_total": 1417,
+        "n_neutral": 0,
+        "hit_rate": 0.5251,
+        "mean_pnl": -0.0489,
+        "median_pnl": 0.0315,
+        "total_pnl": -69.3432,
+        "sharpe": -0.138,
+        "max_drawdown": -140.619,
+        "win_pnl": 0.6363,
+        "loss_pnl": -0.8065,
+        "mean_cost": 0.0451,
+        "total_cost": 63.921
+      },
+      "brent_fly_123": {
+        "n_signals": 688,
+        "n_total": 688,
+        "n_neutral": 0,
+        "hit_rate": 0.75,
+        "mean_pnl": 0.1888,
+        "median_pnl": 0.1263,
+        "total_pnl": 129.8896,
+        "sharpe": 1.527,
+        "max_drawdown": -4.0803,
+        "win_pnl": 0.3347,
+        "loss_pnl": -0.2504,
+        "mean_cost": 0.0524,
+        "total_cost": 36.0814
+      },
+      "wti_fly_123": {
+        "n_signals": 618,
+        "n_total": 618,
+        "n_neutral": 0,
+        "hit_rate": 0.6731,
+        "mean_pnl": 0.1134,
+        "median_pnl": 0.0747,
+        "total_pnl": 70.067,
+        "sharpe": 0.743,
+        "max_drawdown": -7.6559,
+        "win_pnl": 0.2854,
+        "loss_pnl": -0.2409,
+        "mean_cost": 0.0632,
+        "total_cost": 39.027
+      },
+      "wti_m3_m6": {
+        "n_signals": 391,
+        "n_total": 391,
+        "n_neutral": 0,
+        "hit_rate": 0.6061,
+        "mean_pnl": 0.1171,
+        "median_pnl": 0.1106,
+        "total_pnl": 45.784,
+        "sharpe": 0.618,
+        "max_drawdown": -18.5571,
+        "win_pnl": 0.4756,
+        "loss_pnl": -0.4347,
+        "mean_cost": 0.0242,
+        "total_cost": 9.4744
+      },
+      "wti_m1_m2": {
+        "n_signals": 513,
+        "n_total": 513,
+        "n_neutral": 0,
+        "hit_rate": 0.5712,
+        "mean_pnl": 0.0788,
+        "median_pnl": 0.0575,
+        "total_pnl": 40.4223,
+        "sharpe": 0.348,
+        "max_drawdown": -21.7236,
+        "win_pnl": 0.3805,
+        "loss_pnl": -0.323,
+        "mean_cost": 0.0309,
+        "total_cost": 15.8749
+      }
+    },
+    "variants": {
+      "gated_raw": {
+        "n_signals": 6598,
+        "hit_rate": 0.5972,
+        "mean_pnl": 0.1084,
+        "total_pnl": 715.1526,
+        "sharpe": 0.298,
+        "max_drawdown": -280.854,
+        "calmar": 2.546
+      },
+      "baseline_raw": {
+        "n_signals": 6140,
+        "hit_rate": 0.6132,
+        "mean_pnl": 0.1382,
+        "total_pnl": 848.4331,
+        "sharpe": 0.372,
+        "max_drawdown": -170.1,
+        "calmar": 4.988
+      },
+      "decorrelated": {
+        "n_signals": 4834,
+        "hit_rate": 0.5962,
+        "mean_pnl": 0.0852,
+        "total_pnl": 411.9298,
+        "sharpe": 0.251,
+        "max_drawdown": -214.7445,
+        "calmar": 1.918
+      },
+      "risk_parity": {
+        "n_signals": 4834,
+        "hit_rate": 0.5989,
+        "mean_pnl": 0.0545,
+        "total_pnl": 263.4924,
+        "sharpe": 0.235,
+        "max_drawdown": -140.8516,
+        "calmar": 1.871
+      },
+      "parity_stress": {
+        "n_signals": 4834,
+        "hit_rate": 0.6014,
+        "mean_pnl": 0.0443,
+        "total_pnl": 213.9975,
+        "sharpe": 0.203,
+        "max_drawdown": -140.9792,
+        "calmar": 1.518
+      },
+      "vol_target": {
+        "n_signals": 4834,
+        "hit_rate": 0.5995,
+        "mean_pnl": 0.0467,
+        "total_pnl": 225.5601,
+        "sharpe": 0.198,
+        "max_drawdown": -111.9711,
+        "calmar": 2.014
+      }
+    },
+    "config": {
+      "vol_win": 20,
+      "stress_fit_until": "2019-01-01",
+      "rho_max": 0.7,
+      "target_n_bets": 2.0,
+      "k_floor_cap": [
+        0.25,
+        2.0
+      ],
+      "median_spread_vol": 2.2551,
+      "variant_flags": {
+        "decorrelated": "decorrelation only (unit notional)",
+        "risk_parity": "+ per-position vol_scale (equal $/bbl risk)",
+        "parity_stress": "+ stress de-risk into shocks",
+        "vol_target": "+ portfolio overlay to target book vol (headline)"
+      }
+    },
+    "note": "Phase 7 (2.8.10) \u2014 portfolio vol-targeting on the gated tape. Pure post-processing: same fired signals, reweighted notionals. Books normalised to mean notional 1.0 (matched avg exposure \u2192 max-DD comparable; Sharpe/Calmar leverage-invariant). Reuses shock_engine.risk_scale + gated_select.select_decorrelated + a corr-based book overlay. Stress detector fit 2016\u21922019 (OOS for 2020+; 2018-19 tape rows see an in-sample stress read)."
+  },
+  "lift_vol_target_vs_gated": {
+    "brent_m1_m2": {
+      "hit_rate": 0.5733,
+      "ref_hit_rate": 0.6215,
+      "mean_pnl": 0.0072,
+      "ref_mean_pnl": 0.1906,
+      "sharpe": 0.053,
+      "ref_sharpe": 0.61,
+      "n": 1207,
+      "ref_n": 1490
+    },
+    "brent_m3_m6": {
+      "hit_rate": 0.5251,
+      "ref_hit_rate": 0.5318,
+      "mean_pnl": -0.0489,
+      "ref_mean_pnl": -0.0049,
+      "sharpe": -0.138,
+      "ref_sharpe": -0.012,
+      "n": 1417,
+      "ref_n": 1619
+    },
+    "brent_fly_123": {
+      "hit_rate": 0.75,
+      "ref_hit_rate": 0.6826,
+      "mean_pnl": 0.1888,
+      "ref_mean_pnl": 0.1915,
+      "sharpe": 1.527,
+      "ref_sharpe": 1.019,
+      "n": 688,
+      "ref_n": 1106
+    },
+    "wti_fly_123": {
+      "hit_rate": 0.6731,
+      "ref_hit_rate": 0.6498,
+      "mean_pnl": 0.1134,
+      "ref_mean_pnl": 0.1755,
+      "sharpe": 0.743,
+      "ref_sharpe": 0.671,
+      "n": 618,
+      "ref_n": 731
+    },
+    "wti_m3_m6": {
+      "hit_rate": 0.6061,
+      "ref_hit_rate": 0.5437,
+      "mean_pnl": 0.1171,
+      "ref_mean_pnl": 0.0093,
+      "sharpe": 0.618,
+      "ref_sharpe": 0.018,
+      "n": 391,
+      "ref_n": 835
+    },
+    "wti_m1_m2": {
+      "hit_rate": 0.5712,
+      "ref_hit_rate": 0.5741,
+      "mean_pnl": 0.0788,
+      "ref_mean_pnl": 0.1115,
+      "sharpe": 0.348,
+      "ref_sharpe": 0.263,
+      "n": 513,
+      "ref_n": 817
+    }
+  },
+  "lift_vol_target_vs_baseline": {
+    "brent_m1_m2": {
+      "hit_rate": 0.5733,
+      "ref_hit_rate": 0.6283,
+      "mean_pnl": 0.0072,
+      "ref_mean_pnl": 0.2075,
+      "sharpe": 0.053,
+      "ref_sharpe": 0.671,
+      "n": 1207,
+      "ref_n": 1407
+    },
+    "brent_m3_m6": {
+      "hit_rate": 0.5251,
+      "ref_hit_rate": 0.5206,
+      "mean_pnl": -0.0489,
+      "ref_mean_pnl": -0.0154,
+      "sharpe": -0.138,
+      "ref_sharpe": -0.038,
+      "n": 1417,
+      "ref_n": 1600
+    },
+    "brent_fly_123": {
+      "hit_rate": 0.75,
+      "ref_hit_rate": 0.7468,
+      "mean_pnl": 0.1888,
+      "ref_mean_pnl": 0.2431,
+      "sharpe": 1.527,
+      "ref_sharpe": 1.262,
+      "n": 688,
+      "ref_n": 940
+    },
+    "wti_fly_123": {
+      "hit_rate": 0.6731,
+      "ref_hit_rate": 0.717,
+      "mean_pnl": 0.1134,
+      "ref_mean_pnl": 0.2307,
+      "sharpe": 0.743,
+      "ref_sharpe": 0.799,
+      "n": 618,
+      "ref_n": 583
+    },
+    "wti_m3_m6": {
+      "hit_rate": 0.6061,
+      "ref_hit_rate": 0.5815,
+      "mean_pnl": 0.1171,
+      "ref_mean_pnl": 0.1608,
+      "sharpe": 0.618,
+      "ref_sharpe": 0.31,
+      "n": 391,
+      "ref_n": 798
+    },
+    "wti_m1_m2": {
+      "hit_rate": 0.5712,
+      "ref_hit_rate": 0.5714,
+      "mean_pnl": 0.0788,
+      "ref_mean_pnl": 0.1105,
+      "sharpe": 0.348,
+      "ref_sharpe": 0.259,
+      "n": 513,
+      "ref_n": 812
+    }
+  },
+  "per_spread_gate": {
+    "regime_mode": "per_spread_gate",
+    "headline": "per_spread_gate",
+    "overall": {
+      "n_signals": 6192,
+      "n_total": 9926,
+      "n_neutral": 3714,
+      "hit_rate": 0.6122,
+      "mean_pnl": 0.1387,
+      "median_pnl": 0.1048,
+      "total_pnl": 858.5813,
+      "sharpe": 0.374,
+      "max_drawdown": -282.957,
+      "win_pnl": 0.6802,
+      "loss_pnl": -0.7297,
+      "mean_cost": 0.0389,
+      "total_cost": 241.0
+    },
+    "by_spread": {
+      "brent_fly_123": {
+        "n_signals": 940,
+        "n_total": 2170,
+        "n_neutral": 1230,
+        "hit_rate": 0.7468,
+        "mean_pnl": 0.2431,
+        "median_pnl": 0.15,
+        "total_pnl": 228.56,
+        "sharpe": 1.262,
+        "max_drawdown": -16.81,
+        "win_pnl": 0.4505,
+        "loss_pnl": -0.3881,
+        "mean_cost": 0.05,
+        "total_cost": 47.0
+      },
+      "brent_m1_m2": {
+        "n_signals": 1407,
+        "n_total": 2170,
+        "n_neutral": 763,
+        "hit_rate": 0.6283,
+        "mean_pnl": 0.2075,
+        "median_pnl": 0.13,
+        "total_pnl": 291.93,
+        "sharpe": 0.671,
+        "max_drawdown": -49.28,
+        "win_pnl": 0.6725,
+        "loss_pnl": -0.6014,
+        "mean_cost": 0.03,
+        "total_cost": 42.21
+      },
+      "brent_m3_m6": {
+        "n_signals": 1614,
+        "n_total": 2170,
+        "n_neutral": 556,
+        "hit_rate": 0.5248,
+        "mean_pnl": -0.0072,
+        "median_pnl": 0.04,
+        "total_pnl": -11.62,
+        "sharpe": -0.018,
+        "max_drawdown": -170.1,
+        "win_pnl": 0.777,
+        "loss_pnl": -0.8871,
+        "mean_cost": 0.04,
+        "total_cost": 64.56
+      },
+      "wti_fly_123": {
+        "n_signals": 616,
+        "n_total": 1152,
+        "n_neutral": 516,
+        "hit_rate": 0.6932,
+        "mean_pnl": 0.212,
+        "median_pnl": 0.0732,
+        "total_pnl": 130.5658,
+        "sharpe": 0.75,
+        "max_drawdown": -25.538,
+        "win_pnl": 0.4313,
+        "loss_pnl": -0.2835,
+        "mean_cost": 0.05,
+        "total_cost": 30.8
+      },
+      "wti_m1_m2": {
+        "n_signals": 817,
+        "n_total": 1132,
+        "n_neutral": 315,
+        "hit_rate": 0.5716,
+        "mean_pnl": 0.1111,
+        "median_pnl": 0.0634,
+        "total_pnl": 90.7876,
+        "sharpe": 0.262,
+        "max_drawdown": -95.8128,
+        "win_pnl": 0.6743,
+        "loss_pnl": -0.6403,
+        "mean_cost": 0.03,
+        "total_cost": 24.51
+      },
+      "wti_m3_m6": {
+        "n_signals": 798,
+        "n_total": 1132,
+        "n_neutral": 334,
+        "hit_rate": 0.5815,
+        "mean_pnl": 0.1608,
+        "median_pnl": 0.2063,
+        "total_pnl": 128.3579,
+        "sharpe": 0.31,
+        "max_drawdown": -114.6341,
+        "win_pnl": 1.1002,
+        "loss_pnl": -1.1442,
+        "mean_cost": 0.04,
+        "total_cost": 31.92
+      }
+    },
+    "by_source": {
+      "baseline": {
+        "n_signals": 5979,
+        "n_total": 9693,
+        "n_neutral": 3714,
+        "hit_rate": 0.6138,
+        "mean_pnl": 0.135,
+        "median_pnl": 0.1047,
+        "total_pnl": 807.3651,
+        "sharpe": 0.374,
+        "max_drawdown": -282.957,
+        "win_pnl": 0.6589,
+        "loss_pnl": -0.7111,
+        "mean_cost": 0.0388,
+        "total_cost": 231.97
+      },
+      "regime": {
+        "n_signals": 213,
+        "n_total": 233,
+        "n_neutral": 0,
+        "hit_rate": 0.5681,
+        "mean_pnl": 0.2405,
+        "median_pnl": 0.1317,
+        "total_pnl": 51.2162,
+        "sharpe": 0.42,
+        "max_drawdown": -86.92,
+        "win_pnl": 1.3253,
+        "loss_pnl": -1.1864,
+        "mean_cost": 0.0424,
+        "total_cost": 9.03
+      }
+    },
+    "by_spread_source": {
+      "brent_fly_123": {
+        "baseline": {
+          "n_signals": 940,
+          "n_total": 2170,
+          "n_neutral": 1230,
+          "hit_rate": 0.7468,
+          "mean_pnl": 0.2431,
+          "median_pnl": 0.15,
+          "total_pnl": 228.56,
+          "sharpe": 1.262,
+          "max_drawdown": -16.81,
+          "win_pnl": 0.4505,
+          "loss_pnl": -0.3881,
+          "mean_cost": 0.05,
+          "total_cost": 47.0
+        }
+      },
+      "brent_m1_m2": {
+        "baseline": {
+          "n_signals": 1407,
+          "n_total": 2170,
+          "n_neutral": 763,
+          "hit_rate": 0.6283,
+          "mean_pnl": 0.2075,
+          "median_pnl": 0.13,
+          "total_pnl": 291.93,
+          "sharpe": 0.671,
+          "max_drawdown": -49.28,
+          "win_pnl": 0.6725,
+          "loss_pnl": -0.6014,
+          "mean_cost": 0.03,
+          "total_cost": 42.21
+        }
+      },
+      "brent_m3_m6": {
+        "baseline": {
+          "n_signals": 1506,
+          "n_total": 2062,
+          "n_neutral": 556,
+          "hit_rate": 0.5226,
+          "mean_pnl": -0.0131,
+          "median_pnl": 0.04,
+          "total_pnl": -19.71,
+          "sharpe": -0.035,
+          "max_drawdown": -170.1,
+          "win_pnl": 0.702,
+          "loss_pnl": -0.8094,
+          "mean_cost": 0.04,
+          "total_cost": 60.24
+        },
+        "regime": {
+          "n_signals": 108,
+          "n_total": 108,
+          "n_neutral": 0,
+          "hit_rate": 0.5556,
+          "mean_pnl": 0.0749,
+          "median_pnl": 0.4,
+          "total_pnl": 8.09,
+          "sharpe": 0.105,
+          "max_drawdown": -86.92,
+          "win_pnl": 1.7607,
+          "loss_pnl": -2.0323,
+          "mean_cost": 0.04,
+          "total_cost": 4.32
+        }
+      },
+      "wti_fly_123": {
+        "baseline": {
+          "n_signals": 538,
+          "n_total": 1054,
+          "n_neutral": 516,
+          "hit_rate": 0.7175,
+          "mean_pnl": 0.1735,
+          "median_pnl": 0.0733,
+          "total_pnl": 93.3486,
+          "sharpe": 0.687,
+          "max_drawdown": -25.538,
+          "win_pnl": 0.3538,
+          "loss_pnl": -0.2844,
+          "mean_cost": 0.05,
+          "total_cost": 26.9
+        },
+        "regime": {
+          "n_signals": 78,
+          "n_total": 98,
+          "n_neutral": 0,
+          "hit_rate": 0.5256,
+          "mean_pnl": 0.4771,
+          "median_pnl": 0.0309,
+          "total_pnl": 37.2172,
+          "sharpe": 1.106,
+          "max_drawdown": -6.5537,
+          "win_pnl": 1.1606,
+          "loss_pnl": -0.2802,
+          "mean_cost": 0.05,
+          "total_cost": 3.9
+        }
+      },
+      "wti_m1_m2": {
+        "baseline": {
+          "n_signals": 790,
+          "n_total": 1105,
+          "n_neutral": 315,
+          "hit_rate": 0.5658,
+          "mean_pnl": 0.1074,
+          "median_pnl": 0.0577,
+          "total_pnl": 84.8786,
+          "sharpe": 0.249,
+          "max_drawdown": -95.8128,
+          "win_pnl": 0.6885,
+          "loss_pnl": -0.6498,
+          "mean_cost": 0.03,
+          "total_cost": 23.7
+        },
+        "regime": {
+          "n_signals": 27,
+          "n_total": 27,
+          "n_neutral": 0,
+          "hit_rate": 0.7407,
+          "mean_pnl": 0.2189,
+          "median_pnl": 0.2145,
+          "total_pnl": 5.909,
+          "sharpe": 2.299,
+          "max_drawdown": -0.4145,
+          "win_pnl": 0.3569,
+          "loss_pnl": -0.1755,
+          "mean_cost": 0.03,
+          "total_cost": 0.81
+        }
+      },
+      "wti_m3_m6": {
+        "baseline": {
+          "n_signals": 798,
+          "n_total": 1132,
+          "n_neutral": 334,
+          "hit_rate": 0.5815,
+          "mean_pnl": 0.1608,
+          "median_pnl": 0.2063,
+          "total_pnl": 128.3579,
+          "sharpe": 0.31,
+          "max_drawdown": -114.6341,
+          "win_pnl": 1.1002,
+          "loss_pnl": -1.1442,
+          "mean_cost": 0.04,
+          "total_cost": 31.92
+        }
+      }
+    },
+    "n_trades": 9926,
+    "n_regime": 233,
+    "n_baseline": 9693,
+    "enabled_latest": [
+      "wti_fly_123",
+      "wti_m1_m2"
+    ],
+    "enabled_by_cutoff": {
+      "2018-01-02": [],
+      "2018-04-02": [],
+      "2018-07-02": [],
+      "2018-10-01": [],
+      "2019-01-02": [],
+      "2019-04-01": [],
+      "2019-07-01": [],
+      "2019-10-01": [],
+      "2020-01-02": [],
+      "2020-04-01": [],
+      "2020-07-01": [],
+      "2020-10-01": [],
+      "2021-01-04": [],
+      "2021-04-01": [],
+      "2021-07-01": [],
+      "2021-10-01": [
+        "brent_m3_m6"
+      ],
+      "2022-01-03": [
+        "brent_m3_m6"
+      ],
+      "2022-04-01": [
+        "wti_fly_123"
+      ],
+      "2022-07-01": [
+        "brent_m3_m6"
+      ],
+      "2022-10-03": [],
+      "2023-01-03": [],
+      "2023-04-03": [],
+      "2023-07-03": [],
+      "2023-10-02": [],
+      "2024-01-02": [
+        "wti_m1_m2"
+      ],
+      "2024-04-01": [
+        "wti_m1_m2"
+      ],
+      "2024-07-01": [
+        "wti_m1_m2"
+      ],
+      "2024-10-01": [
+        "wti_m1_m2"
+      ],
+      "2025-01-02": [
+        "wti_m1_m2"
+      ],
+      "2025-04-01": [
+        "wti_m1_m2"
+      ],
+      "2025-07-01": [
+        "wti_m1_m2"
+      ],
+      "2025-10-01": [
+        "wti_m1_m2"
+      ],
+      "2026-01-02": [
+        "wti_m1_m2"
+      ],
+      "2026-04-01": [
+        "wti_fly_123",
+        "wti_m1_m2"
+      ]
+    },
+    "config": {
+      "margin": 0.0,
+      "min_n": 20,
+      "global_gate": {
+        "regime": "BACK",
+        "winners": [
+          "CatBoost",
+          "Huber",
+          "Lasso",
+          "LightGBM",
+          "XGBoost"
+        ],
+        "z_thresh": 0.5
+      }
+    },
+    "note": "Phase 8 (2026-06-22) \u2014 per-spread gate. Replaces the uniform global gate with a per-spread enable decision made walk-forward (regime leg fires for a spread only when its OOS NET Sharpe beat baseline for that spread before each refit, \u2265 min_n evidence). Pure post-processing on the pooled + baseline tapes; same fired signals, re-routed regime vs baseline per spread. Decision logic shared with live_ranker via gate_config.py."
+  },
+  "lift_perspread_gate_vs_gated": {
+    "brent_fly_123": {
+      "hit_rate": 0.7468,
+      "ref_hit_rate": 0.6826,
+      "mean_pnl": 0.2431,
+      "ref_mean_pnl": 0.1915,
+      "sharpe": 1.262,
+      "ref_sharpe": 1.019,
+      "n": 940,
+      "ref_n": 1106
+    },
+    "brent_m1_m2": {
+      "hit_rate": 0.6283,
+      "ref_hit_rate": 0.6215,
+      "mean_pnl": 0.2075,
+      "ref_mean_pnl": 0.1906,
+      "sharpe": 0.671,
+      "ref_sharpe": 0.61,
+      "n": 1407,
+      "ref_n": 1490
+    },
+    "brent_m3_m6": {
+      "hit_rate": 0.5248,
+      "ref_hit_rate": 0.5318,
+      "mean_pnl": -0.0072,
+      "ref_mean_pnl": -0.0049,
+      "sharpe": -0.018,
+      "ref_sharpe": -0.012,
+      "n": 1614,
+      "ref_n": 1619
+    },
+    "wti_fly_123": {
+      "hit_rate": 0.6932,
+      "ref_hit_rate": 0.6498,
+      "mean_pnl": 0.212,
+      "ref_mean_pnl": 0.1755,
+      "sharpe": 0.75,
+      "ref_sharpe": 0.671,
+      "n": 616,
+      "ref_n": 731
+    },
+    "wti_m1_m2": {
+      "hit_rate": 0.5716,
+      "ref_hit_rate": 0.5741,
+      "mean_pnl": 0.1111,
+      "ref_mean_pnl": 0.1115,
+      "sharpe": 0.262,
+      "ref_sharpe": 0.263,
+      "n": 817,
+      "ref_n": 817
+    },
+    "wti_m3_m6": {
+      "hit_rate": 0.5815,
+      "ref_hit_rate": 0.5437,
+      "mean_pnl": 0.1608,
+      "ref_mean_pnl": 0.0093,
+      "sharpe": 0.31,
+      "ref_sharpe": 0.018,
+      "n": 798,
+      "ref_n": 835
+    }
+  },
+  "lift_perspread_gate_vs_baseline": {
+    "brent_fly_123": {
+      "hit_rate": 0.7468,
+      "ref_hit_rate": 0.7468,
+      "mean_pnl": 0.2431,
+      "ref_mean_pnl": 0.2431,
+      "sharpe": 1.262,
+      "ref_sharpe": 1.262,
+      "n": 940,
+      "ref_n": 940
+    },
+    "brent_m1_m2": {
+      "hit_rate": 0.6283,
+      "ref_hit_rate": 0.6283,
+      "mean_pnl": 0.2075,
+      "ref_mean_pnl": 0.2075,
+      "sharpe": 0.671,
+      "ref_sharpe": 0.671,
+      "n": 1407,
+      "ref_n": 1407
+    },
+    "brent_m3_m6": {
+      "hit_rate": 0.5248,
+      "ref_hit_rate": 0.5206,
+      "mean_pnl": -0.0072,
+      "ref_mean_pnl": -0.0154,
+      "sharpe": -0.018,
+      "ref_sharpe": -0.038,
+      "n": 1614,
+      "ref_n": 1600
+    },
+    "wti_fly_123": {
+      "hit_rate": 0.6932,
+      "ref_hit_rate": 0.717,
+      "mean_pnl": 0.212,
+      "ref_mean_pnl": 0.2307,
+      "sharpe": 0.75,
+      "ref_sharpe": 0.799,
+      "n": 616,
+      "ref_n": 583
+    },
+    "wti_m1_m2": {
+      "hit_rate": 0.5716,
+      "ref_hit_rate": 0.5714,
+      "mean_pnl": 0.1111,
+      "ref_mean_pnl": 0.1105,
+      "sharpe": 0.262,
+      "ref_sharpe": 0.259,
+      "n": 817,
+      "ref_n": 812
+    },
+    "wti_m3_m6": {
+      "hit_rate": 0.5815,
+      "ref_hit_rate": 0.5815,
+      "mean_pnl": 0.1608,
+      "ref_mean_pnl": 0.1608,
+      "sharpe": 0.31,
+      "ref_sharpe": 0.31,
+      "n": 798,
+      "ref_n": 798
     }
   }
 }

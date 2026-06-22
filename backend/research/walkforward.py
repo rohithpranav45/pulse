@@ -114,6 +114,10 @@ _HORIZON_TRADES_FILE  = Path(__file__).parent.parent / "data" / "research" / "ho
 _FEATSEL_TRADES_FILE  = Path(__file__).parent.parent / "data" / "research" / "featsel_trades.json"
 # Phase 6 — data-driven HMM/change-point regime leg (2.8.9). Headline-K tape.
 _HMM_TRADES_FILE      = Path(__file__).parent.parent / "data" / "research" / "hmm_trades.json"
+# Phase 7 — portfolio vol-targeting leg (2.8.10). Headline (full) variant tape.
+_VOLTARGET_TRADES_FILE = Path(__file__).parent.parent / "data" / "research" / "voltarget_trades.json"
+# Phase 8 — per-spread gate leg (2026-06-22). Per-spread-gated blend tape.
+_PERSPREAD_GATE_TRADES_FILE = Path(__file__).parent.parent / "data" / "research" / "gated_perspread_trades.json"
 
 # Phase 2.8.4 — regime axes used as one-hot features in the "global" leg.
 # Composite label decomposes into 3 axes; the one-hot expansion is 3+3+3=9
@@ -2467,8 +2471,453 @@ def run_hmm_only(states: tuple[int, ...] = N_HMM_STATES_SWEEP,
     return existing
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 7 — portfolio vol-targeting (2.8.10)
+# ─────────────────────────────────────────────────────────────────────────────
+# Reweights the persisted gated trade tape into a vol-targeted book (pure
+# post-processing, no retrain — same pattern as --horizon-only). Reuses
+# shock_engine.risk_scale (per-position vol-target × stress de-risk) and
+# gated_select.select_decorrelated (the desk's decorrelated book), plus a
+# portfolio overlay that scales the whole book to a target book vol from the
+# trailing correlation matrix. The four layers are toggled into ablation
+# variants so the marginal contribution of each is visible. Honest question:
+# does targeting portfolio vol beat the un-targeted gated/baseline book on NET
+# Sharpe and shrink max-drawdown? (vol_target.py holds the sizing logic.)
+_VOLTARGET_VARIANTS = ("decorrelated", "risk_parity", "parity_stress", "vol_target")
+
+
+def _calmar(overall: dict) -> float | None:
+    """Calmar = total NET PnL / |max drawdown| — leverage-invariant, so it's the
+    cleanest cross-variant comparison when notionals differ."""
+    tot = overall.get("total_pnl")
+    dd  = overall.get("max_drawdown")
+    if tot is None or dd is None or not dd:
+        return None
+    return round(float(tot) / abs(float(dd)), 3)
+
+
+def _voltarget_summary(net_block: dict) -> dict:
+    """Compact NET summary (overall) for one vol-target variant."""
+    o = net_block.get("overall") or {}
+    return {
+        "n_signals":    o.get("n_signals"),
+        "hit_rate":     o.get("hit_rate"),
+        "mean_pnl":     o.get("mean_pnl"),
+        "total_pnl":    o.get("total_pnl"),
+        "sharpe":       o.get("sharpe"),
+        "max_drawdown": o.get("max_drawdown"),
+        "calmar":       _calmar(o),
+    }
+
+
+def _voltarget_cfg(name: str):
+    """Build the VolTargetConfig for an ablation variant name."""
+    from research.vol_target import VolTargetConfig
+    flags = {
+        "decorrelated":  dict(decorrelate=True,  vol_scale=False, stress=False, portfolio=False),
+        "risk_parity":   dict(decorrelate=True,  vol_scale=True,  stress=False, portfolio=False),
+        "parity_stress": dict(decorrelate=True,  vol_scale=True,  stress=True,  portfolio=False),
+        "vol_target":    dict(decorrelate=True,  vol_scale=True,  stress=True,  portfolio=True),
+    }[name]
+    return VolTargetConfig(**flags)
+
+
+def run_voltarget_only(headline: str = "vol_target") -> dict:
+    """
+    Phase 7 (2.8.10) — reweight the gated trade tape into vol-targeted books for
+    each ablation variant, merge a `vol_target` block into walkforward_report.json.
+    Mirrors --hmm-only's standalone-merge pattern: gated/baseline/global/etc.
+    blocks are untouched. The `headline` variant (default the full overlay) drives
+    the costs/lift wiring; the others are kept under `vol_target["variants"]`.
+    """
+    from research.spread_universe import build_spread_series
+    from research import vol_target as vt
+    from research import gated_select
+
+    existing = load_report()
+    if existing is None:
+        raise RuntimeError(
+            "walkforward_report.json missing — run the full walk-forward first, "
+            "then re-run with --voltarget-only."
+        )
+    if not _GATED_TRADES_FILE.exists():
+        raise RuntimeError(f"gated tape missing ({_GATED_TRADES_FILE}) — run the full walk-forward first.")
+
+    log.info("Phase 7 — building spread vol / stress / correlation inputs...")
+    spreads = build_spread_series()
+    spread_vol = vt.spread_vol_frame(spreads)
+    stress = vt.stress_series()
+    corr = gated_select.instrument_corr_matrix()
+
+    with open(_GATED_TRADES_FILE) as f:
+        gated_tape = json.load(f)
+    baseline_tape = []
+    if _BASELINE_TRADES_FILE.exists():
+        with open(_BASELINE_TRADES_FILE) as f:
+            baseline_tape = json.load(f)
+
+    # Reference books (unit notional) — recomputed here so all variants share the
+    # same _metrics path and carry Calmar.
+    variants: dict[str, dict] = {}
+    gated_raw_net = _net_block(gated_tape)
+    variants["gated_raw"]    = _voltarget_summary(gated_raw_net)
+    if baseline_tape:
+        variants["baseline_raw"] = _voltarget_summary(_net_block(baseline_tape))
+
+    headline_net = None
+    headline_tape: list[dict] = []
+    for name in _VOLTARGET_VARIANTS:
+        cfg = _voltarget_cfg(name)
+        sized = vt.apply_vol_target(gated_tape, spread_vol=spread_vol, stress=stress,
+                                    corr=corr, cfg=cfg)
+        net = _net_block(sized)
+        variants[name] = _voltarget_summary(net)
+        log.info("  [%s] held=%d net_sharpe=%s maxDD=%s calmar=%s",
+                 name, variants[name]["n_signals"], variants[name]["sharpe"],
+                 variants[name]["max_drawdown"], variants[name]["calmar"])
+        if name == headline:
+            headline_net = net
+            headline_tape = sized
+
+    if headline_net is None:  # pragma: no cover — headline always in _VOLTARGET_VARIANTS
+        raise RuntimeError(f"unknown headline variant {headline!r}")
+
+    block = {
+        "regime_mode":     "vol_target",
+        "headline":        headline,
+        "n_held":          variants[headline]["n_signals"],
+        "overall":         headline_net["overall"],
+        "by_spread":       headline_net["by_spread"],
+        "variants":        variants,
+        "config": {
+            "vol_win":         vt.VOL_WIN,
+            "stress_fit_until":vt.STRESS_FIT_UNTIL,
+            "rho_max":         gated_select.DEFAULT_RHO_MAX,
+            "target_n_bets":   vt.TARGET_N_BETS,
+            "k_floor_cap":     [vt.K_FLOOR, vt.K_CAP],
+            "median_spread_vol": round(float(np.nanmedian(spread_vol.values)), 4) if spread_vol.size else None,
+            "variant_flags": {
+                "decorrelated":  "decorrelation only (unit notional)",
+                "risk_parity":   "+ per-position vol_scale (equal $/bbl risk)",
+                "parity_stress": "+ stress de-risk into shocks",
+                "vol_target":    "+ portfolio overlay to target book vol (headline)",
+            },
+        },
+        "note": (
+            "Phase 7 (2.8.10) — portfolio vol-targeting on the gated tape. Pure "
+            "post-processing: same fired signals, reweighted notionals. Books "
+            "normalised to mean notional 1.0 (matched avg exposure → max-DD "
+            "comparable; Sharpe/Calmar leverage-invariant). Reuses shock_engine."
+            "risk_scale + gated_select.select_decorrelated + a corr-based book "
+            "overlay. Stress detector fit 2016→2019 (OOS for 2020+; 2018-19 tape "
+            "rows see an in-sample stress read)."
+        ),
+    }
+    existing["vol_target"] = block
+
+    costs = existing.setdefault("costs", {})
+    costs["vol_target_net"] = headline_net
+    base_net = (costs.get("baseline_net") or {})
+    gated_net = (costs.get("gated_blend_net") or {})
+    if gated_net.get("by_spread"):
+        existing.setdefault("lift_vol_target_vs_gated", _lift(
+            headline_net, gated_net.get("by_spread", {}), gated_net.get("overall", {})))
+    if base_net.get("by_spread"):
+        existing.setdefault("lift_vol_target_vs_baseline", _lift(
+            headline_net, base_net.get("by_spread", {}), base_net.get("overall", {})))
+
+    cfg = existing.setdefault("config", {})
+    modes = cfg.get("regime_modes") or []
+    if "vol_target" not in modes:
+        cfg["regime_modes"] = list(modes) + ["vol_target"]
+
+    try:
+        _VOLTARGET_TRADES_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(_VOLTARGET_TRADES_FILE, "w") as f:
+            json.dump(headline_tape, f, default=str)
+        log.info("  saved %s (%d rows)", _VOLTARGET_TRADES_FILE.name, len(headline_tape))
+    except Exception as exc:  # pragma: no cover — disk-only failure
+        log.warning("  failed to save %s: %s", _VOLTARGET_TRADES_FILE.name, exc)
+
+    existing["generated_at"] = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    _REPORT_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(_REPORT_FILE, "w") as f:
+        json.dump(existing, f, indent=2, default=str)
+    log.info("Saved walk-forward report (vol-target leg merged) → %s", _REPORT_FILE)
+    return existing
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 8 (2026-06-22) — per-spread gate (post-processing, no retrain — same
+# standalone-merge pattern as --voltarget-only/--horizon-only). Replaces the
+# uniform global gate with a per-spread enable decision made walk-forward: the
+# regime leg fires for a spread only when its OOS NET Sharpe beat baseline for
+# that spread BEFORE each refit cutoff (≥ GATE_MIN_N evidence). Reuses the
+# persisted pooled + baseline tapes; the per-spread decision logic lives in
+# gate_config.py (shared with live_ranker so the two can't drift).
+# ─────────────────────────────────────────────────────────────────────────────
+def _build_perspread_histories(
+    pooled_trades: list[dict],
+    baseline_trades: list[dict],
+) -> tuple[dict, dict]:
+    """
+    Build {spread -> [(close_date, net_pnl)]} histories for the regime leg
+    (pooled trades that PASS the global gate) and the baseline leg, used to
+    decide per-spread enablement at each cutoff. Baseline rows have no fwd_date,
+    so their close is approximated as date + FORWARD_DAYS business days — only
+    used for the < cutoff ordering, and refits are quarterly (~63 bd) so the
+    20-bd approximation never crosses a boundary spuriously.
+    """
+    from research.spread_universe import INSTRUMENTS
+
+    reg_hist: dict[str, list] = {sp: [] for sp in INSTRUMENTS}
+    base_hist: dict[str, list] = {sp: [] for sp in INSTRUMENTS}
+
+    pool_idx = {(t["date"], t["spread"]): t for t in pooled_trades}
+    base_idx = {(t["date"], t["spread"]): t for t in baseline_trades}
+
+    for (dt, sp), p in pool_idx.items():
+        if sp not in reg_hist:
+            continue
+        if _pooled_passes_gate(p) and p.get("fwd_pnl") is not None:
+            fd = p.get("fwd_date")
+            close = pd.Timestamp(fd) if fd else pd.Timestamp(dt) + pd.tseries.offsets.BDay(FORWARD_DAYS)
+            reg_hist[sp].append((close, float(p["fwd_pnl"]) - _cost_for(p)))
+
+    for (dt, sp), b in base_idx.items():
+        if sp not in base_hist:
+            continue
+        if b.get("direction") != "NEUTRAL" and b.get("fwd_pnl") is not None:
+            close = pd.Timestamp(dt) + pd.tseries.offsets.BDay(FORWARD_DAYS)
+            base_hist[sp].append((close, float(b["fwd_pnl"]) - _cost_for(b)))
+
+    return reg_hist, base_hist
+
+
+def _build_perspread_gated_blend(
+    pooled_trades: list[dict],
+    baseline_trades: list[dict],
+    refit_ts: list[pd.Timestamp],
+) -> tuple[list[dict], dict, set]:
+    """
+    Per-spread variant of _build_gated_blend. For each (date, spread) the regime
+    candidate is taken only when the spread is ENABLED as of the trade's refit
+    cutoff AND it passes the global gate; otherwise we fall to baseline. Returns
+    (blended_trades, enabled_by_cutoff, enabled_latest).
+    """
+    from research import gate_config
+
+    reg_hist, base_hist = _build_perspread_histories(pooled_trades, baseline_trades)
+
+    # Resolve the enabled set once per cutoff (decision only uses trades that
+    # closed before the cutoff → genuinely out-of-sample).
+    enabled_by_cutoff: dict[str, set] = {}
+    for cutoff in refit_ts:
+        enabled_by_cutoff[cutoff.strftime("%Y-%m-%d")] = gate_config.enabled_at_cutoff(
+            reg_hist, base_hist, cutoff, forward_days=FORWARD_DAYS,
+        )
+
+    pool_idx = {(t["date"], t["spread"]): t for t in pooled_trades}
+    base_idx = {(t["date"], t["spread"]): t for t in baseline_trades}
+    keys     = sorted(set(pool_idx.keys()) | set(base_idx.keys()))
+
+    blended: list[dict] = []
+    for k in keys:
+        dt = pd.Timestamp(k[0]); sp = k[1]
+        p  = pool_idx.get(k)
+        b  = base_idx.get(k)
+        # cutoff = most recent refit boundary on/before the trade date
+        prior = [r for r in refit_ts if r <= dt]
+        cutoff = prior[-1] if prior else refit_ts[0]
+        enabled = enabled_by_cutoff[cutoff.strftime("%Y-%m-%d")]
+        if gate_config.per_spread_gate_passes(sp, enabled, _pooled_passes_gate(p)):
+            blended.append({**p, "source": "regime", "gate": "pass"})  # type: ignore[arg-type]
+        elif b is not None:
+            blended.append({
+                "date":      b["date"],
+                "spread":    b["spread"],
+                "actual":    b["actual"],
+                "z":         b["z"],
+                "direction": b["direction"],
+                "fwd_move":  b.get("fwd_move"),
+                "fwd_pnl":   b.get("fwd_pnl"),
+                "roll_mu":   b.get("roll_mu"),
+                "roll_sigma":b.get("roll_sigma"),
+                "regime":    (p or {}).get("regime")    if p else None,
+                "winner":    (p or {}).get("winner")    if p else None,
+                "pooled_z":  (p or {}).get("z")         if p else None,
+                "source":    "baseline",
+                "gate":      "disabled" if (p and _pooled_passes_gate(p)) else ("fail" if p else "no_pooled"),
+            })
+
+    latest_key = refit_ts[-1].strftime("%Y-%m-%d")
+    enabled_latest = enabled_by_cutoff[latest_key]
+    return blended, enabled_by_cutoff, enabled_latest
+
+
+def run_perspread_gate_only(headline: str = "per_spread_gate") -> dict:
+    """
+    Phase 8 (2026-06-22) — build a per-spread-gated blend from the persisted
+    pooled + baseline tapes and merge a `per_spread_gate` block into
+    walkforward_report.json. Mirrors --voltarget-only's standalone-merge pattern:
+    every other block is untouched. No retrain.
+
+    The decision (which spreads fire regime) is made walk-forward in
+    gate_config.enabled_at_cutoff — the same module live_ranker reads for
+    inference — so the live gate and the backtested gate cannot drift.
+    """
+    from research import gate_config
+
+    existing = load_report()
+    if existing is None:
+        raise RuntimeError(
+            "walkforward_report.json missing — run the full walk-forward first, "
+            "then re-run with --perspread-gate-only."
+        )
+    if not _POOLED_TRADES_FILE.exists() or not _BASELINE_TRADES_FILE.exists():
+        raise RuntimeError(
+            "pooled/baseline tapes missing — run the full walk-forward first, "
+            "then re-run with --perspread-gate-only."
+        )
+
+    with open(_POOLED_TRADES_FILE) as f:
+        pooled_tape = json.load(f)
+    with open(_BASELINE_TRADES_FILE) as f:
+        baseline_tape = json.load(f)
+
+    refit_ts = [pd.Timestamp(d) for d in REFIT_DATES]
+    blended, enabled_by_cutoff, enabled_latest = _build_perspread_gated_blend(
+        pooled_tape, baseline_tape, refit_ts,
+    )
+
+    net = _net_block(blended, include_source=True)
+    n_regime   = sum(1 for t in blended if t.get("source") == "regime")
+    n_baseline = sum(1 for t in blended if t.get("source") == "baseline")
+
+    block = {
+        "regime_mode":   "per_spread_gate",
+        "headline":      headline,
+        "overall":       net["overall"],
+        "by_spread":     net["by_spread"],
+        "by_source":     net["by_source"],
+        "by_spread_source": net["by_spread_source"],
+        "n_trades":      len(blended),
+        "n_regime":      n_regime,
+        "n_baseline":    n_baseline,
+        "enabled_latest": sorted(enabled_latest),
+        "enabled_by_cutoff": {k: sorted(v) for k, v in enabled_by_cutoff.items()},
+        "config": {
+            "margin":        gate_config.GATE_MARGIN,
+            "min_n":         gate_config.GATE_MIN_N,
+            "global_gate":   {"regime": GATED_REGIME, "winners": sorted(GATED_WINNERS), "z_thresh": GATED_Z_THRESHOLD},
+        },
+        "note": (
+            "Phase 8 (2026-06-22) — per-spread gate. Replaces the uniform global "
+            "gate with a per-spread enable decision made walk-forward (regime leg "
+            "fires for a spread only when its OOS NET Sharpe beat baseline for that "
+            "spread before each refit, ≥ min_n evidence). Pure post-processing on "
+            "the pooled + baseline tapes; same fired signals, re-routed regime vs "
+            "baseline per spread. Decision logic shared with live_ranker via "
+            "gate_config.py."
+        ),
+    }
+    existing["per_spread_gate"] = block
+
+    costs = existing.setdefault("costs", {})
+    costs["per_spread_gate_net"] = {k: net[k] for k in ("overall", "by_spread")}
+    base_net  = (costs.get("baseline_net") or {})
+    gated_net = (costs.get("gated_blend_net") or {})
+    if gated_net.get("by_spread"):
+        existing["lift_perspread_gate_vs_gated"] = _lift(
+            net, gated_net.get("by_spread", {}), gated_net.get("overall", {}))
+    if base_net.get("by_spread"):
+        existing["lift_perspread_gate_vs_baseline"] = _lift(
+            net, base_net.get("by_spread", {}), base_net.get("overall", {}))
+
+    cfg = existing.setdefault("config", {})
+    modes = cfg.get("regime_modes") or []
+    if "per_spread_gate" not in modes:
+        cfg["regime_modes"] = list(modes) + ["per_spread_gate"]
+
+    try:
+        _PERSPREAD_GATE_TRADES_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(_PERSPREAD_GATE_TRADES_FILE, "w") as f:
+            json.dump(blended, f, default=str)
+        log.info("  saved %s (%d rows)", _PERSPREAD_GATE_TRADES_FILE.name, len(blended))
+    except Exception as exc:  # pragma: no cover — disk-only failure
+        log.warning("  failed to save %s: %s", _PERSPREAD_GATE_TRADES_FILE.name, exc)
+
+    existing["generated_at"] = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    _REPORT_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(_REPORT_FILE, "w") as f:
+        json.dump(existing, f, indent=2, default=str)
+    log.info("Saved walk-forward report (per-spread gate leg merged) → %s", _REPORT_FILE)
+    return existing
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    if "--perspread-gate-only" in sys.argv:
+        rpt = run_perspread_gate_only()
+        blk = rpt["per_spread_gate"]
+        ps_net   = rpt["costs"]["per_spread_gate_net"]["overall"]
+        gate_net = (rpt["costs"].get("gated_blend_net") or {}).get("overall", {})
+        base_net = rpt["costs"]["baseline_net"]["overall"]
+        print()
+        print("=== Phase 8 (2026-06-22) — per-spread gate (NET, on pooled+baseline tapes) ===")
+        print(f"  config: margin={blk['config']['margin']}  min_n={blk['config']['min_n']}")
+        print(f"  enabled at latest cutoff: {blk['enabled_latest']}")
+        print(f"  regime fires={blk['n_regime']}  baseline={blk['n_baseline']}")
+        print()
+        print("=== NET-Sharpe verdict — per-spread gate vs global gate vs baseline ===")
+        print(f"  baseline             {base_net['sharpe']:+.3f}")
+        print(f"  gated_blend (global) {(gate_net.get('sharpe') or 0.0):+.3f}")
+        print(f"  per_spread_gate      {(ps_net.get('sharpe') or 0.0):+.3f}")
+        print()
+        print("=== Per-spread NET Sharpe — per-spread gate vs global gate vs baseline ===")
+        psp = rpt["costs"]["per_spread_gate_net"]["by_spread"]
+        gsp = (rpt["costs"].get("gated_blend_net") or {}).get("by_spread", {})
+        bsp = rpt["costs"]["baseline_net"]["by_spread"]
+        for sp in sorted(set(list(psp.keys()) + list(bsp.keys()))):
+            ps = (psp.get(sp) or {}).get("sharpe")
+            g  = (gsp.get(sp) or {}).get("sharpe")
+            b  = (bsp.get(sp) or {}).get("sharpe")
+            en = "ON " if sp in blk["enabled_latest"] else "off"
+            print(f"  {sp:<14} [{en}]  perspread={ps}  global={g}  baseline={b}")
+        sys.exit(0)
+
+    if "--voltarget-only" in sys.argv:
+        rpt = run_voltarget_only()
+        blk = rpt["vol_target"]
+        v = blk["variants"]
+        print()
+        print("=== Phase 7 (2.8.10) — portfolio vol-targeting (NET, on gated tape) ===")
+        print(f"  config: vol_win={blk['config']['vol_win']}  rho_max={blk['config']['rho_max']}"
+              f"  median_spread_vol={blk['config']['median_spread_vol']}")
+        print()
+        order = ["baseline_raw", "gated_raw", "decorrelated", "risk_parity",
+                 "parity_stress", "vol_target"]
+        print(f"  {'variant':<16} {'held':>6} {'NET Shp':>9} {'maxDD':>9} {'Calmar':>8} {'mean PnL':>9}")
+        for name in order:
+            m = v.get(name)
+            if not m:
+                continue
+            tag = name + ("  ←headline" if name == blk["headline"] else "")
+            print(f"  {tag:<16} {(m['n_signals'] or 0):>6} "
+                  f"{(m['sharpe'] if m['sharpe'] is not None else 0.0):>+9.3f} "
+                  f"{(m['max_drawdown'] if m['max_drawdown'] is not None else 0.0):>+9.2f} "
+                  f"{(m['calmar'] if m['calmar'] is not None else 0.0):>+8.3f} "
+                  f"{(m['mean_pnl'] if m['mean_pnl'] is not None else 0.0):>+9.4f}")
+        print()
+        print("=== Per-spread NET Sharpe — vol_target headline vs gated_raw ===")
+        vt_sp = rpt["costs"]["vol_target_net"]["by_spread"]
+        g_sp  = (rpt["costs"].get("gated_blend_net") or {}).get("by_spread", {})
+        for sp in sorted(set(list(vt_sp.keys()) + list(g_sp.keys()))):
+            a = (vt_sp.get(sp) or {}).get("sharpe")
+            b = (g_sp.get(sp) or {}).get("sharpe")
+            print(f"  {sp:<14}  vol_target={a}  gated={b}")
+        sys.exit(0)
+
     if "--hmm-only" in sys.argv:
         rpt = run_hmm_only()
         hmm = rpt["hmm"]
