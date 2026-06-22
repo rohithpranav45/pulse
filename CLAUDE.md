@@ -20,6 +20,10 @@ spread engine), and serves a React dashboard with a paper-trading book.
 
 ## 1. Current status
 
+> 📌 **Latest session handoff:** [`docs/SESSION_HANDOFF_2026-06-22.md`](docs/SESSION_HANDOFF_2026-06-22.md)
+> — Phase 8 per-spread gate + GARCH risk-layer study + A/B backtest-verdict panel (all merged to `main`
+> = `e6b15c4`). Read it for the detailed continuation context + the open next-steps.
+
 ### ✅ Shipped
 - **Phase 1 — dashboard** (PR #2): 32 live data streams, health monitoring, source provenance,
   directional Brent signal engine, Groq morning brief, paper-trading sandbox, pattern analogs.
