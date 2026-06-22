@@ -1,8 +1,8 @@
 # PULSE — Roadmap & Backlog
 
 **The *future* of the project.** Companion to `CLAUDE.md` (the *present* — current state)
-and `docs/PHASE_HISTORY.md` (the *past* — how we got here). Last updated 2026-06-15
-(T2.3 Phase 2.8.5 soft regime probabilities shipped).
+and `docs/PHASE_HISTORY.md` (the *past* — how we got here). Last updated 2026-06-22
+(Phase 8 per-spread gate shipped + deployed live; the Phase 2.8.x model backlog is closed).
 
 This file exists so nothing slips through the cracks again. It captures **every** task
 we planned, deferred, or owe someone — with a timeline and a copy-paste prompt per task.
@@ -27,13 +27,18 @@ we planned, deferred, or owe someone — with a timeline and a copy-paste prompt
 
 ---
 
-## ✅ SHIPPED — Always-on deployment (Phase 3.E, Hugging Face Spaces, 2026-06-15)
+## ✅ SHIPPED — Always-on deployment (Phase 3.E, Hugging Face Spaces, 2026-06-15; Phase 8 redeploy 2026-06-22)
 
 **Live, free, 24/7:** https://rohithpranav45-pulse.hf.space — the A/B paper book accumulates
 round-the-clock. Docker Space builds from `main` (shallow clone) + bakes the 534 MB parquet from a
 private HF Dataset (`rohithpranav45/pulse-data`); `backend/hf_persist.py` syncs `pulse_cache.db`
 to/from that Dataset so it survives HF's ephemeral storage; a GitHub Action pings `/api/health`
 every 6h to beat the 48h idle-sleep. Build files + runbook: `deploy/hf_space/` + `deploy/HF_DEPLOY.md`.
+
+> **2026-06-22 — Phase 8 deployed + verified live.** Factory rebuild pulled the merged `main`;
+> `/api/regime/perspread_gate` → 200, `gated_blend:true` (Space var `PULSE_GATED_BLEND=1`), new panels
+> render. The earlier "regime endpoints broken / joblib missing" state is fully resolved (sklearn is in
+> the image). `as_of` = baked-settle by design (HF runs the parquet lake, not the desk `I:\` live feed).
 
 > **Operate it:** push to `main` → *Factory rebuild* the Space (pulls latest code). Refresh data →
 > re-run `deploy/hf_space/upload_data.py` then rebuild. Secrets live in the Space settings.
@@ -46,12 +51,15 @@ valid for any VPS/Oracle host.
 
 ---
 
-## 🔴 ACTIVE NOW — Phase 3.1: live analysis engine + signal log (mentor directive 2026-06-15)
+## 🟢 FUNCTIONALLY COMPLETE — Phase 3.1: live analysis engine + signal log (mentor directive 2026-06-15)
 
 Mentor: "run your framework on live market data" + "add a trade/signal log to the dashboard
 (timestamp, regime, instrument, rationale, confidence, subsequent performance)." Feed = per-day
-SQLite 15-min bar files on `I:\Public\Siddharth Raj\lightstreamer_data\`. Full context: memory
-`pulse-live-feed` + CLAUDE.md §1 Phase 3.1.
+SQLite 15-min bar files on `I:\Public\Summer Interns Energy\DB\` (the **live** recorder; the
+`…/Siddharth Raj/lightstreamer_data/` path is the **dead** old recorder — ignore it). Backend + the
+Signal Log dashboard tab shipped and verified live; remaining items are operational (L2) + WTI
+enablement. Full context: CLAUDE.md §1 Phase 3.1. Since then the desk also gained the auto-trade desk
+(Phase 3/4), live feature overlay, decorrelated selection, and the Phase 8 per-spread gate.
 
 **✅ Backend shipped + verified (2026-06-15):** `research/live_feed.py` (real spreads + curve from the
 share), `research/live_engine.py` (overlays live snapshot onto the ranker; additive
@@ -165,12 +173,37 @@ hard pooled almost exactly; baseline still wins 4/6. Phase 2.8 acceptance bar (`
 Raw tape `pooled_soft_trades.json` (10,587 rows). Composite-soft available via
 `python -m backend.research.walkforward --soft-only --composite` but not run this sprint —
 the pooled finding makes a flip unlikely (flat-prior composite ≈ global ≈ baseline).
-**T2.4 — 2.8.7: multi-horizon sweep.** `[M]` — evaluate 5/20/60-day horizons, pick the best per spread (`FORWARD_DAYS`).
-**T2.5 — 2.8.9: HMM / change-point regime detection.** `[L]` — data-driven regimes vs the hand-set thresholds.
-**T2.6 — 2.8.10: portfolio-level vol targeting.** `[M]` — size the blended book to a vol target (addresses the baseline-dominated max-DD, gotcha 30).
-**T2.7 — conformal prediction bands.** `[M]` — calibrated prediction intervals (deferred when 2.8.3 took its slot).
-**T2.8 — per-spread sizing override.** `[S]` — config map to half-size only `brent_fly_123` (the Phase-2.7 win) without sizing the rest.
-**T2.9 — 2.8.11: end-of-phase methodology PDF + CLAUDE.md refresh.** `[S]` — do once Phase 2.8 closes.
+**T2.4 — 2.8.7: multi-horizon sweep.** `[M]` ✅ **DONE 2026-06-19** — 5/10/20/30d exit-horizon sweep
+(pure post-processing over the baseline + global tapes, `--horizon-only`). Verdict: the two engines'
+edges live at different horizons — baseline reverts slowly (NET Sharpe peaks at **30d**, +0.530), the
+global regime model carries a faster signal (peaks ~**10d**, +0.451; front spreads at 5d). Corroborates
+the live 30-day time-stop on the baseline-led book. Read the *ranking* across H (longer horizons are
+overlap-inflated); doesn't overturn the headline.
+**T2.5 — 2.8.9: HMM / change-point regime detection.** `[L]` ✅ **DONE 2026-06-19** — `regime_hmm.py`
+(GMM + causal sticky-HMM over curve level + 5d change), `--hmm-only`. Verdict: HMM K=3 NET **+0.289**
+trails baseline/global, ties hard pooled — *learning* the boundary doesn't beat the hard cuts either;
+the regime **partition isn't the binding constraint**. Honest positives: relocates the contango cut
+−$2 → −$0.81, and it's a front-curve win (beats baseline on brent_m1_m2 / wti_m1_m2).
+**T2.6 — 2.8.10: portfolio-level vol targeting.** `[M]` ✅ **DONE 2026-06-22** — `vol_target.py`
+(reuses `shock_engine.risk_scale` + decorrelation + a corr-based book overlay), `--voltarget-only`.
+Verdict: **a drawdown-management tool, not alpha** — halves the gated book's max-DD −281 → −112 (~60%)
+but trades away NET Sharpe +0.298 → +0.198 / Calmar 2.55 → 2.01. For a DD-constrained mandate the
+overlay earns its Sharpe; for a Sharpe-max mandate the baseline wins.
+**T2.10 — Phase 8: per-spread gate.** `[M]` ✅ **DONE + DEPLOYED 2026-06-22** — replaces the uniform
+global gate with a per-spread enable decision made walk-forward (regime leg fires for a spread only
+where its OOS NET Sharpe beat baseline; `gate_config.py` shared by live + walk-forward, `--perspread-gate-only`).
+Verdict: lifts the gated/regime book **+0.298 → +0.374** (baseline parity +0.372) by enabling regime on
+exactly {wti_m1_m2, wti_fly_123}; doesn't beat baseline but makes the regime book competitive. Surfaced
+on the REGIME tab (Per-spread gate panel + Decorrelated book panel) + `/api/regime/perspread_gate`; live.
+> **Phase 2.8.x model backlog is now COMPLETE.** Splitting (2.8.4), softening (2.8.5), long history (2.8.8),
+> multi-horizon (2.8.7), data-driven regimes (2.8.9), vol-targeting (2.8.10), and per-spread gating (Phase 8)
+> all shipped. **Baseline +0.372 remains the NET-Sharpe headline across every variant**; the per-spread-gated
+> regime book now matches it. The conventional model knobs are tapped out — the remaining T2.7/T2.8 below are
+> polish, and the live A/B verdict (T1.2) is the only thing that could promote the regime book over baseline.
+
+**T2.7 — conformal prediction bands.** `[M]` — calibrated prediction intervals (deferred when 2.8.3 took its slot). *Polish — low priority now baseline is the headline.*
+**T2.8 — per-spread sizing override.** `[S]` — config map to half-size only `brent_fly_123` (the Phase-2.7 win) without sizing the rest. *Polish.*
+**T2.9 — 2.8.11: end-of-phase methodology PDF + CLAUDE.md refresh.** `[S]` ✅ **effectively DONE** — the PDF is regenerated each leg (now 29.5 kB through Phase 8) and CLAUDE.md §1 is kept current per sprint.
 > ▶ **Generic Tier-2 prompt:** `Read CLAUDE.md in pulse/, then do [TASK ID + name] from docs/ROADMAP.md Tier 2. Reuse the existing research/ harness; report the honest verdict vs baseline; regenerate the methodology PDF. Don't multi-task; update CLAUDE.md + docs/ROADMAP.md and stop.`
 
 ---
@@ -209,9 +242,10 @@ justified by measurement, not guesswork. Most are **only worth doing if a real a
 
 | When | Focus |
 |---|---|
-| **This week** | D1 finish deploy *(when capacity lands)* · ~~T1.1 invariants test~~ ✅ · T1.3 send mentor asks · ~~T2.1 extended walk-forward~~ ✅ |
-| **+1–2 weeks** | T1.2 read the A/B verdict → production-mode decision · start T2.5 (HMM/change-point) — with both T2.2 (split) and T2.3 (soften) ruled out as headline lifts, T2.5 is the credible remaining regime route |
-| **Internship tail** | Tier 2 model lifts as time allows (T2.3–T2.8) · T2.9 close out Phase 2.8 |
+| **Done** | ~~deploy~~ ✅ (HF, + Phase 8 redeploy) · ~~T1.1 invariants~~ ✅ · ~~T2.1 extended walk-forward~~ ✅ · ~~T2.2 global~~ ✅ · ~~T2.3 soft~~ ✅ · ~~T2.4 multi-horizon~~ ✅ · ~~T2.5 HMM~~ ✅ · ~~T2.6 vol-target~~ ✅ · ~~Phase 8 per-spread gate~~ ✅ |
+| **Owner actions (you)** | T1.3 send mentor asks (WTI daily file + 7 sign-offs, drafted in `mentor_followups.md`) · desk ops: reboot for port 5000, pin/retrain sklearn, retrain WTI on real feed before `include_wti` |
+| **Self-accumulating** | T1.2 read the A/B verdict once ≥30 closed trades/arm — the only thing that could promote the regime book over baseline as the production default |
+| **Optional polish** | T2.7 conformal bands · T2.8 per-spread sizing override (low value now baseline is the headline) |
 | **Only if needed** | Tier 3 hardening (real always-on usage) · Tier 4 opportunistically while in the code |
 
 ---
