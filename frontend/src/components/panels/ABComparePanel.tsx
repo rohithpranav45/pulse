@@ -8,6 +8,7 @@ import { GitBranch, Play, RotateCcw, TrendingUp, TrendingDown, Minus } from 'luc
 import { api } from '@/lib/api';
 import { usePolling } from '@/lib/hooks';
 import type { ABReportData, ABArmMetrics, ABArmEquityPoint } from '@/lib/api';
+import type { ABBacktestVerdict } from '@/lib/api-types';
 
 /**
  * Phase 2.8.6-followup — A/B paper-test comparison panel.
@@ -110,6 +111,70 @@ function EquityChart({ pooled, gated }: { pooled: ABArmEquityPoint[]; gated: ABA
   );
 }
 
+// The instant, statistically-strong answer from the walk-forward backtest tapes
+// (thousands of closed trades) — shown ABOVE the slow live forward book so the
+// panel always leads with a real verdict instead of "accumulating forever".
+function BacktestVerdictBlock({ bv }: { bv?: ABBacktestVerdict | null }) {
+  if (!bv || !bv.available) return null;
+  const arms = bv.arms ?? {};
+  const p = bv.welch?.p_value;
+  const tied = bv.verdict === 'tied';
+  const tone: 'gold' | 'bull' = tied ? 'gold' : 'bull';
+  const label = bv.verdict === 'pooled_wins' ? 'WINNER: POOLED'
+    : bv.verdict === 'gated_wins' ? 'WINNER: GATED'
+    : 'STATISTICALLY TIED';
+
+  const tiles: { key: 'pooled' | 'gated' | 'baseline'; name: string; highlight?: boolean }[] = [
+    { key: 'pooled',   name: 'pooled' },
+    { key: 'gated',    name: 'gated (default)', highlight: true },
+    { key: 'baseline', name: 'baseline' },
+  ];
+
+  return (
+    <div className="mb-3 p-3 rounded-md border border-gold/30 bg-gold/5">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-mono font-semibold tracking-wider text-gold">
+            BACKTEST VERDICT — pooled vs gated
+          </span>
+          <Chip tone={tone as any}>{label}</Chip>
+          {p != null && Number.isFinite(p) && (
+            <span className="text-[10px] font-mono text-text-tertiary">Welch p = {p.toFixed(3)}</span>
+          )}
+        </div>
+        <span className="text-[10px] font-mono text-text-tertiary" title={bv.source ?? ''}>
+          {((arms.pooled?.n_closed ?? 0) + (arms.gated?.n_closed ?? 0)).toLocaleString()} closed trades · 2018–2026
+        </span>
+      </div>
+      <div className="grid grid-cols-3 gap-2 mb-2">
+        {tiles.map(t => {
+          const a = (arms as any)[t.key] as ABBacktestArm | undefined;
+          return (
+            <div key={t.key} className={clsx(
+              'rounded border px-2.5 py-2',
+              t.highlight ? 'border-accent-blue/40 bg-accent-blue/5' : 'border-border/40 bg-bg-card/40',
+            )}>
+              <div className="text-[9px] font-mono uppercase tracking-widest text-text-muted">{t.name}</div>
+              <div className={clsx('text-[18px] font-mono font-bold tabular leading-tight',
+                t.key === 'baseline' ? 'text-text-primary' : 'text-text-secondary')}>
+                {a?.sharpe_net != null ? `${a.sharpe_net >= 0 ? '+' : ''}${a.sharpe_net.toFixed(3)}` : '—'}
+              </div>
+              <div className="text-[9px] font-mono text-text-tertiary">
+                NET Sharpe · hit {a?.hit_rate != null ? `${(a.hit_rate * 100).toFixed(0)}%` : '—'}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="text-[10.5px] font-mono leading-relaxed text-text-secondary">
+        {bv.verdict_note}
+      </div>
+    </div>
+  );
+}
+
+type ABBacktestArm = NonNullable<NonNullable<ABBacktestVerdict['arms']>['pooled']>;
+
 function ArmCard({
   title,
   description,
@@ -188,6 +253,17 @@ export function ABComparePanel() {
   const pooledEq = useMemo(() => data?.arms?.pooled?.equity_curve ?? [], [data]);
   const gatedEq  = useMemo(() => data?.arms?.gated?.equity_curve  ?? [], [data]);
 
+  // Accumulation state — the panel looks "blank" when nothing has closed yet, so
+  // surface the live state explicitly instead of a wall of "—".
+  const pClosed = data?.arms?.pooled?.n_closed ?? 0;
+  const gClosed = data?.arms?.gated?.n_closed ?? 0;
+  const pOpen   = data?.arms?.pooled?.n_open ?? 0;
+  const gOpen   = data?.arms?.gated?.n_open ?? 0;
+  const pOpened = data?.arms?.pooled?.n_opened ?? 0;
+  const gOpened = data?.arms?.gated?.n_opened ?? 0;
+  const totalClosed = pClosed + gClosed;
+  const accumulating = !!data && totalClosed === 0;
+
   const verdict = data?.verdict;
   const verdictNote = data?.verdict_note;
   const stop = data?.stop_criteria;
@@ -217,7 +293,7 @@ export function ABComparePanel() {
   return (
     <Panel
       title="A/B Paper-Test — Pooled vs Gated"
-      subtitle="Phase 2.8.6-followup · live execution validation"
+      subtitle="backtest verdict (instant, 13.8k trades) + live forward confirmation"
       accent="gold"
       right={headerRight}
     >
@@ -228,6 +304,17 @@ export function ABComparePanel() {
 
       {data && (
         <>
+          {/* Backtest verdict — the instant, strong answer (leads the panel) */}
+          <BacktestVerdictBlock bv={data.backtest_verdict} />
+
+          {/* Live forward book — slow real-time confirmation of the backtest */}
+          <div className="flex items-center gap-2 mb-2 mt-1">
+            <span className="text-[10px] font-mono uppercase tracking-widest text-text-muted">
+              Live forward book — slow confirmation
+            </span>
+            <div className="flex-1 h-px bg-border/40" />
+          </div>
+
           {/* Verdict ribbon */}
           <div className="flex items-center justify-between gap-3 mb-3 p-2 rounded-md border border-border bg-bg-card">
             <div className="flex items-center gap-2">
@@ -243,6 +330,22 @@ export function ABComparePanel() {
               {verdictNote || 'waiting on trades…'}
             </div>
           </div>
+
+          {/* Accumulating banner — explains the "blank" state honestly instead of
+              leaving the user staring at empty cards + dashes. */}
+          {accumulating && (
+            <div className="mb-3 p-2.5 rounded-md border border-neut/30 bg-neut/5 text-[11px] font-mono leading-relaxed text-text-secondary">
+              <span className="text-neut font-semibold">Accumulating — no trades have closed yet.</span>{' '}
+              Opened so far: <span className="text-gold">{pOpened} pooled</span> /{' '}
+              <span className="text-accent-blue">{gOpened} gated</span> ({pOpen}+{gOpen} still open) across{' '}
+              {data.sessions?.length ?? 0} session(s) over {data.days_elapsed ?? 0} day(s). The equity curve,
+              t-tests and verdict only appear once trades <span className="text-text-primary">close</span> —
+              and trades hold up to ~6 weeks (30 trading-day time-stop), so closes are slow. Two known limits
+              gate this: the run times out at {stop?.max_days ?? 14} days (shorter than one trade's max hold),
+              and it needs ≥{stop?.min_n_closed ?? 30} closed per arm. Use{' '}
+              <span className="text-gold">TICK</span> to push a signal now; closes still take time.
+            </div>
+          )}
 
           {/* Two arm cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">

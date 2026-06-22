@@ -350,6 +350,101 @@ def _welch_t(a: list[float], b: list[float]) -> dict:
     }
 
 
+_BACKTEST_VERDICT_CACHE: dict | None = None
+
+
+def backtest_verdict(*, force: bool = False) -> dict:
+    """
+    The pooled-vs-gated verdict from the walk-forward BACKTEST tapes — available
+    instantly, on thousands of CLOSED trades, instead of waiting weeks for the
+    live forward book to close 30/arm.
+
+    Reads `pooled_trades.json` / `gated_trades.json` / `baseline_trades.json`
+    (the same tapes the methodology PDF is built from), applies the Phase 2.8.6
+    NET cost model (`walkforward._cost_for`, keyed by spread), and runs the same
+    Welch t-test on per-trade NET PnL that the live arms use. Cached per process
+    (the tapes only change when the walk-forward reruns).
+    """
+    global _BACKTEST_VERDICT_CACHE
+    if _BACKTEST_VERDICT_CACHE is not None and not force:
+        return _BACKTEST_VERDICT_CACHE
+
+    import json
+    import os
+
+    base_dir = os.path.join(os.path.dirname(__file__), "..", "data", "research")
+    try:
+        from research.walkforward import _cost_for as _wf_cost
+    except Exception:  # pragma: no cover — walkforward import guard
+        _wf_cost = lambda r: COST_PER_SPREAD_RT.get(r.get("spread", ""), COST_DEFAULT_RT)
+
+    def _net_from_tape(name: str) -> list[float]:
+        path = os.path.join(base_dir, name)
+        if not os.path.exists(path):
+            return []
+        with open(path) as f:
+            rows = json.load(f)
+        out = []
+        for r in rows:
+            if r.get("direction") == "NEUTRAL" or r.get("fwd_pnl") is None:
+                continue
+            out.append(float(r["fwd_pnl"]) - float(_wf_cost(r)))
+        return out
+
+    def _stat(net: list[float]) -> dict:
+        n = len(net)
+        if n < 2:
+            return {"n_closed": n, "hit_rate": None, "mean_pnl_net": None, "sharpe_net": None}
+        m = sum(net) / n
+        v = sum((x - m) ** 2 for x in net) / (n - 1)
+        s = math.sqrt(v) if v > 0 else 0.0
+        return {
+            "n_closed":     n,
+            "hit_rate":     round(sum(1 for x in net if x > 0) / n, 4),
+            "mean_pnl_net": round(m, 4),
+            # 20-day horizon → annualise √(252/20), matching walkforward._metrics.
+            "sharpe_net":   round((m / s) * math.sqrt(252.0 / 20.0), 3) if s > 0 else None,
+        }
+
+    pooled = _net_from_tape("pooled_trades.json")
+    gated  = _net_from_tape("gated_trades.json")
+    base   = _net_from_tape("baseline_trades.json")
+
+    if not pooled or not gated:
+        return {"available": False,
+                "error": "backtest tapes missing — run the walk-forward first"}
+
+    welch = _welch_t(pooled, gated)
+    p = welch.get("p_value")
+    arm_p, arm_g = _stat(pooled), _stat(gated)
+    sp, sg = arm_p["sharpe_net"], arm_g["sharpe_net"]
+    if p is not None and p < P_VALUE_LT:
+        winner = "pooled" if (sp or 0) > (sg or 0) else "gated"
+        verdict = f"{winner}_wins"
+        note = (f"backtest: {winner} NET Sharpe higher, distinguishable "
+                f"(Welch p={p} < {P_VALUE_LT}, n={arm_p['n_closed']}/{arm_g['n_closed']})")
+    else:
+        verdict = "tied"
+        note = (f"backtest: pooled +{sp} vs gated +{sg} NET Sharpe — statistically tied "
+                f"(Welch p={p}); keep the current gated default. Baseline (+{base and _stat(base)['sharpe_net']}) "
+                f"is the real headline.")
+
+    out = {
+        "available":   True,
+        "source":      "walk-forward tapes (2018–2026)",
+        "arms": {
+            "pooled":   arm_p,
+            "gated":    arm_g,
+            "baseline": _stat(base) if base else None,
+        },
+        "welch":       welch,
+        "verdict":     verdict,
+        "verdict_note": note,
+    }
+    _BACKTEST_VERDICT_CACHE = out
+    return out
+
+
 def get_report() -> dict:
     """
     Build the full A/B report for the dashboard.
@@ -480,6 +575,9 @@ def get_report() -> dict:
         },
         "verdict":     verdict,
         "verdict_note":note,
+        # The instant, statistically-strong answer from the backtest tapes — the
+        # live forward book above is slow confirmation of this.
+        "backtest_verdict": backtest_verdict(),
     }
 
 
