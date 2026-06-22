@@ -8,7 +8,7 @@ spread engine), and serves a React dashboard with a paper-trading book.
   DuckDB/Parquet over a 3.5 GB `/Data` desk feed · sklearn + XGBoost/LightGBM/CatBoost
 - **Run (local):** `python start.py` from the repo root → http://127.0.0.1:5000
 - **Last updated:** 2026-06-22 (Phase 8 — per-spread gate: replaces the uniform global gate (BACK × winners × |z|≥0.5 on every spread) with a **per-spread enable decision** made walk-forward — the regime leg fires for a spread only where its OOS NET Sharpe beat baseline. **Lifts the gated/regime book +0.298 → +0.374 NET Sharpe, reaching baseline parity (+0.372)** by enabling regime on exactly {wti_m1_m2, wti_fly_123} and routing every other spread to the rolling-z baseline. Doesn't beat baseline (consistent with the whole 2.8.x arc) but finally makes the regime book competitive. Shared decision logic in `gate_config.py` (live ↔ walk-forward can't drift); live default-on, `PULSE_PERSPREAD_GATE=0` reverts. Prior: Phase 7 — 2.8.10 portfolio vol-targeting halved the gated book's max-DD −281 → −112 but traded away NET Sharpe +0.298 → +0.198 / Calmar 2.55 → 2.01)
-- **Live:** https://rohithpranav45-pulse.hf.space (free HF Space, A/B book accumulating 24/7 — **regime endpoints currently failing**, see §1 below)
+- **Live:** https://rohithpranav45-pulse.hf.space (free HF Space, A/B book accumulating 24/7 — **Phase 8 deployed + verified live 2026-06-22**; regime endpoints healthy, `/api/regime/perspread_gate` serving, `PULSE_GATED_BLEND=1` set so the live per-spread gate is active. Runs on the baked parquet lake, so `as_of` = latest baked settle, not the desk `I:\` live feed)
 
 > 🧭 **Three docs, one per tense:**
 > **this file = present** (current state · how to run · architecture · gotchas) ·
@@ -481,20 +481,22 @@ uniformly) with **per-spread thresholds** where the lift table justifies them, w
   2 invariants (`test_perspread_gate_is_single_source`, `test_perspread_gate_degrades_to_global_gate`).
   **103 pytest green** (87 + 16). Methodology PDF regenerated (Phase 8 section, +1.7 kB → 29.5 kB).
 
-### 🚨 HF Spaces regime endpoints broken (root cause found, 2026-06-16)
-- `https://rohithpranav45-pulse.hf.space/api/regime/recommendation` and `/api/regime/backtest` return
-  `{"available": false}` silently. `/api/regime/drill/<spread>` surfaces the real error:
-  **`No module named 'joblib'`**.
-- Root cause: `requirements.txt` shipped without `scikit-learn` pinned, so the HF image installed
-  neither sklearn nor its transitive `joblib`. Every `pkl` load via `joblib.load` raises ImportError,
-  caught by `safe_fetch`, masked as "available: false". `/api/regime` (current regime, no pkls) and
-  `/api/regime/walkforward` + `/api/regime/ab` (cached JSON / SQLite) still work — that's why the
-  failure looked partial.
-- **Fix already in local working tree** (this session): added `scikit-learn==1.7.0` to `requirements.txt`.
-  When the user is ready, push to `main` → HF auto-rebuilds with sklearn + joblib → all regime
-  endpoints recover. Until then, the dashboard's Regime tab shows partial data only.
-- User-deferred: pushing was held back so the HF Space stays stable as a presentation backup
-  (today, 2026-06-16). Local desk version is what's being demoed.
+### ✅ HF Spaces — Phase 8 deployed + verified live (2026-06-22)
+- **Deployed.** PR #5 (Phase 7+8) merged to `main`; user triggered a Factory rebuild (HF does NOT
+  auto-rebuild on GitHub push — it needs Settings → *Factory rebuild*, which shallow-clones the latest
+  `main`; deploy/HF_DEPLOY.md §6). Verified live post-rebuild: `/api/regime/perspread_gate` → **200** with
+  `{baseline 0.372, global_gate 0.298, perspread 0.374}`, `enabled_latest:[wti_fly_123, wti_m1_m2]`;
+  `/api/regime/recommendation` → `available:true, gated_blend:true` (Space var `PULSE_GATED_BLEND=1` set →
+  live per-spread gate + decorrelated `portfolio` + `gated_summary` all active); dashboard HTML + the new
+  Decorrelated-book / Per-spread-gate panels render.
+- **The earlier "broken" state is fully resolved.** The `scikit-learn==1.7.0` + transitive `joblib` fix has
+  been in the running image (pkls load fine; `/api/regime/drill/<spread>` returns real analogs). The
+  `No module named 'joblib'` symptom is gone.
+- **`as_of` = latest baked settle (2026-05-26), by design** — the HF Space runs on the **baked parquet
+  lake**, not the office `I:\` 15-min live feed (only the desk process sees `I:\`). So the public Space is
+  the A/B book + framework on baked daily settles; the live-feed `as_of` advancing is a desk-only behaviour.
+- **Updating going forward:** merge to `main` → **Factory rebuild** the Space (no token on this desk; the
+  keep-alive Action only pings `/api/health`, it does not rebuild).
 
 ### 🔄 In progress — **Phase 3.1: live analysis engine + signal log** (mentor directive, 2026-06-15)
 Mentor asked everyone past the historical-validation phase to **run the framework on live market
