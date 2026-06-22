@@ -195,6 +195,13 @@ where its OOS NET Sharpe beat baseline; `gate_config.py` shared by live + walk-f
 Verdict: lifts the gated/regime book **+0.298 → +0.374** (baseline parity +0.372) by enabling regime on
 exactly {wti_m1_m2, wti_fly_123}; doesn't beat baseline but makes the regime book competitive. Surfaced
 on the REGIME tab (Per-spread gate panel + Decorrelated book panel) + `/api/regime/perspread_gate`; live.
+**T2.11 — GARCH conditional vol (risk-layer study).** `[M]` ✅ **DONE 2026-06-22** — `garch_vol.py`
+(causal plain-GARCH + GJR-GARCH forecast via `arch`, drop-in for `vol_target.spread_vol_frame`),
+`--garch-only`. Verdict: as a 1-step *forecast* GARCH loses to trailing-20d (QLIKE, 3/6 spreads); as the
+*sizing input* to Phase 7 vol-targeting it materially helps (Calmar 2.01 → 3.21, Sharpe +0.198 → +0.285,
+maxDD −112 → −93, robust across specs) — a **risk-layer refinement, not alpha**; still below baseline.
+Research-only dep; live path unchanged.
+
 > **Phase 2.8.x model backlog is now COMPLETE.** Splitting (2.8.4), softening (2.8.5), long history (2.8.8),
 > multi-horizon (2.8.7), data-driven regimes (2.8.9), vol-targeting (2.8.10), and per-spread gating (Phase 8)
 > all shipped. **Baseline +0.372 remains the NET-Sharpe headline across every variant**; the per-spread-gated
