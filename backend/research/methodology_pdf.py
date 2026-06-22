@@ -1193,6 +1193,61 @@ def build_pdf(out_path: Path = _OUT_PDF) -> Path:
         story.append(Paragraph(psg_find, callout))
         story.append(Spacer(1, 6))
 
+    # ── GARCH risk-layer study (2026-06-22) ────────────────────────────────
+    garch = wf.get("garch") or {}
+    if garch and garch.get("trading"):
+        story.append(Paragraph("GARCH conditional vol — does it help the risk layer? (2026-06-22)", h2))
+        story.append(Paragraph(
+            "Phase 7 vol-targeting sizes each position by a <i>trailing 20-day realised</i> $/bbl vol. "
+            "This study asks whether a <b>GARCH conditional-vol forecast</b> (vol clustering — shocks beget "
+            "shocks; plain GARCH(1,1) and asymmetric GJR-GARCH, Student-t, fit causally on daily $/bbl "
+            "changes) does better. Two questions, two answers.",
+            note,
+        ))
+        fa = garch.get("forecast_accuracy") or {}
+        story.append(Paragraph(
+            f"<b>(1) As a 1-step forecast — no.</b> On QLIKE (lower=better), the trailing-20d window wins "
+            f"on the mean and on {fa.get('roll_wins')}-of-{fa.get('n_spreads')} spreads; GARCH/GJR only edge "
+            f"it on the two front spreads. Calendar spreads are low-and-stable-vol, where the clustering "
+            f"edge GARCH exploits on outright prices is muted.",
+            note,
+        ))
+        tr = garch.get("trading") or {}
+        order = ["decorrelated", "risk_parity", "parity_stress", "vol_target"]
+        rows = [["Variant (NET)", "realised-20d", "plain GARCH", "GJR-GARCH"]]
+        for name in order:
+            def _cell(src):
+                v = (tr.get(src) or {}).get(name) or {}
+                return (f"{_fmt(v.get('sharpe'),3)} / {_fmt(v.get('max_drawdown'),0)} / "
+                        f"{_fmt(v.get('calmar'),2)}")
+            rows.append([name, _cell("realised_20d"), _cell("plain_garch"), _cell("gjr_garch")])
+        gt = Table(rows, colWidths=[1.5*inch, 1.6*inch, 1.6*inch, 1.6*inch])
+        _style_table(gt)
+        story.append(gt)
+        story.append(Paragraph("Each cell: NET Sharpe / max-DD / Calmar. "
+                               "'decorrelated' has no vol scaling → identical across inputs (sanity check).",
+                               ParagraphStyle("Cap", parent=body, fontSize=7.5, textColor=colors.grey)))
+        story.append(Spacer(1, 4))
+        gj = (tr.get("gjr_garch") or {}).get("vol_target") or {}
+        rl = (tr.get("realised_20d") or {}).get("vol_target") or {}
+        base_s = ((costs.get("baseline_net") or {}).get("overall") or {}).get("sharpe") if costs else None
+        story.append(Paragraph(
+            f"<b>(2) As the sizing input — yes, materially.</b> Feeding GARCH vol into the full vol-target "
+            f"overlay lifts the book from realised-vol {_fmt(rl.get('sharpe'),3)} Sharpe / Calmar "
+            f"{_fmt(rl.get('calmar'),2)} to GJR-GARCH {_fmt(gj.get('sharpe'),3)} / Calmar "
+            f"{_fmt(gj.get('calmar'),2)} (max-DD {_fmt(rl.get('max_drawdown'),0)} → "
+            f"{_fmt(gj.get('max_drawdown'),0)}), <b>robust across plain and GJR</b>. This turns Phase 7 from "
+            f"a Sharpe-losing drawdown tool into a Calmar-improving one — vol-targeting doesn't need the best "
+            f"point forecast, it needs reactivity to vol onset (GARCH leads the lagging window) and sensible "
+            f"cross-sectional risk. <b>Verdict (graded):</b> a genuine <b>risk-layer refinement, not alpha</b> "
+            f"— it still sits below the baseline headline ({_fmt(base_s,3)} Sharpe / Calmar 4.99), so it does "
+            f"not change the conclusion; but it's the first lever that makes the vol-targeted regime book "
+            f"competitive on risk-adjusted terms. <b>Caveat:</b> the asymmetric (GJR) edge is small over plain "
+            f"GARCH, and the win is concentrated in risk-parity's cross-sectional reweighting.",
+            callout,
+        ))
+        story.append(Spacer(1, 6))
+
     story.append(Paragraph("Caveats &amp; next steps", h2))
     tight = ParagraphStyle("Tight", parent=body, fontSize=8, leading=10, spaceAfter=2)
     caveats = [

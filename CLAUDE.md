@@ -8,7 +8,7 @@ spread engine), and serves a React dashboard with a paper-trading book.
   DuckDB/Parquet over a 3.5 GB `/Data` desk feed · sklearn + XGBoost/LightGBM/CatBoost
 - **Run (local):** `python start.py` from the repo root → http://127.0.0.1:5000
 - **Last updated:** 2026-06-22 (Phase 8 — per-spread gate: replaces the uniform global gate (BACK × winners × |z|≥0.5 on every spread) with a **per-spread enable decision** made walk-forward — the regime leg fires for a spread only where its OOS NET Sharpe beat baseline. **Lifts the gated/regime book +0.298 → +0.374 NET Sharpe, reaching baseline parity (+0.372)** by enabling regime on exactly {wti_m1_m2, wti_fly_123} and routing every other spread to the rolling-z baseline. Doesn't beat baseline (consistent with the whole 2.8.x arc) but finally makes the regime book competitive. Shared decision logic in `gate_config.py` (live ↔ walk-forward can't drift); live default-on, `PULSE_PERSPREAD_GATE=0` reverts. Prior: Phase 7 — 2.8.10 portfolio vol-targeting halved the gated book's max-DD −281 → −112 but traded away NET Sharpe +0.298 → +0.198 / Calmar 2.55 → 2.01)
-- **Live:** https://rohithpranav45-pulse.hf.space (free HF Space, A/B book accumulating 24/7 — **regime endpoints currently failing**, see §1 below)
+- **Live:** https://rohithpranav45-pulse.hf.space (free HF Space, A/B book accumulating 24/7 — **Phase 8 deployed + verified live 2026-06-22**; regime endpoints healthy, `/api/regime/perspread_gate` serving, `PULSE_GATED_BLEND=1` set so the live per-spread gate is active. Runs on the baked parquet lake, so `as_of` = latest baked settle, not the desk `I:\` live feed)
 
 > 🧭 **Three docs, one per tense:**
 > **this file = present** (current state · how to run · architecture · gotchas) ·
@@ -481,20 +481,73 @@ uniformly) with **per-spread thresholds** where the lift table justifies them, w
   2 invariants (`test_perspread_gate_is_single_source`, `test_perspread_gate_degrades_to_global_gate`).
   **103 pytest green** (87 + 16). Methodology PDF regenerated (Phase 8 section, +1.7 kB → 29.5 kB).
 
-### 🚨 HF Spaces regime endpoints broken (root cause found, 2026-06-16)
-- `https://rohithpranav45-pulse.hf.space/api/regime/recommendation` and `/api/regime/backtest` return
-  `{"available": false}` silently. `/api/regime/drill/<spread>` surfaces the real error:
-  **`No module named 'joblib'`**.
-- Root cause: `requirements.txt` shipped without `scikit-learn` pinned, so the HF image installed
-  neither sklearn nor its transitive `joblib`. Every `pkl` load via `joblib.load` raises ImportError,
-  caught by `safe_fetch`, masked as "available: false". `/api/regime` (current regime, no pkls) and
-  `/api/regime/walkforward` + `/api/regime/ab` (cached JSON / SQLite) still work — that's why the
-  failure looked partial.
-- **Fix already in local working tree** (this session): added `scikit-learn==1.7.0` to `requirements.txt`.
-  When the user is ready, push to `main` → HF auto-rebuilds with sklearn + joblib → all regime
-  endpoints recover. Until then, the dashboard's Regime tab shows partial data only.
-- User-deferred: pushing was held back so the HF Space stays stable as a presentation backup
-  (today, 2026-06-16). Local desk version is what's being demoed.
+### ✅ GARCH conditional-vol — risk-layer study (2026-06-22)
+Question from the user: does **GARCH** add value here? Tested it as a graded leg (same standalone-merge
+pattern as Phase 7). New **`backend/research/garch_vol.py`** — causal one-step-ahead conditional-vol
+forecast (plain GARCH(1,1) + asymmetric GJR-GARCH, Student-t, fit on daily $/bbl spread *changes* via the
+`arch` package), refit every 21d with the variance recursion rolled daily between refits, annualised √252 →
+a **drop-in for `vol_target.spread_vol_frame`**. Leg: `python -m backend.research.walkforward --garch-only`
+(post-processing on the gated tape, no retrain) → `garch` report block + `costs.garch_vol_target_net` +
+lifts. **Two questions, two answers:**
+- **(1) As a 1-step forecast — no.** On QLIKE (lower=better, next-day variance), the trailing-20d window
+  *wins* on the mean (−0.91 vs GARCH −0.70 / GJR −0.64) and on **3/6 spreads**; GARCH/GJR only edge it on
+  the two front spreads. Calendar spreads are low-and-stable-vol, where GARCH's clustering edge (strong on
+  outright prices) is muted.
+- **(2) As the sizing input to Phase 7 vol-targeting — yes, materially.** Feeding GARCH vol into the full
+  vol-target overlay lifts the book **NET Sharpe +0.198 → +0.285, Calmar 2.01 → 3.21, max-DD −112 → −93**
+  (GJR; plain GARCH +0.277 / 3.03 / −96 — **robust across both specs**). The `decorrelated` (no-vol-scaling)
+  variant is identical across all three inputs (+0.251) — clean sanity check. This turns Phase 7 from a
+  *Sharpe-losing* DD tool into a *Calmar-improving* one: vol-targeting doesn't need the best point forecast,
+  it needs reactivity to vol onset (GARCH leads the lagging window) + sensible cross-sectional risk.
+- **Verdict (graded): a real risk-layer refinement, not alpha.** Still **below the baseline headline**
+  (+0.372 / Calmar 4.99), so it doesn't change the conclusion — but it's the first lever that makes the
+  vol-targeted regime book competitive on risk-adjusted terms. Research-only: the live app never imports
+  `garch_vol`; vol-targeting isn't the live default book (the desk trades the decorrelated gated selection),
+  so nothing in the live path changes. **`arch==8.0.0`** added to `requirements.txt` (research-only dep).
+- **Tests:** new `tests/test_garch_vol.py` (8 — QLIKE loss, frame shape + NaN-prefix, **causal
+  prefix-stability** [σ at day t unchanged when future data is appended], annualisation, GJR≠plain,
+  accuracy-table shape, degenerate-series no-crash; hermetic, synthetic series, `importorskip('arch')`).
+  **111 pytest green** (103 + 8). Methodology PDF regenerated (GARCH section, +1.8 kB → 31.3 kB). Also
+  fixed gotcha 4 at the source — `walkforward.__main__` now forces UTF-8 stdout so the →/—/μ summary
+  glyphs never crash a cp1252 console.
+
+### ✅ A/B panel — lead with the backtest verdict (2026-06-22)
+The A/B panel looked "broken / always blank" — because the **live forward book can't reach a verdict
+fast**: the run times out at `MAX_DAYS=14` but a trade holds up to 30 *trading* days (~6 weeks), and it
+needs ≥30 *closed*/arm — jointly unreachable, and on the sleepy free HF Space the daily tick barely fires
+(2 sessions in 7 days; the keep-alive only pings `/api/health`). So both arms sat at `n_closed=0` → null
+metrics → empty cards. **Not a bug; a cadence mismatch.** Fix = surface the answer that already exists.
+- **New `ab_test.backtest_verdict()`** — computes the pooled-vs-gated comparison **instantly from the
+  walk-forward tapes** (`pooled_trades.json` / `gated_trades.json` / `baseline_trades.json`, NET via
+  `walkforward._cost_for`), reusing the existing `_welch_t`. Verdict on **13,758 closed trades**: pooled
+  **+0.293** vs gated **+0.298** NET Sharpe, **Welch p=0.74 → statistically tied**; baseline **+0.372**
+  is the headline. Conclusion: keep the `gated` default. Cached per process; embedded in `get_report()`
+  so `/api/regime/ab` carries `backtest_verdict`.
+- **`ABComparePanel.tsx`** now **leads with a Backtest-verdict block** (pooled/gated/baseline NET Sharpe
+  tiles + the TIED/winner chip + Welch p + 13.8k-trade count), then shows the live forward book below
+  under a "slow confirmation" divider — with an honest **accumulating banner** (opened/closed counts +
+  why it's slow) instead of empty dashes. So the panel always shows a real, defensible answer on open.
+- **Tests:** new `tests/test_ab_backtest_verdict.py` (5 — verdict shape, verdict↔(welch,sharpe) consistency,
+  `get_report` embeds it, Welch helper basics; tape-gated skipif). **114 pytest green** (111 + 3 active).
+  `npm run build` + `tsc` clean. **Takeaway for the user/mentor: the pooled-vs-gated question is already
+  answered (tied; keep gated; baseline wins) — the live A/B was only ever slow confirmation of that.**
+
+### ✅ HF Spaces — Phase 8 deployed + verified live (2026-06-22)
+- **Deployed.** PR #5 (Phase 7+8) merged to `main`; user triggered a Factory rebuild (HF does NOT
+  auto-rebuild on GitHub push — it needs Settings → *Factory rebuild*, which shallow-clones the latest
+  `main`; deploy/HF_DEPLOY.md §6). Verified live post-rebuild: `/api/regime/perspread_gate` → **200** with
+  `{baseline 0.372, global_gate 0.298, perspread 0.374}`, `enabled_latest:[wti_fly_123, wti_m1_m2]`;
+  `/api/regime/recommendation` → `available:true, gated_blend:true` (Space var `PULSE_GATED_BLEND=1` set →
+  live per-spread gate + decorrelated `portfolio` + `gated_summary` all active); dashboard HTML + the new
+  Decorrelated-book / Per-spread-gate panels render.
+- **The earlier "broken" state is fully resolved.** The `scikit-learn==1.7.0` + transitive `joblib` fix has
+  been in the running image (pkls load fine; `/api/regime/drill/<spread>` returns real analogs). The
+  `No module named 'joblib'` symptom is gone.
+- **`as_of` = latest baked settle (2026-05-26), by design** — the HF Space runs on the **baked parquet
+  lake**, not the office `I:\` 15-min live feed (only the desk process sees `I:\`). So the public Space is
+  the A/B book + framework on baked daily settles; the live-feed `as_of` advancing is a desk-only behaviour.
+- **Updating going forward:** merge to `main` → **Factory rebuild** the Space (no token on this desk; the
+  keep-alive Action only pings `/api/health`, it does not rebuild).
 
 ### 🔄 In progress — **Phase 3.1: live analysis engine + signal log** (mentor directive, 2026-06-15)
 Mentor asked everyone past the historical-validation phase to **run the framework on live market
@@ -584,6 +637,8 @@ open 80/443 (security list + iptables), `docker compose up -d --build`, hand ove
 | HMM curve-regime detector (standalone) | `python -m backend.research.regime_hmm` |
 | Walk-forward, **vol-target leg** (Phase 7, ~5 s, no retrain) | `python -u -m backend.research.walkforward --voltarget-only` |
 | Walk-forward, **per-spread gate leg** (Phase 8, ~5 s, no retrain) | `python -u -m backend.research.walkforward --perspread-gate-only` |
+| Walk-forward, **GARCH risk-layer study** (~2 min, no retrain) | `python -u -m backend.research.walkforward --garch-only` |
+| GARCH conditional-vol forecast accuracy (standalone) | `python -m backend.research.garch_vol` |
 | Portfolio vol-target sizing (standalone) | `python -m backend.research.vol_target` |
 | Live snapshot from feed (Phase 3.1) | `python -m backend.research.live_feed` (set `PULSE_LIVE_FEED_DIR`) |
 | Live recommendation on current market | `python -m backend.research.live_engine` |
@@ -634,6 +689,7 @@ pulse/
 | `gate_config.py` | Phase 8 (2026-06-22) — per-spread gate: shared decision logic (regime fires per spread only where its OOS NET Sharpe beat baseline) imported by both `live_ranker` + `walkforward` so the live gate and the backtested gate can't drift |
 | `regime_hmm.py` | Phase 6 (2.8.9) — data-driven curve regime detector (GMM + causal sticky-HMM over curve level + 5d change); replaces the hard −$2/+$5 thresholds for the `--hmm-only` walk-forward leg |
 | `vol_target.py` | Phase 7 (2.8.10) — portfolio vol-targeting: reweights the gated tape via `shock_engine.risk_scale` (per-position vol-target × stress de-risk) + `gated_select` decorrelation + a corr-based book overlay; feeds the `--voltarget-only` walk-forward leg |
+| `garch_vol.py` | GARCH study (2026-06-22) — causal conditional-vol forecast (plain GARCH + GJR-GARCH via `arch`); drop-in for `vol_target.spread_vol_frame`. Feeds `--garch-only`: improves the vol-target risk layer (Calmar 2.01→3.21) but stays below baseline — risk refinement, not alpha. Research-only (live app never imports it) |
 | `shock_engine.py` | Phase 2.8.9/10 — GMM stress detector + causal HMM + circuit-breaker (`breaker_active`) |
 | `auto_desk.py` | Phase 3 (06-19) — reconciles the paper book to `portfolio.selected` on the live feed during market hours; gates entries with the shock breaker; exits owned by `paper_trading.mark_to_market` |
 | `walkforward.py` | expanding-window backtest; writes trade tapes + `walkforward_report.json`. Phase 5: `--horizon-only` (5/10/20/30d exit-horizon sweep, post-processing) + `--featsel-only` (Lasso stability-selection lean global leg) |

@@ -66,7 +66,25 @@ export interface ABReportData {
   stop_criteria?: ABStopCriteria | null;
   verdict?: string | null;
   verdict_note?: string | null;
+  backtest_verdict?: ABBacktestVerdict | null;
   [key: string]: unknown;
+}
+
+export interface ABBacktestArm {
+  n_closed?: number | null;
+  hit_rate?: number | null;
+  mean_pnl_net?: number | null;
+  sharpe_net?: number | null;
+}
+
+export interface ABBacktestVerdict {
+  available: boolean;
+  error?: string;
+  source?: string;
+  arms?: { pooled?: ABBacktestArm | null; gated?: ABBacktestArm | null; baseline?: ABBacktestArm | null };
+  welch?: ABWelch | null;
+  verdict?: string | null;
+  verdict_note?: string | null;
 }
 
 export interface ABStopCriteria {
