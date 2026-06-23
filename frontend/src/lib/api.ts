@@ -163,6 +163,15 @@ export const api = {
                             getJSON(`/api/regime/calibration?include=${include}`),
   // Phase 8 — per-spread gate summary
   regimePerspreadGate:    () => getJSON('/api/regime/perspread_gate'),
+  // Inventory Surprise Impact Model — EIA crude release framework
+  regimeInventory:        () => getJSON('/api/regime/inventory'),
+  regimeInventoryLive:    (actual?: number, consensus?: number) => {
+                            const p = new URLSearchParams();
+                            if (actual != null) p.set('actual', String(actual));
+                            if (consensus != null) p.set('consensus', String(consensus));
+                            const qs = p.toString();
+                            return getJSON(`/api/regime/inventory${qs ? '?' + qs : ''}`);
+                          },
   regimeABTick:           (body: any = {}) => postJSON('/api/regime/ab/tick', body),
   regimeABReset:          (scope: 'all' | 'closed' = 'all') => postJSON('/api/regime/ab/reset', { scope }),
   // Phase 3.1 — live analysis engine + signal log

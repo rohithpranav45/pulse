@@ -11,6 +11,7 @@ import { ChartsView } from '@/views/ChartsView';
 import { MarketsView } from '@/views/MarketsView';
 import { PaperView } from '@/views/PaperView';
 import { RegimeView } from '@/views/RegimeView';
+import { InventoryView } from '@/views/InventoryView';
 import { SignalLogView } from '@/views/SignalLogView';
 import { ChatDock } from '@/components/chat/ChatDock';
 import { OnboardingTour } from '@/components/onboarding/OnboardingTour';
@@ -51,13 +52,13 @@ export default function App() {
 
   const [helpOpen, setHelpOpen] = useState(false);
 
-  // Keyboard shortcuts. Bare 1..6/R/F/P only fire outside form inputs; the
-  // modifier variant (Cmd/Ctrl+1..6) fires anywhere, so tab nav still works
+  // Keyboard shortcuts. Bare 1..7/R/F/P only fire outside form inputs; the
+  // modifier variant (Cmd/Ctrl+1..7) fires anywhere, so tab nav still works
   // while typing in the ChatDock or a paper-trade entry field.
   useEffect(() => {
     const map: Record<string, ViewKey> = {
       '1':'desk','2':'charts','3':'markets',
-      '4':'paper','5':'regime','6':'signals',
+      '4':'paper','5':'regime','6':'inventory','7':'signals',
     };
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
@@ -65,7 +66,7 @@ export default function App() {
       const k = e.key;
       const mod = e.metaKey || e.ctrlKey;
 
-      // Cmd/Ctrl+1..6 — global, works in inputs too.
+      // Cmd/Ctrl+1..7 — global, works in inputs too.
       if (mod && map[k]) {
         e.preventDefault();
         setView(map[k]);
@@ -203,6 +204,7 @@ export default function App() {
                 {view === 'markets'       && <MarketsView all={merged} />}
                 {view === 'paper'         && <PaperView tradeIdea={tradeIdea} />}
                 {view === 'regime'        && <RegimeView />}
+                {view === 'inventory'     && <InventoryView all={merged} />}
                 {view === 'signals'       && <SignalLogView />}
               </motion.div>
             </ErrorBoundary>

@@ -605,7 +605,9 @@ function WeatherPanel({ w }: { w: any }) {
   );
 }
 
-function InventoriesSection({ all }: { all: any }) {
+// Exported — the dedicated Inventory tab (InventoryView) renders this; Markets
+// no longer carries an Inventories sub-section (consolidated 2026-06-23).
+export function InventoriesSection({ all }: { all: any }) {
   const f = all?.fundamentals ?? {};
   const surprise = all?.eia_surprise;
   const forwardCover = all?.forward_cover;
@@ -1038,9 +1040,7 @@ export function MarketsView({ all }: { all: any }) {
       <LazySection id="spreads" title="Spreads & Curve" subtitle="calendar · term · physical" defaultOpen>
         <SpreadsAndCurveSection all={all} />
       </LazySection>
-      <LazySection id="inventories" title="Inventories" subtitle="EIA crude · distillates · gasoline · surprise">
-        <InventoriesSection all={all} />
-      </LazySection>
+      {/* Inventories moved to the dedicated Inventory tab (hotkey 6). */}
       <LazySection id="cot" title="COT positioning" subtitle="CFTC managed money · OPEC+ · rigs">
         <COTSection all={all} />
       </LazySection>

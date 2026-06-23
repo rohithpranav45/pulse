@@ -11,17 +11,27 @@ import { usePolling } from '@/lib/hooks';
  * The mentor's single evaluation criterion is shock absorption. This panel shows
  * the live GMM stress read + circuit-breaker state, the validated absorption
  * metrics (stop-loss + onset breaker), and a P(stress) timeline proving the
- * detector — fit only on 2016-2019 — caught every real oil shock out-of-sample.
+ * detector. The live read is calibrated on the full 2016-present vol distribution
+ * (so normal post-2020 vol isn't mis-flagged); the backtest keeps a causal
+ * 2016-2019 fit for out-of-sample validation.
  */
 
 type Current = {
   as_of: string;
-  p_stress: number;
+  p_stress: number;          // = vol_pct: percentile rank of current realised vol
+  realised_vol?: number | null;
+  vol_pct?: number;
   onset: number;
   breaker_active: boolean;
-  label: 'CALM' | 'ELEVATED' | 'STRESS';
+  raw_onset_fires?: boolean;
+  onset_reliable?: boolean;
+  stale?: boolean;
+  staleness_days?: number;
+  label: 'CALM' | 'NORMAL' | 'ELEVATED' | 'STRESS' | 'STALE';
   note: string;
   onset_gate: number;
+  source?: string;
+  live?: boolean;
 };
 type HistPt = { date: string; p_stress: number };
 type ShockEvt = { date: string; label: string; p_stress: number };
@@ -36,8 +46,9 @@ type Shock = {
   detector?: { fit_window: string; method: string };
 };
 
+// Graded by vol percentile: STRESS (>92nd) red · ELEVATED/NORMAL (60–92nd) amber · CALM green.
 const toneOf = (p: number): 'bull' | 'neut' | 'bear' =>
-  p >= 0.5 ? 'bear' : p >= 0.25 ? 'neut' : 'bull';
+  p >= 0.92 ? 'bear' : p >= 0.60 ? 'neut' : 'bull';
 const sgn = (v: number, d = 2) => (v >= 0 ? `+${v.toFixed(d)}` : v.toFixed(d));
 
 export function ShockMonitorPanel() {
@@ -75,7 +86,8 @@ export function ShockMonitorPanel() {
 
   const c = data.current;
   const a = data.absorption ?? {};
-  const tone = toneOf(c.p_stress);
+  // A stale read (frozen feed) must not be painted as a live shock — mute it.
+  const tone = c.stale ? 'neut' : toneOf(c.p_stress);
 
   return (
     <Panel
@@ -95,15 +107,23 @@ export function ShockMonitorPanel() {
           tone === 'neut' && 'border-neut/40 bg-neut/5',
           tone === 'bull' && 'border-bull/40 bg-bull/5',
         )}>
-          <div className="text-[10px] uppercase tracking-widest text-text-muted">P(stress)</div>
+          <div className="text-[10px] uppercase tracking-widest text-text-muted">
+            Vol percentile{c.stale ? ` · ${c.staleness_days}d stale` : ''}
+          </div>
           <div className={clsx('text-4xl font-display font-extrabold tabular',
+            c.stale && 'opacity-50',
             tone === 'bear' && 'text-bear', tone === 'neut' && 'text-neut', tone === 'bull' && 'text-bull')}>
-            {(c.p_stress * 100).toFixed(0)}%
+            {(c.p_stress * 100).toFixed(0)}<span className="text-xl">th</span>
           </div>
           <div className={clsx('text-[11px] font-mono font-bold',
             tone === 'bear' && 'text-bear', tone === 'neut' && 'text-neut', tone === 'bull' && 'text-bull')}>
-            {c.label}
+            {c.label}{c.stale ? ' (frozen feed)' : ''}
           </div>
+          {c.realised_vol != null && (
+            <div className="text-[10px] font-mono text-text-tertiary mt-0.5">
+              {(c.realised_vol * 100).toFixed(0)}% ann. vol
+            </div>
+          )}
         </div>
         <div className="flex-1 min-w-[220px] flex flex-col justify-center gap-1.5">
           <div className="flex items-center gap-2">
@@ -124,7 +144,7 @@ export function ShockMonitorPanel() {
       {/* P(stress) timeline — proves OOS shock detection */}
       <div className="mt-4">
         <div className="text-[10px] uppercase tracking-widest text-text-muted mb-1">
-          P(stress) since 2016 · detector never trained past 2019
+Vol percentile since 2016 · current vol ranked against full 2016–present history
         </div>
         <div className="flex items-end gap-px h-16 border-b border-border/40">
           {hist.map(pt => {
