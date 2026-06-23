@@ -159,6 +159,68 @@ def get_gdelt_news(
     }
 
 
+def get_gdelt_articles_between(
+    start: datetime,
+    end: datetime,
+    max_articles: int = 250,
+    themes=None,
+    extra_query: str = "",
+) -> dict:
+    """
+    Historical DOC-API pull over an explicit [start, end) datetime window.
+
+    Unlike `get_gdelt_news` (which uses `timespan` = "last N hours"), this uses
+    GDELT's `startdatetime`/`enddatetime` parameters so we can backfill a
+    timestamped headline corpus for the event study. GDELT DOC 2.0 indexes
+    full-text articles from ~2017 onward; windows before that return empty.
+
+    Both datetimes are coerced to UTC and formatted YYYYMMDDHHMMSS. Returns the
+    same article shape as `get_gdelt_news` (`articles` carry `published_at` as
+    the GDELT `seendate`). Caller is responsible for windowing/paging the range.
+    """
+    if themes is None:
+        themes = ENERGY_THEMES
+
+    def _fmt(dt: datetime) -> str:
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc).strftime("%Y%m%d%H%M%S")
+
+    theme_q = " OR ".join(f"theme:{t}" for t in themes)
+    query = f"({theme_q}) sourcelang:english"
+    if extra_query:
+        query = f"({query}) AND ({extra_query})"
+
+    url = (
+        f"{DOC}?query={quote(query)}"
+        f"&mode=artlist&maxrecords={max_articles}"
+        f"&startdatetime={_fmt(start)}&enddatetime={_fmt(end)}"
+        f"&format=json&sort=DateDesc"
+    )
+    r = _rate_limited_get(url)
+    ts = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    if r is None:
+        return {"articles": [], "source_used": "gdelt-unavailable", "stale": True, "timestamp": ts}
+    try:
+        body = r.json()
+    except Exception:
+        return {"articles": [], "source_used": "gdelt-parse-error", "stale": True, "timestamp": ts}
+
+    out = []
+    for a in body.get("articles", []) or []:
+        title = a.get("title") or ""
+        out.append({
+            "headline":     title,
+            "title":        title,
+            "url":          a.get("url"),
+            "source":       a.get("domain"),
+            "published_at": a.get("seendate"),
+            "published":    a.get("seendate"),
+            "language":     a.get("language"),
+        })
+    return {"articles": out, "source_used": "gdelt", "stale": False, "timestamp": ts}
+
+
 def get_gdelt_tone(themes=("ECON_OILPRICE",), hours: int = 24) -> dict:
     """
     GDELT aggregate tone for given themes. Uses `tonechart` mode (artlist
