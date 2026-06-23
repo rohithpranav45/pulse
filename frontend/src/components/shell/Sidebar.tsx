@@ -7,9 +7,10 @@ import {
   Wallet,
   Radar,
   ScrollText,
+  Droplets,
 } from 'lucide-react';
 
-export type ViewKey = 'desk' | 'charts' | 'markets' | 'paper' | 'regime' | 'signals';
+export type ViewKey = 'desk' | 'charts' | 'markets' | 'paper' | 'regime' | 'signals' | 'inventory';
 
 // Phase 4.E — Intelligence tab cut entirely. Groq brief lives on DESK; the
 // stumpy analogs / news / correlation widgets were not regime-model inputs.
@@ -19,7 +20,8 @@ export const NAV_ITEMS: { key: ViewKey; label: string; icon: any; hint: string; 
   { key: 'markets',       label: 'Markets',          icon: BarChart3,        hint: '3', sub: 'Spreads · fundamentals' },
   { key: 'paper',         label: 'Paper Book',       icon: Wallet,           hint: '4', sub: 'Live P&L' },
   { key: 'regime',        label: 'Regime',           icon: Radar,            hint: '5', sub: 'Engine · A/B · drill' },
-  { key: 'signals',       label: 'Signal Log',       icon: ScrollText,       hint: '6', sub: 'Realised performance' },
+  { key: 'inventory',     label: 'Inventory',        icon: Droplets,         hint: '6', sub: 'EIA release framework' },
+  { key: 'signals',       label: 'Signal Log',       icon: ScrollText,       hint: '7', sub: 'Realised performance' },
 ];
 
 export function Sidebar({ active, onSelect }: { active: ViewKey; onSelect: (k: ViewKey) => void }) {
@@ -117,7 +119,7 @@ export function Sidebar({ active, onSelect }: { active: ViewKey; onSelect: (k: V
         <div className="mt-4 pt-3 border-t border-border/40 flex items-center justify-between">
           <div className="flex flex-col leading-none gap-0.5">
             <span className="text-[8.5px] font-mono tracking-[0.22em] text-text-muted uppercase">Build</span>
-            <span className="text-[10px] font-mono text-text-tertiary tabular">v2.0 · phase 4</span>
+            <span className="text-[10px] font-mono text-text-tertiary tabular">v2.1 · phase 8</span>
           </div>
           <span
             aria-hidden

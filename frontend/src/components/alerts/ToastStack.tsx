@@ -9,9 +9,9 @@ import { AlertTriangle, AlertOctagon, Info, X, Volume2, VolumeX, BellOff, Bell, 
  * Consumes the `/api/alerts` payload via the parent's `alerts` prop and
  * pops a slide-in toast for each *new* alert (deduplicated by id). Each
  * toast auto-dismisses after a tone-dependent duration:
- *   critical → 14s (or stays until manually dismissed)
- *   warning  → 8s
- *   info     → 5s
+ *   critical → 30s (or stays until manually dismissed)
+ *   warning  → 18s
+ *   info     → 10s
  *
  * Optional features (controlled by localStorage toggles in the header):
  *   • Sound ping on critical/warning
@@ -48,9 +48,9 @@ function saveJSON(key: string, value: any): void {
 }
 
 function durationFor(severity: string): number {
-  if (severity === 'critical') return 14000;
-  if (severity === 'warning') return 8000;
-  return 5000;
+  if (severity === 'critical') return 30000;
+  if (severity === 'warning') return 18000;
+  return 10000;
 }
 
 const TONE_CLASS: Record<string, { bg: string; border: string; text: string; accent: string }> = {

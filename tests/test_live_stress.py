@@ -100,10 +100,11 @@ def test_live_stress_uses_feed_when_enough_history(monkeypatch):
 
 
 @pytest.mark.skipif(not _HAS_DATA, reason="/Data lake (detector fit) not present")
-def test_live_stress_falls_back_on_thin_history(monkeypatch):
-    # Only 5 daily rows → can't form a 20d window → honest fall back to settle.
+def test_live_stress_falls_back_when_no_daily_and_no_intraday(monkeypatch):
+    # Thin daily history AND no intraday vol → honest fall back to settle.
     monkeypatch.setattr(lf, "recent_daily_frame",
                         lambda *a, **k: _synthetic_daily(5))
+    monkeypatch.setattr(lf, "recent_intraday_realised_vol", lambda *a, **k: None)
     out = se.live_stress_state(use_live_feed=True, refit=True)
     assert out["live"] is False
     assert out["source"] == "daily_settle"
@@ -111,7 +112,58 @@ def test_live_stress_falls_back_on_thin_history(monkeypatch):
 
 
 @pytest.mark.skipif(not _HAS_DATA, reason="/Data lake (detector fit) not present")
+def test_live_stress_engages_via_intraday_when_daily_thin(monkeypatch):
+    # Too few daily closes for a 20d vol, BUT intraday realised vol is available →
+    # the live read engages off intraday vol instead of falling back to settle.
+    daily = _synthetic_daily(6)
+    vol = pd.Series(0.35, index=daily.index)  # 35% annualised current vol
+    monkeypatch.setattr(lf, "recent_daily_frame", lambda *a, **k: daily)
+    monkeypatch.setattr(lf, "recent_intraday_realised_vol", lambda *a, **k: vol)
+    out = se.live_stress_state(use_live_feed=True, refit=True)
+    assert out["live"] is True
+    assert out["source"] == "live_feed"
+    # short frame → onset can't be formed → not reliable → breaker must not block
+    assert out["onset_reliable"] is False
+    assert out["breaker_active"] is False
+
+
+@pytest.mark.skipif(not _HAS_DATA, reason="/Data lake (detector fit) not present")
 def test_live_stress_falls_back_when_feed_absent(monkeypatch):
     monkeypatch.setattr(lf, "recent_daily_frame", lambda *a, **k: None)
     out = se.live_stress_state(use_live_feed=True, refit=True)
     assert out["live"] is False and out["source"] == "daily_settle"
+
+
+# ── staleness guard: a frozen-feed onset must not latch the breaker ───────────
+def _synthetic_settle(end_offset_days: int, *, spike: bool = True) -> pd.DataFrame:
+    """A ~10yr daily Brent settle frame ending `end_offset_days` before today,
+    with a volatility burst at the tail so the onset fires. Hermetic — no lake."""
+    end = pd.Timestamp.now().normalize() - pd.Timedelta(days=end_offset_days)
+    idx = pd.bdate_range(end=end, periods=2600)
+    rng = np.random.default_rng(7)
+    rets = rng.normal(0, 0.008, len(idx))
+    if spike:
+        # a SHARP 3-day shock at the very end → vol percentile jumps from ~median
+        # to ~top (5 trading days prior is still calm) so the onset clears the gate.
+        rets[-3:] = np.array([0.12, -0.13, 0.11])
+    c1 = 60.0 * np.exp(np.cumsum(rets))
+    return pd.DataFrame({"c1": c1, "c12": c1 * 1.01}, index=idx)
+
+
+def test_stale_onset_disengages_breaker():
+    # data frozen ~30 days ago with a tail shock → onset fires but is stale.
+    settle = _synthetic_settle(30, spike=True)
+    out = se.live_stress_state(settle=settle, fit_until="2019-01-01", refit=True)
+    assert out["stale"] is True
+    assert out["staleness_days"] >= 8
+    assert out["raw_onset_fires"] is True          # the onset genuinely fired
+    assert out["breaker_active"] is False          # …but it's expired → disengaged
+    assert out["label"] == "STALE"
+
+
+def test_fresh_onset_keeps_breaker():
+    # same shock but data is current → the breaker must still engage.
+    settle = _synthetic_settle(0, spike=True)
+    out = se.live_stress_state(settle=settle, fit_until="2019-01-01", refit=True)
+    assert out["stale"] is False
+    assert out["breaker_active"] == out["raw_onset_fires"]

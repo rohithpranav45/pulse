@@ -31,9 +31,9 @@ const STEPS: Step[] = [
   },
   {
     target: 'nav',
-    title: 'Six workspaces',
+    title: 'Seven workspaces',
     body:
-      'Each tab is a different angle on the market: Desk (the landing view), Charts, Markets, Paper Trading, Regime, and the Signal Log. Press 1–6 anywhere to jump.',
+      'Each tab is a different angle on the market: Desk (the landing view), Charts, Markets, Paper Trading, Regime, Inventory (the EIA-release framework), and the Signal Log. Press 1–7 anywhere to jump.',
     placement: 'right',
   },
   {

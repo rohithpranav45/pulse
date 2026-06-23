@@ -305,6 +305,52 @@ def recent_daily_frame(product: str = "CO", *, days: int = 40,
         conn.close()
 
 
+def recent_intraday_realised_vol(product: str = "CO", *, days: int = 30,
+                                 feed_dir: Path | None = None):
+    """
+    Per-day ANNUALISED realised volatility of the front contract, estimated from
+    the intraday 15-min returns (∑ r_i² → daily realised variance → ×252 → √).
+
+    This is the bridge for a CURRENT stress read when the recorder holds only a
+    handful of daily *closes* (too few for a 20-day close-to-close vol) but plenty
+    of intraday bars: a single day of 15-min bars already yields ~tens of returns,
+    so the daily RV estimate is statistically solid. Returns a date-indexed Series
+    of annualised vol (one value per trading day), or None when unavailable.
+    """
+    import numpy as np
+    import pandas as pd
+
+    f = latest_feed_file(feed_dir)
+    if f is None:
+        return None
+    conn = _open_feed_local(f)
+    try:
+        contracts = list_contracts(conn, product.upper())
+        if not contracts:
+            return None
+        rows = conn.execute(
+            f'SELECT timestamp, close FROM "{contracts[0][0]}"').fetchall()
+        if not rows:
+            return None
+        s = pd.Series({pd.Timestamp(str(ts)): float(c) for ts, c in rows}).sort_index()
+        s = s[s > 0]
+        logret = np.log(s / s.shift(1))
+        day = s.index.normalize()
+        # realised variance per day = sum of squared intraday returns
+        rv_day = (logret ** 2).groupby(day).sum()
+        n_obs = logret.groupby(day).count()
+        # need a few intraday obs for a meaningful daily RV
+        rv_day = rv_day[n_obs >= 4]
+        ann_vol = np.sqrt(rv_day * 252.0)
+        ann_vol = ann_vol[np.isfinite(ann_vol)].tail(days)
+        return ann_vol if not ann_vol.empty else None
+    except sqlite3.DatabaseError as exc:
+        log.warning("recent_intraday_realised_vol(%s): %s", product, exc)
+        return None
+    finally:
+        conn.close()
+
+
 def get_live_snapshot(product: str = "CO", feed_dir: Path | None = None) -> dict:
     """
     Build a live market snapshot for one product from the most-recent feed file.

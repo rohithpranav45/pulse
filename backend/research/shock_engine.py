@@ -168,11 +168,38 @@ def shock_guard(z, p_stress, *, z_extreme: float = Z_EXTREME, stress_gate: float
 # of onset was worse — it gives up the profitable sustained-stress mean-reversion.
 ONSET_WINDOW = 5
 ONSET_GATE   = 0.25
+# A shock ONSET is only actionable while it is recent. When the underlying stress
+# data is stale (the daily settle feed froze — e.g. /Data stopped advancing), a
+# weeks-old onset must NOT keep the breaker latched, or the desk blocks forever on
+# a shock that is long over. Past this many calendar days the onset is treated as
+# expired (the breaker disengages; the live feed re-engages it the moment fresh
+# data shows a genuine new onset). 8 days > the 5-trading-day onset window.
+ONSET_MAX_STALE_DAYS = 8
 
 
 def stress_onset(p_stress: pd.Series, window: int = ONSET_WINDOW) -> pd.Series:
     """Rising-stress signal: the increase in P(stress) over `window` days, floored at 0."""
     return (p_stress - p_stress.shift(window)).clip(lower=0)
+
+
+def vol_percentile(feats: pd.DataFrame, hist_vol: np.ndarray | None = None) -> pd.Series:
+    """
+    Graded stress score = the percentile rank (0–1) of each row's 20-day realised
+    vol within the historical rv_20d distribution. Used for the LIVE read instead
+    of the GMM posterior: the GMM is a near-binary regime classifier that flips
+    0↔1 on the *same* point depending on the fit window (a poor continuous gauge),
+    whereas the vol percentile is stable, monotonic and directly interpretable
+    ("today's vol is hotter than N% of history"). `hist_vol` defaults to the full
+    historical rv_20d in `feats` itself.
+    """
+    cur = feats["rv_20d"]
+    ref = hist_vol if hist_vol is not None else cur.dropna().values
+    ref = np.asarray(ref, dtype=float)
+    ref = ref[np.isfinite(ref)]
+    if ref.size == 0:
+        return pd.Series(np.nan, index=feats.index, name="vol_pct")
+    out = cur.apply(lambda v: float((ref < v).mean()) if np.isfinite(v) else np.nan)
+    return out.rename("vol_pct")
 
 
 def breaker_active(p_stress: pd.Series, *, onset_gate: float = ONSET_GATE,
@@ -199,18 +226,59 @@ LIVE_STRESS_LOOKBACK_DAYS = 45    # daily closes to pull from the feed
 MIN_LIVE_STRESS_ROWS      = 6     # usable feature rows (post-dropna) before we trust the live read
 
 
+def _live_features_from_intraday(daily_df: pd.DataFrame, product: str = "CO") -> pd.DataFrame | None:
+    """
+    Build the detector's 5-feature frame for the live read using INTRADAY realised
+    vol (so it works off only a few daily closes). rv_5d / rv_20d are the rolling
+    RMS of the per-day annualised intraday RV; abs_ret_5d and the curve features
+    come from the daily closes. Returns the (possibly 1-row) feature frame, or None.
+    """
+    try:
+        from research.live_feed import recent_intraday_realised_vol
+        vol = recent_intraday_realised_vol(product, days=LIVE_STRESS_LOOKBACK_DAYS)
+    except Exception:  # pragma: no cover — defensive (feed I/O)
+        vol = None
+    if vol is None or vol.empty or daily_df is None or daily_df.empty:
+        return None
+    vol = vol.sort_index()
+    v2 = vol ** 2
+    rv_5d = np.sqrt(v2.rolling(5, min_periods=2).mean())
+    rv_20d = np.sqrt(v2.rolling(20, min_periods=2).mean())  # "≤20d" — all available
+    c1 = daily_df["c1"].astype(float)
+    n = len(c1)
+    k = min(5, max(1, n - 1))                      # short lookback if <6 closes
+    abs_ret_5d = c1.pct_change(k).abs()
+    curve = (daily_df["c1"] - daily_df["c12"]).astype(float) if "c12" in daily_df else c1 * 0.0
+    d_curve_5d = curve.diff(k).abs()
+    df = pd.DataFrame({
+        "rv_5d": rv_5d, "rv_20d": rv_20d, "abs_ret_5d": abs_ret_5d,
+        "curve_lvl": curve, "d_curve_5d": d_curve_5d,
+    }).dropna()
+    return df if not df.empty else None
+
+
 def live_stress_state(settle: pd.DataFrame | None = None, *,
-                      fit_until: str = "2019-01-01", refit: bool = False,
+                      fit_until: str | None = None, refit: bool = False,
                       use_live_feed: bool = False) -> dict:
     """
     Today's stress read for the dashboard + the live desk's entry gate. Returns
     P(stress), onset, the circuit-breaker state, and an explainable label.
-    The detector is fit causally (default burn-in 2016→2019) and cached.
 
-    `use_live_feed=True` scores the detector on the live feed's recent daily
-    closes (Phase 4 — so the breaker reacts intraday). Falls back to the daily-
-    settle read with `live_fallback_reason` set when the feed is unreachable or
-    has too little history for a clean 20-day vol window.
+    Calibration: the LIVE read fits the detector on the **full available history**
+    (`fit_until=None`), so "stress" is judged against the whole vol distribution —
+    including COVID (~170% vol) and 2022 (~80%). This is deliberately different
+    from the BACKTEST, which fits causally on 2016→2019 to keep 2020+ out-of-sample
+    (that lives in vol_target/walkforward and is untouched). Calibrating the live
+    gate on 2016–19 only made normal post-2020 vol (~40%) read as ~100% stress —
+    a regime-drift artifact; the full-history fit reads ~40% vol as CALM and still
+    flags genuine crises (>70% vol → ~0.9).
+
+    `use_live_feed=True` scores the detector on the live feed (Phase 4 — reacts
+    intraday): recent daily closes, or INTRADAY realised vol when the recorder has
+    too few daily closes for a 20-day window. Falls back to the daily-settle read
+    (with `live_fallback_reason`) when the feed is unreachable, and flags `stale`
+    when that settle is older than the onset window so a frozen feed can't latch
+    the breaker.
     """
     global _DETECTOR, _FEATS_CACHE
     if _DETECTOR is None or refit:
@@ -236,33 +304,86 @@ def live_stress_state(settle: pd.DataFrame | None = None, *,
             if lf is not None and len(lf) >= MIN_LIVE_STRESS_ROWS:
                 feats, live = lf, True
             else:
-                fallback_reason = (
-                    f"insufficient live history ({0 if lf is None else len(lf)} usable "
-                    f"daily rows < {MIN_LIVE_STRESS_ROWS}; recorder still accumulating)"
-                )
+                # Not enough daily *closes* for a 20-day close-to-close vol — but a
+                # handful of days of 15-min bars hold plenty of INTRADAY returns for
+                # a solid current realised-vol read. Build the features off that so
+                # the live read engages with today's market instead of falling back
+                # to the (possibly weeks-stale) daily settle.
+                intraday = _live_features_from_intraday(ldf)
+                if intraday is not None and len(intraday) >= 1:
+                    feats, live = intraday, True
+                else:
+                    fallback_reason = (
+                        f"insufficient live history ({0 if lf is None else len(lf)} usable "
+                        f"daily rows < {MIN_LIVE_STRESS_ROWS}; intraday vol unavailable)"
+                    )
         elif fallback_reason is None:
             fallback_reason = "no live feed frame available"
 
     if feats is None:
         feats = build_stress_features(settle) if settle is not None else _FEATS_CACHE
 
-    ps = _DETECTOR.p_stress(feats)
-    onset = stress_onset(ps)
-    p = float(ps.iloc[-1]); o = float(onset.iloc[-1])
-    label = "STRESS" if p >= 0.5 else "ELEVATED" if p >= 0.25 else "CALM"
+    # Graded, stable stress score = percentile rank of current realised vol in the
+    # full historical distribution (NOT the jumpy GMM posterior — see vol_percentile).
+    hist_vol = (_FEATS_CACHE["rv_20d"].dropna().values
+                if _FEATS_CACHE is not None and "rv_20d" in _FEATS_CACHE else None)
+    ps = vol_percentile(feats, hist_vol).dropna()
+    if ps.empty:
+        ps = pd.Series([0.0], index=feats.index[-1:])
+    onset = (ps - ps.shift(ONSET_WINDOW)).clip(lower=0)
+    p = float(ps.iloc[-1])
+    cur_vol = feats["rv_20d"].iloc[-1]
+    realised_vol = float(cur_vol) if np.isfinite(cur_vol) else None
+    o_raw = float(onset.iloc[-1])
+    # With a short live frame (<onset window) the rise can't be formed → NaN.
+    # Treat an uncomputable onset as 0 (no rising-shock signal → don't block).
+    o = o_raw if np.isfinite(o_raw) else 0.0
+    onset_reliable = len(ps) > ONSET_WINDOW
+
+    # Staleness: how old is the data this read is built on? A live read is current
+    # by construction; a daily-settle read can be weeks stale if the feed froze.
+    as_of_ts = feats.index[-1]
+    staleness_days = int((pd.Timestamp.now().normalize() - as_of_ts.normalize()).days)
+    stale = staleness_days > ONSET_MAX_STALE_DAYS
+
+    raw_onset_fires = bool(o >= ONSET_GATE)
+    # The breaker only latches on a RECENT onset. A stale onset (frozen feed) is
+    # not actionable — disengage so the desk can trade; the moment fresh data
+    # shows a genuine new onset the breaker re-engages.
+    breaker = raw_onset_fires and not stale
+
+    # Graded label by vol percentile (stable, intuitive).
+    label = ("STALE" if stale else
+             "STRESS" if p >= 0.92 else
+             "ELEVATED" if p >= 0.80 else
+             "NORMAL" if p >= 0.60 else "CALM")
+
+    vol_txt = f"{realised_vol*100:.0f}% annualised vol (~{p*100:.0f}th pctile)" if realised_vol else f"{p*100:.0f}th pctile"
+    if stale:
+        note = (f"Read is {staleness_days}d stale (data frozen at {as_of_ts.date()}); "
+                f"a weeks-old onset is not actionable — breaker DISENGAGED so trading isn't blocked.")
+    elif breaker:
+        note = f"Volatility surging ({vol_txt}) — pausing NEW entries; open trades run under stops."
+    else:
+        note = f"{vol_txt}; vol not surging — normal trading."
+
     return {
-        "as_of":          str(feats.index[-1].date()),
+        "as_of":          str(as_of_ts.date()),
         "p_stress":       round(p, 4),
+        "realised_vol":   round(realised_vol, 4) if realised_vol is not None else None,
+        "vol_pct":        round(p, 4),
         "onset":          round(o, 4),
-        "breaker_active": bool(o >= ONSET_GATE),
+        "breaker_active": breaker,
+        "raw_onset_fires": raw_onset_fires,
+        "onset_reliable": onset_reliable,
+        "stale":          stale,
+        "staleness_days": staleness_days,
         "label":          label,
         "onset_gate":     ONSET_GATE,
         "live":           live,
         "source":         "live_feed" if live else "daily_settle",
         "live_fallback_reason": fallback_reason if not live else None,
-        "note":           ("Shock onset detected — pausing NEW entries; open trades run under stops."
-                           if o >= ONSET_GATE else
-                           "No shock onset — normal trading."),
+        "note":           note,
     }
 
 
@@ -293,9 +414,14 @@ MECHANISMS = [
 
 def dashboard_payload(settle: pd.DataFrame | None = None) -> dict:
     """Everything the dashboard's shock-absorption panel needs."""
-    cur = live_stress_state(settle)
+    # Use the live-feed read so the panel reflects the CURRENT market (intraday
+    # realised vol off the recorder) rather than the last daily settle — which can
+    # be weeks stale when /Data freezes. Falls back to the settle read internally.
+    cur = live_stress_state(settle, use_live_feed=True)
     feats = build_stress_features(settle) if settle is not None else _FEATS_CACHE
-    ps = _DETECTOR.p_stress(feats)
+    # Same graded vol-percentile gauge as the live read (consistent scale with the
+    # `current` marker), not the jumpy GMM posterior.
+    ps = vol_percentile(feats)
     monthly = ps.resample("MS").mean()
     history = [{"date": str(d.date()), "p_stress": round(float(v), 3)}
                for d, v in monthly.items() if np.isfinite(v)]
@@ -313,7 +439,7 @@ def dashboard_payload(settle: pd.DataFrame | None = None) -> dict:
         "shock_events": events,
         "absorption":   ABSORPTION_METRICS,
         "mechanisms":   MECHANISMS,
-        "detector":     {"fit_window": "2016 → 2019 (causal/OOS)", "method": "Gaussian mixture + sticky-HMM smoothing"},
+        "detector":     {"fit_window": "2016 → present", "method": "realised-vol percentile (live gauge) · GMM+HMM onset breaker"},
     }
 
 

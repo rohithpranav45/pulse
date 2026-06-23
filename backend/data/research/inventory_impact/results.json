@@ -1,0 +1,377 @@
+{
+  "thesis": "Trade the surprise vs consensus, gated by the inventory/curve regime.",
+  "report_span": [
+    "2015-09-25",
+    "2026-06-12"
+  ],
+  "n_weeks": 560,
+  "when_it_mattered": [
+    {
+      "conditioner": "ALL",
+      "regime": "all releases",
+      "beta": -0.1849,
+      "t": -1.71,
+      "r2": 0.005,
+      "n": 535,
+      "corr": -0.074
+    },
+    {
+      "conditioner": "curve",
+      "regime": "contango front",
+      "beta": -0.428,
+      "t": -2.06,
+      "r2": 0.027,
+      "n": 154,
+      "corr": -0.165
+    },
+    {
+      "conditioner": "curve",
+      "regime": "backwardated front",
+      "beta": -0.0566,
+      "t": -0.45,
+      "r2": 0.001,
+      "n": 381,
+      "corr": -0.023
+    },
+    {
+      "conditioner": "inventory",
+      "regime": "HIGH stocks",
+      "beta": -1.0331,
+      "t": -3.36,
+      "r2": 0.165,
+      "n": 59,
+      "corr": -0.406
+    },
+    {
+      "conditioner": "inventory",
+      "regime": "AVG stocks",
+      "beta": -0.1768,
+      "t": -0.86,
+      "r2": 0.006,
+      "n": 126,
+      "corr": -0.077
+    },
+    {
+      "conditioner": "inventory",
+      "regime": "LOW stocks",
+      "beta": -0.024,
+      "t": -0.17,
+      "r2": 0.0,
+      "n": 350,
+      "corr": -0.009
+    },
+    {
+      "conditioner": "inventory",
+      "regime": "above 5yr (glut)",
+      "beta": -0.734,
+      "t": -3.05,
+      "r2": 0.076,
+      "n": 115,
+      "corr": -0.276
+    },
+    {
+      "conditioner": "inventory",
+      "regime": "below 5yr (tight)",
+      "beta": -0.0365,
+      "t": -0.3,
+      "r2": 0.0,
+      "n": 420,
+      "corr": -0.015
+    },
+    {
+      "conditioner": "era",
+      "regime": "2015-2020",
+      "beta": -0.434,
+      "t": -2.94,
+      "r2": 0.033,
+      "n": 254,
+      "corr": -0.182
+    },
+    {
+      "conditioner": "era",
+      "regime": "2021-2026",
+      "beta": 0.0796,
+      "t": 0.51,
+      "r2": 0.001,
+      "n": 281,
+      "corr": 0.03
+    }
+  ],
+  "intraday": {
+    "n_releases": 281,
+    "confirmed_spikes": 145,
+    "decay": {
+      "5": {
+        "mean_aligned": -0.0099,
+        "mean_abs": 0.1144,
+        "hit_rate": 0.48
+      },
+      "30": {
+        "mean_aligned": -0.0209,
+        "mean_abs": 0.2484,
+        "hit_rate": 0.498
+      },
+      "60": {
+        "mean_aligned": -0.0482,
+        "mean_abs": 0.3123,
+        "hit_rate": 0.456
+      },
+      "120": {
+        "mean_aligned": -0.0268,
+        "mean_abs": 0.4971,
+        "hit_rate": 0.498
+      },
+      "settle": {
+        "mean_aligned": -0.0116,
+        "mean_abs": 0.8222,
+        "hit_rate": 0.509
+      },
+      "retention_settle_vs_peak": 1.172
+    },
+    "betas_30m": {
+      "wti_flat": {
+        "overall": {
+          "slope": 0.0263,
+          "r2": 0.004,
+          "n": 281,
+          "t": 1.03,
+          "corr": 0.062
+        },
+        "BACK": {
+          "slope": 0.0235,
+          "r2": 0.003,
+          "n": 252,
+          "t": 0.84,
+          "corr": 0.053
+        },
+        "CONTANGO": {
+          "slope": 0.0545,
+          "r2": 0.024,
+          "n": 29,
+          "t": 0.81,
+          "corr": 0.154
+        }
+      },
+      "brent_flat": {
+        "overall": {
+          "slope": 0.0015,
+          "r2": 0.0,
+          "n": 281,
+          "t": 0.05,
+          "corr": 0.003
+        },
+        "BACK": {
+          "slope": 0.0038,
+          "r2": 0.0,
+          "n": 252,
+          "t": 0.12,
+          "corr": 0.008
+        },
+        "CONTANGO": {
+          "slope": 0.0138,
+          "r2": 0.0,
+          "n": 29,
+          "t": 0.11,
+          "corr": 0.022
+        }
+      },
+      "wti_m1_m2": {
+        "overall": {
+          "slope": 0.0018,
+          "r2": 0.003,
+          "n": 281,
+          "t": 0.85,
+          "corr": 0.051
+        },
+        "BACK": {
+          "slope": 0.002,
+          "r2": 0.003,
+          "n": 252,
+          "t": 0.82,
+          "corr": 0.052
+        },
+        "CONTANGO": {
+          "slope": -0.0004,
+          "r2": 0.004,
+          "n": 29,
+          "t": -0.34,
+          "corr": -0.064
+        }
+      },
+      "brent_m1_m2": {
+        "overall": {
+          "slope": -0.0068,
+          "r2": 0.003,
+          "n": 281,
+          "t": -0.91,
+          "corr": -0.055
+        },
+        "BACK": {
+          "slope": -0.0069,
+          "r2": 0.003,
+          "n": 252,
+          "t": -0.8,
+          "corr": -0.051
+        },
+        "CONTANGO": {
+          "slope": -0.0075,
+          "r2": 0.052,
+          "n": 29,
+          "t": -1.22,
+          "corr": -0.228
+        }
+      },
+      "wti_brent": {
+        "overall": {
+          "slope": 0.0196,
+          "r2": 0.001,
+          "n": 281,
+          "t": 0.59,
+          "corr": 0.035
+        },
+        "BACK": {
+          "slope": 0.0168,
+          "r2": 0.001,
+          "n": 252,
+          "t": 0.47,
+          "corr": 0.03
+        },
+        "CONTANGO": {
+          "slope": 0.022,
+          "r2": 0.002,
+          "n": 29,
+          "t": 0.21,
+          "corr": 0.04
+        }
+      }
+    }
+  },
+  "current_regime": {
+    "as_of": "2026-05-29",
+    "inv_bucket": "LOW",
+    "inv_vs_5yr_pct": -12.4,
+    "front_contango": false,
+    "regime_label": "LOW stocks / backwardation",
+    "applicable_beta": {
+      "beta": -0.0365,
+      "t": -0.3,
+      "r2": 0.0,
+      "n": 420,
+      "corr": -0.015
+    },
+    "bucket_beta": {
+      "beta": -0.024,
+      "t": -0.17,
+      "r2": 0.0,
+      "n": 350,
+      "corr": -0.009
+    },
+    "sensitivity": "LOW"
+  },
+  "call": {
+    "as_of": "2026-06-12",
+    "actual_change_mbbl": -8263.0,
+    "surprise_mbbl": -3093.0,
+    "surprise_z": -0.64,
+    "surprise_source": "seasonal proxy (no consensus supplied)",
+    "call": "NEUTRAL",
+    "p_bullish": 0.6,
+    "p_bearish": 0.4,
+    "confidence": "LOW",
+    "expected_brent_move_pct": 0.0,
+    "regime": {
+      "as_of": "2026-05-29",
+      "inv_bucket": "LOW",
+      "inv_vs_5yr_pct": -12.4,
+      "front_contango": false,
+      "regime_label": "LOW stocks / backwardation",
+      "applicable_beta": {
+        "beta": -0.0365,
+        "t": -0.3,
+        "r2": 0.0,
+        "n": 420,
+        "corr": -0.015
+      },
+      "bucket_beta": {
+        "beta": -0.024,
+        "t": -0.17,
+        "r2": 0.0,
+        "n": 350,
+        "corr": -0.009
+      },
+      "sensitivity": "LOW"
+    },
+    "regime_sensitive": false,
+    "quality_of_draw": 1.69,
+    "spreads": {
+      "primary": "WTI-Brent",
+      "ranked": [
+        "WTI-Brent",
+        "WTI M1-M2",
+        "Brent/WTI cracks",
+        "WTI flat"
+      ],
+      "scores": {
+        "WTI M1-M2": 0.93,
+        "WTI-Brent": 1.66,
+        "Brent/WTI cracks": 0.53,
+        "WTI flat": 0.51
+      }
+    },
+    "top_factors": [
+      "Regime gate: LOW stocks / backwardation \u2192 inventory sensitivity LOW (hist. beta -0.04%/\u03c3, t=-0.3). Inventories have not moved flat price in this regime.",
+      "Quality-of-draw +1.7: the draw looks demand-led / coherent",
+      "Most-exposed instrument: WTI-Brent (then WTI M1-M2, Brent/WTI cracks)"
+    ]
+  },
+  "latest_quality_of_draw": [
+    {
+      "week_ending": "2026-05-08",
+      "crude_ex_spr_surprise_z": "-1.08",
+      "demand_z": "0.18",
+      "runs_z": "0.21",
+      "export_z": "0.25",
+      "quality_of_draw": "0.91"
+    },
+    {
+      "week_ending": "2026-05-15",
+      "crude_ex_spr_surprise_z": "-1.15",
+      "demand_z": "0.06",
+      "runs_z": "-0.46",
+      "export_z": "-0.31",
+      "quality_of_draw": "-0.61"
+    },
+    {
+      "week_ending": "2026-05-22",
+      "crude_ex_spr_surprise_z": "-0.17",
+      "demand_z": "0.87",
+      "runs_z": "1.11",
+      "export_z": "-1.19",
+      "quality_of_draw": "3.11"
+    },
+    {
+      "week_ending": "2026-05-29",
+      "crude_ex_spr_surprise_z": "-1.39",
+      "demand_z": "-0.43",
+      "runs_z": "-1.14",
+      "export_z": "2.47",
+      "quality_of_draw": "-3.03"
+    },
+    {
+      "week_ending": "2026-06-05",
+      "crude_ex_spr_surprise_z": "-1.61",
+      "demand_z": "-0.2",
+      "runs_z": "0.42",
+      "export_z": "-1.46",
+      "quality_of_draw": "2.09"
+    },
+    {
+      "week_ending": "2026-06-12",
+      "crude_ex_spr_surprise_z": "-0.64",
+      "demand_z": "-0.53",
+      "runs_z": "1.15",
+      "export_z": "-1.29",
+      "quality_of_draw": "1.69"
+    }
+  ]
+}

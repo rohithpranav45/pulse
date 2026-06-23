@@ -108,7 +108,10 @@ def _rule_based_brief(ctx: dict) -> str:
         bullets.append("Inventory: data unavailable.")
 
     # 3 — Positioning + crack
-    if cot is not None:
+    # cot may be the "—" sentinel when COT data is unavailable; guard numerically
+    # (matches the isinstance pattern used for y10/cpi below) so a missing feed
+    # never crashes the brief on `cot > 75`.
+    if isinstance(cot, (int, float)):
         cot_tag = ("crowded long" if cot > 75 else
                    "washed-out" if cot < 25 else "neutral")
         positioning = f"COT speculator at {cot:.0f}th percentile — {cot_tag}"

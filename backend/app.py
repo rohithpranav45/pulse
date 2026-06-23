@@ -46,7 +46,7 @@ for _p in (_BACKEND, _ROOT):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_file
 from flask_cors import CORS
 from schemas import (
     PricesResponse, SignalResponse, TradeIdeaResponse, FundamentalsResponse,
@@ -1392,6 +1392,121 @@ def regime_perspread_gate_route():
 
     return jsonify({"data": safe_fetch(_psg, {"available": False}),
                     "timestamp": _now()})
+
+
+@app.route("/api/regime/inventory")
+def regime_inventory_route():
+    """
+    Inventory Surprise Impact Model — the crude EIA-release framework.
+
+    Returns the decision-ready call for the latest release plus the centerpiece
+    "when-it-mattered" regime table (surprise→Brent release-day return by
+    inventory/curve regime, 2015-2026) and the current-regime conviction gate.
+
+    Pass ?actual=<MBBL>&consensus=<MBBL> to score a specific release with a real
+    consensus (the live call); omitted → the latest released number with the
+    seasonal proxy surprise.
+
+    Read-only research; reads cached parquet panels (no model is hit). Regenerate
+    with `python -m backend.research.inventory_impact`.
+    """
+    def _inv():
+        import math
+        from research.inventory_impact import eia_report, framework, regime_conditioning
+        from research.inventory_impact.release_calendar import release_datetime
+
+        actual = request.args.get("actual", type=float)
+        consensus = request.args.get("consensus", type=float)
+        call = framework.assess_release(actual_change=actual, consensus=consensus)
+        panel = regime_conditioning.build_daily_panel("seasonal")
+        cond = regime_conditioning.conditional_table(panel, "ret")
+
+        def _f(v):
+            try:
+                v = float(v)
+                return None if math.isnan(v) else v
+            except (TypeError, ValueError):
+                return None
+
+        # recent releases — surprise history + quality, newest first
+        sp = eia_report.surprise_series("crude_ex_spr")
+        dec = eia_report.decomposition()
+        recent = []
+        for we in sp.dropna(subset=["surprise"]).index[-12:][::-1]:
+            rel = release_datetime(we).tz_convert("America/New_York")
+            q = dec.loc[we, "quality_of_draw"] if we in dec.index else None
+            recent.append({
+                "week_ending":   str(we.date()),
+                "release_date":  str(rel.date()),
+                "actual_change": _f(sp.loc[we, "actual_change"]),
+                "expected":      _f(sp.loc[we, "expected_change"]),
+                "surprise":      _f(sp.loc[we, "surprise"]),
+                "surprise_z":    _f(sp.loc[we, "surprise_z"]),
+                "bullish":       bool(sp.loc[we, "bullish"]),
+                "quality":       _f(q),
+            })
+
+        # latest report snapshot — levels + weekly change for the headline lines
+        wf = eia_report.weekly_frame()
+        last = wf.iloc[-1]
+        lines = [
+            ("Crude (ex-SPR)", "crude_ex_spr", "MMbbl"),
+            ("Cushing",        "cushing",      "MMbbl"),
+            ("Gasoline",       "gasoline",     "MMbbl"),
+            ("Distillate",     "distillate",   "MMbbl"),
+            ("Refinery util",  "refinery_util", "%"),
+            ("Crude exports",  "exports",      "Mb/d"),
+            ("Crude imports",  "imports",      "Mb/d"),
+            ("Implied demand", "products_supplied", "Mb/d"),
+        ]
+        report = []
+        for label, col, unit in lines:
+            if col not in wf:
+                continue
+            chg = wf[col].diff().iloc[-1]
+            report.append({
+                "label": label, "unit": unit,
+                "level": _f(last.get(col)),
+                "change": _f(chg),
+            })
+        latest_report = {
+            "week_ending": str(wf.index[-1].date()),
+            "release_date": str(release_datetime(wf.index[-1]).tz_convert("America/New_York").date()),
+            "adjustment": _f(last.get("adjustment")),
+            "lines": report,
+        }
+
+        return {
+            "available": True,
+            "call": call,
+            "next_release": framework.next_release_context(),
+            "spread_betas": framework.spread_attribution_betas(),
+            "when_it_mattered": cond.to_dict("records"),
+            "recent_releases": recent,
+            "latest_report": latest_report,
+            "n_releases": int(len(panel)),
+            "span": [str(panel.index.min().date()), str(panel.index.max().date())],
+            "charts": ["when_it_mattered", "era_scatter", "quality", "decay_placebo"],
+            "source": "backend/research/inventory_impact",
+        }
+
+    return jsonify({"data": safe_fetch(_inv, {"available": False}),
+                    "timestamp": _now()})
+
+
+@app.route("/api/regime/inventory/chart/<name>")
+def regime_inventory_chart_route(name):
+    """Serve a pre-rendered inventory deck chart PNG. Regenerate with
+    `python -m backend.research.inventory_impact.charts`."""
+    import os as _os
+    safe = {"when_it_mattered", "era_scatter", "quality", "decay_placebo"}
+    if name not in safe:
+        return ("unknown chart", 404)
+    path = _os.path.join(_os.path.dirname(__file__), "data", "research",
+                         "inventory_impact", f"chart_{name}.png")
+    if not _os.path.exists(path):
+        return ("chart not generated — run inventory_impact.charts", 404)
+    return send_file(path, mimetype="image/png")
 
 
 @app.route("/api/regime/ab")
