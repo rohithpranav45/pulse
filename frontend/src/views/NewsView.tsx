@@ -1,3 +1,4 @@
+import { LiveHeadlinesPanel } from '@/components/panels/LiveHeadlinesPanel';
 import { NewsImpactPanel } from '@/components/panels/NewsImpactPanel';
 import { NewsFactorPanel } from '@/components/panels/NewsFactorPanel';
 
@@ -16,6 +17,7 @@ import { NewsFactorPanel } from '@/components/panels/NewsFactorPanel';
 export function NewsView() {
   return (
     <div className="space-y-4">
+      <LiveHeadlinesPanel />
       <NewsImpactPanel />
       <NewsFactorPanel />
       <div className="text-[10px] font-mono text-text-muted leading-relaxed px-1">
