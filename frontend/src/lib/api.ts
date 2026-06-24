@@ -140,6 +140,7 @@ export const api = {
   // News Headline Impact Model (Sprint 2) — event-study % move per factor
   newsImpact:    () => getJSON<NewsImpactData>('/api/news/impact'),
   newsFactors:   () => getJSON<NewsImpactData>('/api/news/factors'),
+  newsLive:      () => getJSON('/api/news/live'),   // live wire, each headline scored
   weather:       () => getJSON('/api/weather'),
   technicals:    () => getJSON('/api/technicals'),
   termStructure: () => getJSON('/api/term-structure'),

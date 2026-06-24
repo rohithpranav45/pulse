@@ -207,6 +207,48 @@ def impact_feed(limit: int = 40, betas: dict | None = None,
     return scored[:limit]
 
 
+def live_scored(articles: list, betas: dict | None = None,
+                regime: dict | None = None, limit: int = 60) -> list[dict]:
+    """
+    Score the LIVE news wire directly (for the Live Headlines strip): every
+    headline gets a factor + expected % move with a clean ISO timestamp, without
+    depending on whether it's been ingested into the corpus yet.
+
+    Factor source, in order: the corpus's stored (Groq) factor when the URL is
+    already classified, else the deterministic keyword classifier. Timestamps are
+    normalised through the corpus parser so GDELT's compact ``YYYYMMDDTHHMMSSZ``
+    (which JS Date.parse can't read) becomes ISO-8601.
+    """
+    from research.news_impact import corpus, classify
+    if betas is None:
+        betas = event_study.load_cached()
+    if regime is None:
+        regime = current_regime()
+    known = corpus.factors_by_url([a.get("url") for a in articles])
+    out = []
+    for a in articles[:limit]:
+        title = (a.get("title") or a.get("headline") or "").strip()
+        if not title:
+            continue
+        url = a.get("url")
+        ts = corpus._norm_ts(a.get("published_at") or a.get("published") or a.get("time"))
+        kf = known.get(url)
+        if kf:
+            factor, fsrc = kf[0], "corpus"
+        else:
+            factor, _ = classify.keyword_factor(title)
+            fsrc = "keyword"
+        s = score_headline(title, factor=factor, factor_source=fsrc,
+                           published_at=ts, betas=betas, regime=regime)
+        s["url"] = url
+        s["source"] = a.get("source")
+        s["category"] = a.get("category")
+        s["news_sentiment"] = (a.get("sentiment_score")
+                               if a.get("sentiment_score") is not None else a.get("sentiment"))
+        out.append(s)
+    return out
+
+
 def factor_table_view(betas: dict | None = None, horizon: str | None = None) -> list[dict]:
     """
     Per-factor beta table for /api/news/factors: every factor in the taxonomy with

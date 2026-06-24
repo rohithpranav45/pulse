@@ -1994,6 +1994,28 @@ def news_impact_route():
                    _now())
 
 
+@app.route("/api/news/live")
+def news_live_route():
+    """
+    The live news wire, each headline scored with its factor + expected Brent %
+    move (the Live Headlines strip). Reads the cached /api/news payload and
+    enriches every article via the news-impact model — factor from the corpus's
+    stored Groq label when the URL is already classified, else keyword; timestamps
+    normalised to ISO (GDELT's compact format breaks the browser's parser).
+    """
+    def _live():
+        from research.news_impact import impact
+        news = get_cached("news", TTL_NEWS) or {}
+        arts = news.get("articles") or []
+        if not arts:
+            return {"available": False, "articles": []}
+        reg = impact.current_regime()
+        return {"available": True, "as_of": reg.get("as_of"), "regime": reg,
+                "articles": impact.live_scored(arts, limit=60)}
+    return jsonify({"data": safe_fetch(_live, {"available": False, "articles": []}),
+                    "timestamp": _now()})
+
+
 @app.route("/api/news/factors")
 def news_factors_route():
     """

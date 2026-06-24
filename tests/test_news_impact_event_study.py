@@ -242,6 +242,31 @@ def test_impact_feed_recent_order_leads_with_newest(temp_corpus):
     assert feed[0]["published_at"].startswith("2026")   # newest leads, not highest-impact
 
 
+def test_live_scored_normalizes_ts_and_scores(temp_corpus):
+    # one headline already classified in the corpus (factor reused by url),
+    # one fresh headline (keyword-classified), GDELT-compact timestamp normalised.
+    temp_corpus.upsert_articles([
+        {"url": "k", "title": "Drone attack halts Saudi crude output",
+         "published_at": "2026-06-20T09:00:00Z"},
+    ])
+    temp_corpus.set_classification("k", "GEOPOLITICAL", 0.9)
+    arts = [
+        {"url": "k", "title": "Drone attack halts Saudi crude output",
+         "published_at": "20260620T090000Z", "source": "reuters.com"},   # GDELT compact
+        {"url": "x", "title": "Refinery outage widens gasoline crack spread",
+         "published_at": "2026-06-21T10:00:00Z", "source": "platts.com"},
+    ]
+    out = im.live_scored(arts, betas=_betas_with(True),
+                         regime={"curve": "BACK", "as_of": "2026-06-23"})
+    assert len(out) == 2
+    # GDELT compact YYYYMMDDTHHMMSSZ → ISO (so the browser can render it)
+    assert out[0]["published_at"].startswith("2026-06-20T09:00")
+    # factor: corpus (Groq) label for the known URL, keyword for the fresh one
+    assert out[0]["factor"] == "GEOPOLITICAL" and out[0]["factor_source"] == "corpus"
+    assert out[1]["factor"] == "REFINING_PRODUCTS" and out[1]["factor_source"] == "keyword"
+    assert "expected_pct_move" in out[0] and out[0]["url"] == "k"
+
+
 def test_current_regime_graceful_without_tape():
     # empty frames → no crash, curve None
     empty = {"brent_curve": pd.DataFrame(), "rvol": pd.Series(dtype=float)}
