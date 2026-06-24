@@ -7,12 +7,15 @@ spread engine), and serves a React dashboard with a paper-trading book.
 - **Stack:** Flask 3 · React 18 + Vite + Tailwind · SQLite (cache + paper book) ·
   DuckDB/Parquet over a 3.5 GB `/Data` desk feed · sklearn + XGBoost/LightGBM/CatBoost
 - **Run (local):** `python start.py` from the repo root → http://127.0.0.1:5000
-- **Last updated:** 2026-06-24 (**News Impact Sprint 3 — infra fix + corpus de-risk.** Fixed a recurring
-  `pulse_cache.db` corruption at root (no `.gitattributes` → git autocrlf mangled the binary on checkout;
-  marked binaries `binary` + restored from the clean blob) and tightened the backfill theme set to oil-only
-  (`OIL_CORPUS_THEMES`, drops generic MILITARY news). **Corpus broadening stayed blocked** — GDELT 429s from
-  the office IP + no Groq key in-env — so the 1d-horizon verdict is unchanged (nothing clears |t|≥2; priors
-  hold). Prior: **News Impact Model — Sprint 2: event study + the % move.** Turns the Sprint-1
+- **Last updated:** 2026-06-24 (**News Impact Sprint 3 — GEOPOLITICAL earns a measured beta.** Re-classified
+  ~1/3 of the NOISE corpus with Groq 8b (70b's daily token cap was exhausted), cutting NOISE 80%→72% and
+  growing GEOPOLITICAL 317→520 headlines → at the 1d horizon it goes **t=1.54 (prior) → t=3.05, β=+0.87 %/unit
+  (MEASURED)**; t rose with n, so 8b recovered real geo-oil headlines (not noise). `impact.score_headline` now
+  serves a measured % move for geopolitical headlines instead of a prior. Also fixed a recurring
+  `pulse_cache.db` corruption at root (`.gitattributes` marks binaries `binary`) + tightened backfill themes to
+  oil-only (`OIL_CORPUS_THEMES`). Still open: corpus span 2021-only (GDELT coverage backfill 429s from the
+  office IP), remaining NOISE best re-done with 70b once its cap resets. Prior: **Sprint 2: event study + the %
+  move.** Turns the Sprint-1
   GDELT headline corpus into an empirical headline → expected Brent % move: `event_study.py` fits a per-factor,
   curve-regime-gated beta from the +1h/+4h/+1d forward return regressed on a signed crude-sentiment lexicon;
   `impact.py` serves it through a **prior-then-learn gate** (measured beta only when |t|≥2 on ≥12 headlines,
@@ -569,34 +572,41 @@ metrics → empty cards. **Not a bug; a cadence mismatch.** Fix = surface the an
 - **Updating going forward:** merge to `main` → **Factory rebuild** the Space (no token on this desk; the
   keep-alive Action only pings `/api/health`, it does not rebuild).
 
-### 🔧 News Impact Model — Sprint 3: infra fix + corpus de-risk (corpus broadening blocked) (2026-06-24)
-Sprint 3's goal was to **broaden the corpus so a beta earns out of its prior**. Both broadening levers turned
-out to be **environment-blocked this session**, so the sprint landed an infra fix + a de-risk and is honest
-that the data-volume verdict is unchanged.
-- **🩹 Fixed a recurring DB-corruption blocker (the real win).** Pulling the Sprint-2 branch onto the desk
-  produced `database disk image is malformed` reading `pulse_cache.db` — **not** WAL/sidecar this time: there
-  was **no `.gitattributes`**, so git's autocrlf smudge filter mangled the binary on checkout (the blob stayed
-  valid — 2,277,376 B, `integrity ok`, 2,999 rows — but the working-tree file came out 1,556,480 B and
-  malformed, and `git status` showed it *clean* because the clean/smudge filters are self-consistent). New
-  **`.gitattributes`** marks `*.db` + all binary asset types `binary`; restored the working DB from the clean
-  blob. A blast-radius scan (blob-size vs working-size over every tracked binary) confirmed **only
-  `pulse_cache.db`** was affected. This is the chronic corruption the repo kept hitting — now fixed at root.
+### ✅ News Impact Model — Sprint 3: GEOPOLITICAL earns a measured beta + infra fixes (2026-06-24)
+Sprint 3's goal — **broaden/clean the corpus so a factor earns out of its prior** — was **achieved**:
+GEOPOLITICAL now clears |t|≥2 at the 1d headline horizon, so the prior-then-learn gate serves a **measured**
+beta for it. The coverage lever (more years) stayed blocked, but the **classification-quality lever** (Groq
+re-classification) was unblocked mid-session by a user-supplied key and did the job.
+- **🩹 Fixed a recurring DB-corruption blocker.** Pulling the Sprint-2 branch onto the desk gave
+  `database disk image is malformed` on `pulse_cache.db` — **no `.gitattributes`**, so git's autocrlf smudge
+  filter mangled the binary on checkout (blob stayed valid — 2,277,376 B, `integrity ok`, 2,999 rows — but the
+  working file came out 1,556,480 B; `git status` showed it *clean* as the clean/smudge filters are
+  self-consistent). New **`.gitattributes`** marks `*.db` + all binary assets `binary`; restored from the clean
+  blob; a blob-vs-working size scan confirmed only `pulse_cache.db` was hit. Root-caused the chronic corruption.
 - **Corpus de-risk:** new **`OIL_CORPUS_THEMES`** (`gdelt.py`) drops `MILITARY` + `WB_MENA_ENERGY` from the
-  backfill theme set — those pulled generic war/regional news the classifier mislabels GEOPOLITICAL (the
-  Kabul-drone-strike problem, the 80%-NOISE driver). `corpus.backfill_gdelt` now defaults to the oil-only set
-  (threaded via `functools.partial` so the hermetic test fetcher is untouched). Improves the **next** backfill.
-- **⛔ Corpus broadening blocked here:** (1) the **GDELT historical backfill 429s from the office desk IP too**
-  — even a single request fails after the built-in 8s/15s backoff, i.e. the shared office IP is saturated/
-  soft-banned (the whole batch is hitting GDELT). (2) **No `GROQ_API_KEY` in this env**, so re-classifying the
-  80% NOISE with 70b is also off the table. Neither is code-fixable from the desk; the backfill stays
-  idempotent/resumable. **Resume when on an un-banned network + with a Groq key:**
-  `python -m backend.research.news_impact --backfill --start 2021-09-01 --classify`.
-- **Refit reproduced the Sprint-2 verdict (no p-hacking):** at the **1d headline horizon nothing clears
-  |t|≥2** — GEOPOLITICAL is closest (n=317, β=+0.47 %/unit, t=1.54). The 1h/4h "significant" flickers
-  (DEMAND_MACRO t=3.16 n=13; INVENTORY t=−2.98 n=20) are **small-N artifacts** with poor aligned hit-rates
-  (0.15–0.20) and are exactly what the seendate-lag + thin corpus produce — not tradeable. `news_impact_betas.json`
-  re-cached. **Verdict unchanged: the pipeline is sound; only a broader/cleaner corpus moves it off priors.**
-- **Tests:** +1 (`test_corpus_theme_set_is_oil_only`); full suite green. Branch stays
+  backfill theme set (generic war/regional news the classifier mislabels GEOPOLITICAL — the Kabul-drone-strike
+  problem). `corpus.backfill_gdelt` defaults to the oil-only set (via `functools.partial`, hermetic test
+  untouched). Improves the next backfill.
+- **Classifier robustness + re-classify path:** `_groq_classify_batch` gained **429 backoff** (honours
+  `retry-after`, capped) + **daily-cap detection** (terminal, no pointless retries); new
+  **`classify.reclassify_factor(target)`** re-runs Groq over rows *currently* labelled a factor and overwrites
+  (Groq-only — skips on failure rather than re-confirming NOISE via keywords; naturally resumable).
+- **Re-classification (8b, since 70b's 100k daily token cap was exhausted — `Used 99932/100000`):** 8b-instant
+  has a separate budget but a tight **6,000 TPM**, so bulk runs are paced ~5 batches/min. Re-classified ~1/3 of
+  NOISE (958 headlines, 32 batches): **NOISE 2,407 → 2,147 (80%→72%)**, GEOPOLITICAL **317 → 520**.
+- **Verdict (graded): GEOPOLITICAL earns a measured beta.** At the 1d horizon GEOPOLITICAL goes
+  **n=317 t=1.54 (prior) → n=520 β=+0.865 %/unit t=3.05 (MEASURED)**. Critically **t rose as n grew** — random
+  NOISE→GEOPOLITICAL relabels would have diluted t toward 0, so 8b is recovering *real* geo-oil headlines the
+  keyword fallback had buried, not manufacturing signal. Right sign (bullish-for-crude geo → Brent up). `impact.score_headline`
+  now returns e.g. *"Drone strike on Saudi oil pipeline → GEOPOLITICAL, LONG, +0.78% Brent, basis=measured
+  (t=3.05, n=520)"* instead of the prior. Other factors stay on priors (still thin). `news_impact_betas.json`
+  re-cached; `.env` GROQ key set (gitignored, **not committed**).
+- **Still open / honest caveats:** corpus span still 2021-only (the GDELT coverage backfill **429s from the
+  office shared IP** — resume from a clean network: `python -m backend.research.news_impact --backfill --start
+  2021-09-01 --classify`); remaining ~2,147 NOISE not yet re-done (better to finish with **70b once its daily
+  cap resets** — cleaner than 8b); some GEOPOLITICAL growth may include non-oil military news, a known limit of
+  the broad-theme 2021 pull (the oil-only theme set fixes it going forward).
+- **Tests:** +1 (`test_corpus_theme_set_is_oil_only`); **170 pytest green**. Branch stays
   `phase4-live-feature-overlay` (feature branch, not merged to main).
 
 ### ✅ News Impact Model — Sprint 2: event study + the % move (2026-06-23)
