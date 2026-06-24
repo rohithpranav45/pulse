@@ -92,6 +92,33 @@ def _brent_daily() -> pd.DataFrame:
     return b
 
 
+def _wti_daily() -> pd.DataFrame:
+    """WTI front daily return + M1-M2 + WTI-Brent spread. US crude inventories are
+    a US signal, so WTI is the more directly-affected benchmark than Brent — this
+    lets the regime study measure the WTI reaction alongside Brent's."""
+    try:
+        w = dl.get_wti_settlements()
+    except Exception:
+        return pd.DataFrame()
+    if w is None or "c1" not in getattr(w, "columns", []):
+        return pd.DataFrame()
+    w = w.copy()
+    w.index = pd.to_datetime(w.index)
+    out = pd.DataFrame(index=w.index.sort_values())
+    out["ret_wti"] = w["c1"].astype(float).pct_change() * 100.0
+    if "c2" in w.columns:
+        m = w["c1"].astype(float) - w["c2"].astype(float)
+        out["d_wti_m1_m2"] = m.diff()
+    # WTI-Brent spread change (the cleanest expression of a US-specific surprise)
+    try:
+        b = _brent_daily()["c1"].astype(float)
+        sprd = (w["c1"].astype(float) - b.reindex(w.index).ffill())
+        out["d_wti_brent"] = sprd.diff()
+    except Exception:
+        pass
+    return out
+
+
 def build_daily_panel(method: str = "seasonal", force_refresh: bool = False,
                       series: str = "crude_ex_spr") -> pd.DataFrame:
     """
@@ -113,10 +140,13 @@ def build_daily_panel(method: str = "seasonal", force_refresh: bool = False,
         else f"daily_panel_{series}_{method}.parquet"
     cache = _CACHE / fname
     if not force_refresh and cache.exists():
-        return pd.read_parquet(cache)
+        cached = pd.read_parquet(cache)
+        if "ret_wti" in cached.columns:   # migrate old panels that predate the WTI column
+            return cached
 
     sp = eia_report.surprise_series(series, method)
     b = _brent_daily()
+    w = _wti_daily()
     inv = pd.read_parquet(_INV_HISTORY) if _INV_HISTORY.exists() else None
 
     rows = []
@@ -137,12 +167,26 @@ def build_daily_panel(method: str = "seasonal", force_refresh: bool = False,
             if len(ib):
                 bucket = ib["inv_bucket"].iloc[-1]
                 pct = ib["vs_5yr_pct"].iloc[-1]
+        # WTI reaction on the same release day (asof-matched; NaN when no WTI bar)
+        def _wcol(col):
+            try:
+                if len(w) and col in w.columns:
+                    pos = w.index.searchsorted(d0, side="right") - 1
+                    if pos >= 0 and (d0 - w.index[pos]).days <= 4:
+                        v = w.iloc[pos][col]
+                        return float(v) if pd.notna(v) else np.nan
+            except Exception:
+                pass
+            return np.nan
         rows.append({
             "release_day": d0,
             "surprise_z": float(z),
             "surprise": float(sp.loc[we, "surprise"]),
             "actual_change": float(sp.loc[we, "actual_change"]),
             "ret": float(b.loc[d0, "ret"]),
+            "ret_wti": _wcol("ret_wti"),
+            "d_wti_m1_m2": _wcol("d_wti_m1_m2"),
+            "d_wti_brent": _wcol("d_wti_brent"),
             "d_m1_m2": float(b.loc[d0, "d_m1_m2"]),
             "front_contango": bool(b.loc[d0, "front_contango"]),
             "inv_bucket": bucket,
@@ -226,8 +270,11 @@ def current_regime(series: str = "crude_ex_spr") -> dict:
     panel = build_daily_panel("seasonal", series=series)
     glut = panel[panel["inv_pct"] > 0]
     tight = panel[panel["inv_pct"] <= 0]
-    applicable = _ols((glut if pct > 0 else tight)["surprise_z"].values,
-                      (glut if pct > 0 else tight)["ret"].values)
+    sub = glut if pct > 0 else tight
+    applicable = _ols(sub["surprise_z"].values, sub["ret"].values)
+    # WTI reaction in the same regime — US crude inventories move WTI more than Brent
+    applicable_wti = (_ols(sub["surprise_z"].values, sub["ret_wti"].values)
+                      if "ret_wti" in sub.columns and sub["ret_wti"].notna().sum() >= 8 else None)
     bucket_beta = _ols(panel[panel["inv_bucket"] == bucket]["surprise_z"].values,
                        panel[panel["inv_bucket"] == bucket]["ret"].values)
 
@@ -236,6 +283,7 @@ def current_regime(series: str = "crude_ex_spr") -> dict:
         "inv_bucket": bucket,
         "inv_vs_5yr_pct": round(pct, 1) if pd.notna(pct) else None,
         "front_contango": contango,
+        "applicable_beta_wti": applicable_wti,
         "regime_label": f"{bucket} stocks / {'contango' if contango else 'backwardation'}",
         "applicable_beta": applicable,        # by glut/tight split
         "bucket_beta": bucket_beta,           # by HIGH/AVG/LOW bucket

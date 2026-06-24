@@ -301,9 +301,41 @@ def assess_release(actual_change: float | None = None,
         pass
     scenarios = scenario_tree(regime_beta, sensitive, surprise_std, glut_beta)
 
+    # --- WTI reaction (US crude inventories move WTI more than Brent) ---
+    wti_b = cr.get("applicable_beta_wti") or {}
+    wti_beta = wti_b.get("beta", 0.0)
+    wti_t = wti_b.get("t", 0.0)
+    wti_sensitive = abs(wti_t) >= 2.0
+    expected_wti_move_pct = round(wti_beta * surprise_z, 3) if wti_sensitive else 0.0
+    price_reaction = {
+        "wti":   {"beta_pct_per_sigma": wti_beta, "t": wti_t,
+                  "expected_move_pct": expected_wti_move_pct, "sensitive": wti_sensitive},
+        "brent": {"beta_pct_per_sigma": regime_beta, "t": regime_t,
+                  "expected_move_pct": expected_move_pct, "sensitive": sensitive},
+    }
+
+    # --- per-spread impact (the WTI event study × today's surprise) ---
+    spread_impacts = []
+    try:
+        for s in (spread_attribution_betas().get("intraday_spreads") or []):
+            b = s.get("beta_per_sigma", 0.0)
+            spread_impacts.append({
+                "instrument": s.get("instrument"),
+                "beta_per_sigma": b,
+                "t": s.get("t"),
+                "significant": s.get("significant"),
+                "expected_move": round(b * surprise_z, 4),
+            })
+        spread_impacts.sort(key=lambda x: -abs(x["expected_move"]))
+    except Exception:
+        pass
+
     return {
         "as_of": as_of,
         "week_ending": week_ending,
+        "expected_wti_move_pct": expected_wti_move_pct,
+        "price_reaction": price_reaction,
+        "spread_impacts": spread_impacts,
         "release_date": release_date,
         "release_day_name": release_day_name,
         "actual_change_mbbl": round(actual_change, 0),
@@ -431,6 +463,12 @@ def assess_series(series: str = "crude_ex_spr", actual_change: float | None = No
         "surprise_source": surprise_src, "surprise_std_mbbl": round(std, 0),
         "call": call, "p_bullish": p_bull, "p_bearish": p_bear, "confidence": confidence,
         "expected_brent_move_pct": expected_move_pct,
+        "expected_wti_move_pct": None,     # WTI event study is crude-specific
+        "price_reaction": {
+            "brent": {"beta_pct_per_sigma": regime_beta, "t": regime_t,
+                      "expected_move_pct": expected_move_pct, "sensitive": sensitive},
+        },
+        "spread_impacts": [],              # the product crack is the expression (see spreads)
         "regime": cr, "regime_sensitive": sensitive,
         "regime_beta_pct_per_sigma": regime_beta, "regime_t": regime_t,
         "quality_of_draw": None,           # the quality decomposition is crude-only

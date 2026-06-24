@@ -44,6 +44,69 @@ const tone = (c: string) => (c === 'BULLISH' ? 'bull' : c === 'BEARISH' ? 'bear'
 const mm = (v: number | null | undefined) =>
   v == null ? '—' : `${v > 0 ? '+' : ''}${(v / 1000).toFixed(1)} MMbbl`;
 
+const SPREAD_LABEL: Record<string, string> = {
+  wti_flat: 'WTI flat', brent_flat: 'Brent flat',
+  wti_brent: 'WTI–Brent', wti_m1_m2: 'WTI M1–M2',
+};
+
+// WTI vs Brent reaction + per-spread impact. Crude inventories are US data → WTI
+// is the affected benchmark (Brent barely reacts); the spread impacts are the
+// event-study betas × today's surprise.
+function PriceReaction({ live }: { live: any }) {
+  const pr = live?.price_reaction;
+  const impacts: any[] = live?.spread_impacts ?? [];
+  if (!pr?.wti && !impacts.length) return null;
+  const moveTxt = (p: any) =>
+    !p ? '—' : p.sensitive ? `${p.expected_move_pct > 0 ? '+' : ''}${p.expected_move_pct.toFixed(2)}%` : '≈0';
+  const moveTone = (p: any) =>
+    !p || !p.sensitive ? 'text-text-muted'
+      : p.expected_move_pct > 0 ? 'text-bull' : p.expected_move_pct < 0 ? 'text-bear' : 'text-text-muted';
+  return (
+    <div className="rounded-lg border border-border/50 bg-bg-card/30 p-3 mb-4">
+      <div className="text-[10px] font-mono uppercase tracking-[0.15em] text-text-tertiary mb-2">
+        Price reaction · <span className="text-gold">WTI</span> is the affected benchmark (US crude data) · Brent barely reacts
+      </div>
+      {pr?.wti && (
+        <div className="grid grid-cols-2 gap-3 mb-3">
+          {[['WTI', pr.wti], ['Brent', pr.brent]].map(([lab, p]: any) => (
+            <div key={lab} className={clsx('flex items-baseline justify-between rounded border px-2.5 py-1.5',
+              lab === 'WTI' ? 'border-gold/40 bg-gold/5' : 'border-border/40')}>
+              <span className="text-[12px] font-mono font-bold">{lab}</span>
+              <span className="text-[9.5px] font-mono text-text-muted">β {Number(p?.beta_pct_per_sigma ?? 0).toFixed(3)}%/σ · t={p?.t}</span>
+              <span className={clsx('text-[13px] font-mono font-bold tabular', moveTone(p))}>{moveTxt(p)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {impacts.length > 0 && (
+        <>
+          <div className="text-[9.5px] font-mono uppercase tracking-wide text-text-muted mb-1">
+            Spread impact · expected move per the current surprise (z={live.surprise_z})
+          </div>
+          <div className="space-y-0.5">
+            {impacts.map((s) => (
+              <div key={s.instrument} className="grid grid-cols-[1fr_auto_64px] gap-2 items-center text-[10.5px] font-mono tabular">
+                <span className={clsx(s.instrument === 'brent_flat' ? 'text-text-muted' : 'text-text-secondary')}>
+                  {SPREAD_LABEL[s.instrument] ?? s.instrument}
+                </span>
+                <span className="text-[9px] text-text-muted">β {Number(s.beta_per_sigma).toFixed(4)}/σ · t={s.t}</span>
+                <span className={clsx('text-right font-bold',
+                  s.expected_move > 0 ? 'text-bull' : s.expected_move < 0 ? 'text-bear' : 'text-text-muted')}>
+                  {s.expected_move >= 0 ? '+' : ''}{Number(s.expected_move).toFixed(3)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+      <div className="mt-1.5 text-[9.5px] font-mono text-text-muted leading-snug">
+        WTI reacts ~17× more than Brent to a crude surprise (US-specific data). Moves are small here because today's
+        tight/backwardated regime is low-sensitivity — read the WTI-vs-Brent <span className="text-gold">ratio</span>, not the level.
+      </div>
+    </div>
+  );
+}
+
 function DeliverableTag({ n, label }: { n: number; label: string }) {
   return (
     <div className="flex items-center gap-1.5 mb-1.5">
@@ -129,7 +192,15 @@ export function InventoryImpactPanel({ series = 'crude_ex_spr' }: { series?: str
           <div className="grid grid-cols-3 gap-2 mt-2 text-[10.5px] font-mono">
             <div><div className="text-text-muted">confidence</div><div className="text-text-secondary font-bold">{live.confidence}</div></div>
             <div><div className="text-text-muted">P(bull/bear)</div><div className="text-text-secondary">{live.p_bullish.toFixed(2)} / {live.p_bearish.toFixed(2)}</div></div>
-            <div><div className="text-text-muted">exp. move</div><div className={live.regime_sensitive ? 'text-text-secondary' : 'text-text-muted'}>{live.regime_sensitive ? `${live.expected_brent_move_pct > 0 ? '+' : ''}${live.expected_brent_move_pct.toFixed(2)}%` : '≈0'}</div></div>
+            {(() => {
+              const wti = (live as any).price_reaction?.wti;
+              const sens = wti ? wti.sensitive : live.regime_sensitive;
+              const mv = wti ? wti.expected_move_pct : live.expected_brent_move_pct;
+              return (
+                <div><div className="text-text-muted">exp. {wti ? 'WTI' : 'Brent'}</div>
+                  <div className={sens ? 'text-text-secondary' : 'text-text-muted'}>{sens ? `${mv > 0 ? '+' : ''}${mv.toFixed(2)}%` : '≈0'}</div></div>
+              );
+            })()}
           </div>
         </div>
         {/* regime gate — the why */}
@@ -174,6 +245,9 @@ export function InventoryImpactPanel({ series = 'crude_ex_spr' }: { series?: str
           </ol>
         </div>
       </div>
+
+      {/* ── PRICE REACTION · WTI vs Brent + per-spread impact ──────── */}
+      <PriceReaction live={live as any} />
 
       {/* ── consensus calculator ───────────────────────────────── */}
       <div className="rounded-lg border border-gold/30 bg-gold/5 p-3 mb-4">
