@@ -2016,6 +2016,35 @@ def news_live_route():
                     "timestamp": _now()})
 
 
+_news_refresh_lock = threading.Lock()
+
+@app.route("/api/news/refresh", methods=["POST"])
+def news_refresh_route():
+    """
+    Force a live-news re-fetch + corpus ingest now (the dashboard 'Refresh news'
+    button). The upstream sources are slow (NewsAPI backoff, GDELT's 5s rate
+    limit) — up to a minute — so this runs ASYNC: it kicks the re-fetch + ingest
+    on a background thread and returns immediately. The client keeps polling
+    /api/news/live and sees the fresh, re-scored headlines when it lands. A lock
+    coalesces overlapping clicks into one in-flight refresh.
+    """
+    if not _news_refresh_lock.acquire(blocking=False):
+        return jsonify({"data": {"ok": True, "started": False, "busy": True},
+                        "timestamp": _now()})
+
+    def _bg():
+        try:
+            _refresh_news()          # re-fetch + cache the wire
+            _news_corpus_ingest()    # upsert + classify the newly-arrived headlines
+        except Exception as exc:
+            log.warning("manual news refresh failed: %s", exc)
+        finally:
+            _news_refresh_lock.release()
+
+    threading.Thread(target=_bg, daemon=True, name="news-refresh").start()
+    return jsonify({"data": {"ok": True, "started": True}, "timestamp": _now()})
+
+
 @app.route("/api/news/factors")
 def news_factors_route():
     """

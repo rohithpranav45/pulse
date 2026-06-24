@@ -1,5 +1,6 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import clsx from 'clsx';
+import { RefreshCw } from 'lucide-react';
 import { Panel } from '@/components/ui/Panel';
 import { SkeletonRows } from '@/components/ui/Skeleton';
 import { api } from '@/lib/api';
@@ -39,8 +40,40 @@ function sentToneOf(s: number | null | undefined): 'bull' | 'bear' | 'neut' {
 }
 
 export function LiveHeadlinesPanel() {
-  const { data, lastUpdated, error } = usePolling<LiveData>(
+  const { data, lastUpdated, error, refetch } = usePolling<LiveData>(
     () => api.newsLive() as Promise<LiveData>, 90_000,
+  );
+  const [refreshing, setRefreshing] = useState(false);
+
+  async function refreshNews() {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await api.newsRefresh();   // kicks an async wire re-fetch + corpus ingest (returns fast)
+      // the upstream fetch takes up to ~a minute; poll the feed until it lands.
+      for (let i = 0; i < 9; i++) {
+        await new Promise(r => setTimeout(r, 12_000));
+        await refetch();
+      }
+    } catch { /* surfaced by the panel's error chip on the next poll */ }
+    finally { setRefreshing(false); }
+  }
+
+  const refreshBtn = (
+    <button
+      onClick={refreshNews}
+      disabled={refreshing}
+      title="Re-fetch the live wire + re-score now"
+      className={clsx(
+        'flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-mono uppercase tracking-widest transition-colors',
+        refreshing
+          ? 'text-text-muted border-border/40 cursor-default'
+          : 'text-gold border-gold/30 bg-gold/5 hover:bg-gold/15',
+      )}
+    >
+      <RefreshCw className={clsx('w-3 h-3', refreshing && 'animate-spin')} />
+      {refreshing ? 'refreshing' : 'refresh'}
+    </button>
   );
 
   const articles = useMemo<LiveItem[]>(() => {
@@ -63,7 +96,7 @@ export function LiveHeadlinesPanel() {
   if (!articles.length) {
     return (
       <Panel title="Live headlines · oil tape" accent="blue" source="news_live"
-        staticMount lastSuccess={lastUpdated} fetchError={error}>
+        staticMount lastSuccess={lastUpdated} fetchError={error} right={refreshBtn}>
         <div className="text-[12px] font-mono text-text-tertiary px-3 py-6 text-center">
           {error
             ? `News endpoint unreachable: ${(error as any)?.message ?? String(error)}`
@@ -83,9 +116,12 @@ export function LiveHeadlinesPanel() {
       lastSuccess={lastUpdated}
       fetchError={error}
       right={
-        <span className="text-[9.5px] font-mono text-text-muted uppercase tracking-widest">
-          {articles.length} on wire
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-[9.5px] font-mono text-text-muted uppercase tracking-widest">
+            {articles.length} on wire
+          </span>
+          {refreshBtn}
+        </div>
       }
     >
       <div className="grid grid-cols-[78px_1fr_64px_96px] gap-2 text-[9.5px] font-mono text-text-muted uppercase tracking-wide px-1 mb-1">

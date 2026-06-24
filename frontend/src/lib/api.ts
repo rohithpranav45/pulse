@@ -141,6 +141,7 @@ export const api = {
   newsImpact:    () => getJSON<NewsImpactData>('/api/news/impact'),
   newsFactors:   () => getJSON<NewsImpactData>('/api/news/factors'),
   newsLive:      () => getJSON('/api/news/live'),   // live wire, each headline scored
+  newsRefresh:   () => postJSON('/api/news/refresh', {}, 60000),  // force re-fetch + ingest
   weather:       () => getJSON('/api/weather'),
   technicals:    () => getJSON('/api/technicals'),
   termStructure: () => getJSON('/api/term-structure'),
