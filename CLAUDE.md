@@ -7,7 +7,12 @@ spread engine), and serves a React dashboard with a paper-trading book.
 - **Stack:** Flask 3 · React 18 + Vite + Tailwind · SQLite (cache + paper book) ·
   DuckDB/Parquet over a 3.5 GB `/Data` desk feed · sklearn + XGBoost/LightGBM/CatBoost
 - **Run (local):** `python start.py` from the repo root → http://127.0.0.1:5000
-- **Last updated:** 2026-06-23 (**News Impact Model — Sprint 2: event study + the % move.** Turns the Sprint-1
+- **Last updated:** 2026-06-24 (**News Impact Sprint 3 — infra fix + corpus de-risk.** Fixed a recurring
+  `pulse_cache.db` corruption at root (no `.gitattributes` → git autocrlf mangled the binary on checkout;
+  marked binaries `binary` + restored from the clean blob) and tightened the backfill theme set to oil-only
+  (`OIL_CORPUS_THEMES`, drops generic MILITARY news). **Corpus broadening stayed blocked** — GDELT 429s from
+  the office IP + no Groq key in-env — so the 1d-horizon verdict is unchanged (nothing clears |t|≥2; priors
+  hold). Prior: **News Impact Model — Sprint 2: event study + the % move.** Turns the Sprint-1
   GDELT headline corpus into an empirical headline → expected Brent % move: `event_study.py` fits a per-factor,
   curve-regime-gated beta from the +1h/+4h/+1d forward return regressed on a signed crude-sentiment lexicon;
   `impact.py` serves it through a **prior-then-learn gate** (measured beta only when |t|≥2 on ≥12 headlines,
@@ -563,6 +568,36 @@ metrics → empty cards. **Not a bug; a cadence mismatch.** Fix = surface the an
   the A/B book + framework on baked daily settles; the live-feed `as_of` advancing is a desk-only behaviour.
 - **Updating going forward:** merge to `main` → **Factory rebuild** the Space (no token on this desk; the
   keep-alive Action only pings `/api/health`, it does not rebuild).
+
+### 🔧 News Impact Model — Sprint 3: infra fix + corpus de-risk (corpus broadening blocked) (2026-06-24)
+Sprint 3's goal was to **broaden the corpus so a beta earns out of its prior**. Both broadening levers turned
+out to be **environment-blocked this session**, so the sprint landed an infra fix + a de-risk and is honest
+that the data-volume verdict is unchanged.
+- **🩹 Fixed a recurring DB-corruption blocker (the real win).** Pulling the Sprint-2 branch onto the desk
+  produced `database disk image is malformed` reading `pulse_cache.db` — **not** WAL/sidecar this time: there
+  was **no `.gitattributes`**, so git's autocrlf smudge filter mangled the binary on checkout (the blob stayed
+  valid — 2,277,376 B, `integrity ok`, 2,999 rows — but the working-tree file came out 1,556,480 B and
+  malformed, and `git status` showed it *clean* because the clean/smudge filters are self-consistent). New
+  **`.gitattributes`** marks `*.db` + all binary asset types `binary`; restored the working DB from the clean
+  blob. A blast-radius scan (blob-size vs working-size over every tracked binary) confirmed **only
+  `pulse_cache.db`** was affected. This is the chronic corruption the repo kept hitting — now fixed at root.
+- **Corpus de-risk:** new **`OIL_CORPUS_THEMES`** (`gdelt.py`) drops `MILITARY` + `WB_MENA_ENERGY` from the
+  backfill theme set — those pulled generic war/regional news the classifier mislabels GEOPOLITICAL (the
+  Kabul-drone-strike problem, the 80%-NOISE driver). `corpus.backfill_gdelt` now defaults to the oil-only set
+  (threaded via `functools.partial` so the hermetic test fetcher is untouched). Improves the **next** backfill.
+- **⛔ Corpus broadening blocked here:** (1) the **GDELT historical backfill 429s from the office desk IP too**
+  — even a single request fails after the built-in 8s/15s backoff, i.e. the shared office IP is saturated/
+  soft-banned (the whole batch is hitting GDELT). (2) **No `GROQ_API_KEY` in this env**, so re-classifying the
+  80% NOISE with 70b is also off the table. Neither is code-fixable from the desk; the backfill stays
+  idempotent/resumable. **Resume when on an un-banned network + with a Groq key:**
+  `python -m backend.research.news_impact --backfill --start 2021-09-01 --classify`.
+- **Refit reproduced the Sprint-2 verdict (no p-hacking):** at the **1d headline horizon nothing clears
+  |t|≥2** — GEOPOLITICAL is closest (n=317, β=+0.47 %/unit, t=1.54). The 1h/4h "significant" flickers
+  (DEMAND_MACRO t=3.16 n=13; INVENTORY t=−2.98 n=20) are **small-N artifacts** with poor aligned hit-rates
+  (0.15–0.20) and are exactly what the seendate-lag + thin corpus produce — not tradeable. `news_impact_betas.json`
+  re-cached. **Verdict unchanged: the pipeline is sound; only a broader/cleaner corpus moves it off priors.**
+- **Tests:** +1 (`test_corpus_theme_set_is_oil_only`); full suite green. Branch stays
+  `phase4-live-feature-overlay` (feature branch, not merged to main).
 
 ### ✅ News Impact Model — Sprint 2: event study + the % move (2026-06-23)
 Sprint 1 (merged `cf3fbd3`) shipped the timestamped GDELT headline corpus (`news_history` table) + the
