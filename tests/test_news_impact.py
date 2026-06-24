@@ -189,3 +189,13 @@ def test_all_keyword_factors_are_valid_labels():
         pass
     assert set(f for f, _ in classify._KEYWORDS) <= classify.VALID
     assert "NOISE" in classify.VALID
+
+
+def test_corpus_theme_set_is_oil_only():
+    """The backfill corpus themes must exclude generic MILITARY / regional news
+    (the non-oil GEOPOLITICAL-pollution source) and stay a subset of ENERGY_THEMES."""
+    from backend.fetchers.gdelt import OIL_CORPUS_THEMES, ENERGY_THEMES
+    assert "MILITARY" not in OIL_CORPUS_THEMES
+    assert "WB_MENA_ENERGY" not in OIL_CORPUS_THEMES
+    assert "ECON_OILPRICE" in OIL_CORPUS_THEMES
+    assert set(OIL_CORPUS_THEMES) <= set(ENERGY_THEMES)
