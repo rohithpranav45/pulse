@@ -606,8 +606,17 @@ re-classification) was unblocked mid-session by a user-supplied key and did the 
   2021-09-01 --classify`); remaining ~2,147 NOISE not yet re-done (better to finish with **70b once its daily
   cap resets** — cleaner than 8b); some GEOPOLITICAL growth may include non-oil military news, a known limit of
   the broad-theme 2021 pull (the oil-only theme set fixes it going forward).
-- **Tests:** +1 (`test_corpus_theme_set_is_oil_only`); **170 pytest green**. Branch stays
-  `phase4-live-feature-overlay` (feature branch, not merged to main).
+- **Live feed wiring (the News tab is now actually live):** a scheduler job **`_news_corpus_ingest`** (app.py,
+  every `TTL_NEWS`, opt-out `PULSE_NEWS_IMPACT_DISABLED=1`) pipes the cached `/api/news` wire → `corpus.upsert_articles`
+  → `classify.classify_corpus` (dedup on URL, classifies only the new rows), so the corpus grows with today's
+  headlines and the Impact feed scores them. `impact_feed` gained `order="recent"` (the live API now leads with
+  the **newest** headlines, not the highest-impact historical ones) and **excludes NOISE** (the impact feed is
+  "what's worth something"; the raw tape lives in the new panel). Verified end-to-end: 40 live headlines
+  ingested → corpus span now extends to **2026-06-24**, feed leads with today's oil headlines scored
+  (GEOPOLITICAL measured). **Two new frontend surfaces on the News tab:** **`LiveHeadlinesPanel`** (raw current
+  wire, unscored, NewsAPI/GDELT/marketaux, top of tab) + a **Time·UTC column** on the Impact feed.
+- **Tests:** +2 (`test_corpus_theme_set_is_oil_only`, `test_impact_feed_recent_order_leads_with_newest`);
+  **171 pytest green**, frontend `tsc`+build clean. Branch stays `phase4-live-feature-overlay` (not merged to main).
 
 ### ✅ News Impact Model — Sprint 2: event study + the % move (2026-06-23)
 Sprint 1 (merged `cf3fbd3`) shipped the timestamped GDELT headline corpus (`news_history` table) + the

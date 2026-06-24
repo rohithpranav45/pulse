@@ -1150,6 +1150,38 @@ _scheduler.add_job(
 )
 
 
+# News Impact — pipe the live news wire into the news-impact corpus and classify
+# the new headlines, so the Impact feed scores TODAY's news instead of only the
+# 2021 backfill. Reads the already-cached /api/news payload (no double fetch),
+# dedups on URL, and classifies only the newly-added rows (cheap: a handful per
+# tick, Groq with keyword fallback). Opt out with PULSE_NEWS_IMPACT_DISABLED=1.
+def _news_corpus_ingest():
+    if os.getenv("PULSE_NEWS_IMPACT_DISABLED", "").strip().lower() in ("1", "true", "yes"):
+        return
+    try:
+        from research.news_impact import corpus, classify
+    except Exception as exc:
+        log.warning("news_impact import failed: %s", exc)
+        return
+    try:
+        news = get_cached("news", TTL_NEWS) or {}
+        articles = news.get("articles") or []
+        if not articles:
+            return
+        added = corpus.upsert_articles(articles)
+        if added:
+            res = classify.classify_corpus(limit=100)
+            log.info("news_impact ingest: +%d live headlines, classified %s %s",
+                     added, res.get("classified"), res.get("by_source"))
+    except Exception as exc:
+        log.warning("news_impact ingest failed: %s", exc)
+
+_scheduler.add_job(
+    _news_corpus_ingest, "interval", seconds=TTL_NEWS,
+    next_run_time=_dt.now() + timedelta(minutes=2), id="_news_corpus_ingest",
+)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Flask routes
 # ─────────────────────────────────────────────────────────────────────────────

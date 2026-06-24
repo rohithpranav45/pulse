@@ -22,6 +22,15 @@ function dirTone(d: string | null | undefined) {
   return d === 'LONG' ? 'bull' : d === 'SHORT' ? 'bear' : 'neut';
 }
 
+// Headline publish time, in UTC (the corpus timestamps are UTC; keeping it UTC
+// avoids local-timezone ambiguity across desks). Two lines: date over HH:mm.
+function fmtTs(iso: string | null | undefined): { date: string; time: string } {
+  if (!iso) return { date: '—', time: '' };
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return { date: '—', time: '' };
+  return { date: d.toISOString().slice(0, 10), time: d.toISOString().slice(11, 16) + 'Z' };
+}
+
 export function NewsImpactPanel() {
   const { data, lastUpdated, error } = usePolling<NewsImpactData>(
     () => api.newsImpact() as Promise<NewsImpactData>,
@@ -54,7 +63,7 @@ export function NewsImpactPanel() {
   return (
     <Panel
       title="Impact feed · headline → % move"
-      subtitle={`Brent ${data.horizon ?? '1d'} forward · ranked by |expected move|`}
+      subtitle={`Brent ${data.horizon ?? '1d'} forward · newest first · expected move per headline`}
       accent="gold"
       source="news_impact"
       staticMount
@@ -66,20 +75,25 @@ export function NewsImpactPanel() {
         </span>
       }
     >
-      <div className="grid grid-cols-[64px_60px_1fr_120px] gap-2 text-[9.5px] font-mono text-text-muted uppercase tracking-wide px-1 mb-1">
-        <span>Dir</span><span className="text-right">Exp move</span><span>Headline</span>
+      <div className="grid grid-cols-[78px_56px_58px_1fr_114px] gap-2 text-[9.5px] font-mono text-text-muted uppercase tracking-wide px-1 mb-1">
+        <span>Time · UTC</span><span>Dir</span><span className="text-right">Exp move</span><span>Headline</span>
         <span className="text-right">Factor · basis</span>
       </div>
       <div className="space-y-0.5 max-h-[520px] overflow-y-auto">
         {feed.map((s, i) => {
           const tone = dirTone(s.direction);
           const measured = s.basis === 'measured';
+          const ts = fmtTs(s.published_at);
           return (
             <div
               key={(s.published_at ?? '') + i}
-              className="grid grid-cols-[64px_60px_1fr_120px] gap-2 items-center text-[10.5px] font-mono tabular py-1 px-1 rounded hover:bg-bg-card/30"
+              className="grid grid-cols-[78px_56px_58px_1fr_114px] gap-2 items-center text-[10.5px] font-mono tabular py-1 px-1 rounded hover:bg-bg-card/30"
               title={s.rationale ?? ''}
             >
+              <span className="flex flex-col leading-tight text-[9px]" title={s.published_at ?? ''}>
+                <span className="text-text-tertiary">{ts.date}</span>
+                <span className="text-text-muted">{ts.time}</span>
+              </span>
               <span className={clsx('font-bold uppercase text-[9.5px] tracking-wide',
                 tone === 'bull' && 'text-bull', tone === 'bear' && 'text-bear', tone === 'neut' && 'text-neut')}>
                 {s.direction ?? '—'}

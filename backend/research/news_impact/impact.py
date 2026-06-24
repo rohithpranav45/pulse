@@ -180,21 +180,30 @@ def current_regime(frames: dict | None = None) -> dict:
 
 
 def impact_feed(limit: int = 40, betas: dict | None = None,
-                regime: dict | None = None) -> list[dict]:
+                regime: dict | None = None, order: str = "impact") -> list[dict]:
     """
-    Recent classified headlines, scored and ranked by |expected % move| (the desk's
-    'what just printed and what is it worth' feed). Reads the live corpus.
+    Recent classified headlines, scored. ``order="impact"`` (default) ranks by
+    |expected % move| — the desk's 'biggest movers' view; ``order="recent"`` ranks
+    newest-first — the live tape view (used by /api/news/impact once the live news
+    wire is feeding the corpus, so today's headlines lead instead of high-impact
+    historical ones). Reads the live corpus.
     """
     from research.news_impact import corpus
     if betas is None:
         betas = event_study.load_cached()
     if regime is None:
         regime = current_regime()
-    rows = [r for r in corpus.recent(limit=max(limit * 4, 200)) if r.get("factor")]
+    # Exclude NOISE — the impact feed is "what's worth something"; the raw tape
+    # (incl. non-oil/NOISE items) lives in the Live Headlines panel.
+    rows = [r for r in corpus.recent(limit=max(limit * 6, 300))
+            if r.get("factor") and r["factor"] != "NOISE"]
     scored = [score_headline(
         r.get("title", ""), factor=r["factor"], factor_source="corpus",
         published_at=r.get("published_at"), betas=betas, regime=regime) for r in rows]
-    scored.sort(key=lambda s: abs(s["expected_pct_move"] or 0), reverse=True)
+    if order == "recent":
+        scored.sort(key=lambda s: (s.get("published_at") or ""), reverse=True)
+    else:
+        scored.sort(key=lambda s: abs(s["expected_pct_move"] or 0), reverse=True)
     return scored[:limit]
 
 
@@ -229,12 +238,14 @@ def factor_table_view(betas: dict | None = None, horizon: str | None = None) -> 
     return rows
 
 
-def to_results(betas: dict | None = None, limit: int = 40) -> dict:
-    """The composed payload behind /api/news/impact and /api/news/factors."""
+def to_results(betas: dict | None = None, limit: int = 40, order: str = "recent") -> dict:
+    """The composed payload behind /api/news/impact and /api/news/factors. The live
+    feed defaults to ``order="recent"`` (newest headlines lead) now that the news
+    wire feeds the corpus."""
     if betas is None:
         betas = event_study.load_cached()
     reg = current_regime()
-    feed = impact_feed(limit=limit, betas=betas, regime=reg)
+    feed = impact_feed(limit=limit, betas=betas, regime=reg, order=order)
     factors = factor_table_view(betas=betas)
     return {
         "available": bool(betas and betas.get("available")),

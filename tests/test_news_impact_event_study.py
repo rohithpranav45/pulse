@@ -210,17 +210,36 @@ def test_impact_feed_ranks_by_expected_move(temp_corpus):
     temp_corpus.upsert_articles([
         {"url": "u1", "title": "Drone attack halts Saudi crude output",
          "published_at": "2026-06-20T09:00:00+00:00"},
-        {"url": "u2", "title": "Quarterly logistics seminar concludes",
+        {"url": "u2", "title": "Mild weather eases heating demand",
          "published_at": "2026-06-20T10:00:00+00:00"},
+        {"url": "u3", "title": "Quarterly logistics seminar concludes",
+         "published_at": "2026-06-20T11:00:00+00:00"},
     ])
     temp_corpus.set_classification("u1", "GEOPOLITICAL", 0.9)
-    temp_corpus.set_classification("u2", "NOISE", 0.3)
+    temp_corpus.set_classification("u2", "WEATHER", 0.6)
+    temp_corpus.set_classification("u3", "NOISE", 0.3)
     feed = im.impact_feed(limit=10, betas=_betas_with(True),
                           regime={"curve": "BACK", "as_of": "2026-06-23"})
+    # NOISE is excluded from the impact feed (it's the "what's worth something" view)
     assert len(feed) == 2
+    assert all(s["factor"] != "NOISE" for s in feed)
     # the geopolitical attack must rank first (largest |expected move|)
     assert feed[0]["factor"] == "GEOPOLITICAL"
     assert abs(feed[0]["expected_pct_move"]) >= abs(feed[1]["expected_pct_move"])
+
+
+def test_impact_feed_recent_order_leads_with_newest(temp_corpus):
+    temp_corpus.upsert_articles([
+        {"url": "old", "title": "OPEC weighs deeper output cut",
+         "published_at": "2021-03-01T09:00:00+00:00"},
+        {"url": "new", "title": "Drone attack halts Saudi crude output",
+         "published_at": "2026-06-20T09:00:00+00:00"},
+    ])
+    temp_corpus.set_classification("old", "SUPPLY_OPEC", 0.8)
+    temp_corpus.set_classification("new", "GEOPOLITICAL", 0.9)
+    feed = im.impact_feed(limit=10, betas=_betas_with(True),
+                          regime={"curve": "BACK", "as_of": "2026-06-23"}, order="recent")
+    assert feed[0]["published_at"].startswith("2026")   # newest leads, not highest-impact
 
 
 def test_current_regime_graceful_without_tape():
