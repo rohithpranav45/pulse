@@ -28,9 +28,9 @@ const CHART_META: Record<string, { title: string; cap: string }> = {
   decay_placebo:    { title: 'Release-day vol vs placebo', cap: 'In 2021-26 the print is ~1.0× a normal day at every horizon — not even a reliable vol event in this regime.' },
 };
 
-export function InventoryFrameworkPanel() {
+export function InventoryFrameworkPanel({ series = 'crude_ex_spr' }: { series?: string }) {
   const { data, lastUpdated, error } = usePolling<Inventory>(
-    () => api.regimeInventory() as Promise<Inventory>, 600_000,
+    () => api.regimeInventory(series) as Promise<Inventory>, 600_000, [series],
   );
   const rows = useMemo(() => data?.when_it_mattered ?? [], [data]);
   const maxAbs = useMemo(() => rows.reduce((m, r) => Math.max(m, Math.abs(r.beta)), 0.01), [rows]);

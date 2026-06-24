@@ -175,11 +175,13 @@ export const api = {
   // Phase 8 — per-spread gate summary
   regimePerspreadGate:    () => getJSON('/api/regime/perspread_gate'),
   // Inventory Surprise Impact Model — EIA crude release framework
-  regimeInventory:        () => getJSON('/api/regime/inventory'),
-  regimeInventoryLive:    (actual?: number, consensus?: number) => {
+  regimeInventory:        (series?: string) =>
+                            getJSON(`/api/regime/inventory${series ? '?series=' + series : ''}`),
+  regimeInventoryLive:    (actual?: number, consensus?: number, series?: string) => {
                             const p = new URLSearchParams();
                             if (actual != null) p.set('actual', String(actual));
                             if (consensus != null) p.set('consensus', String(consensus));
+                            if (series) p.set('series', series);
                             const qs = p.toString();
                             return getJSON(`/api/regime/inventory${qs ? '?' + qs : ''}`);
                           },

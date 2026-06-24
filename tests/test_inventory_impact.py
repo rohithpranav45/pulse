@@ -113,3 +113,23 @@ def test_real_consensus_overrides_proxy():
     r = framework.assess_release(actual_change=-8263, consensus=-2000)
     assert r["surprise_mbbl"] == -6263  # actual - consensus
     assert "consensus" in r["surprise_source"]
+
+
+@pytest.mark.skipif(not (_CACHE / "eia_report_history.parquet").exists(),
+                    reason="EIA report cache not present")
+@pytest.mark.parametrize("series", ["crude_ex_spr", "gasoline", "distillate"])
+def test_assess_series_all_three(series):
+    r = framework.assess_series(series)
+    assert r["series"] == series
+    for k in ("call", "p_bullish", "p_bearish", "confidence", "regime",
+              "spreads", "surprise_mbbl", "surprise_z", "regime_t", "series_label"):
+        assert k in r
+    assert r["call"] in ("BULLISH", "BEARISH", "NEUTRAL")
+    # crude delegates to the full assess_release (WTI spread attribution); non-crude
+    # carry their own series-specific regime beta + product spread set.
+    if series == "crude_ex_spr":
+        assert "WTI" in r["spreads"]["primary"]
+    else:
+        assert r["spreads"]["primary"] and r["spreads"]["primary"] != "—"
+    if not r["regime_sensitive"]:
+        assert r["expected_brent_move_pct"] == 0.0

@@ -53,9 +53,9 @@ function DeliverableTag({ n, label }: { n: number; label: string }) {
   );
 }
 
-export function InventoryImpactPanel() {
+export function InventoryImpactPanel({ series = 'crude_ex_spr' }: { series?: string }) {
   const { data, lastUpdated, error } = usePolling<Inventory>(
-    () => api.regimeInventory() as Promise<Inventory>, 600_000,
+    () => api.regimeInventory(series) as Promise<Inventory>, 600_000, [series],
   );
   // consensus calculator (manual override)
   const [actualIn, setActualIn] = useState('');
@@ -71,6 +71,7 @@ export function InventoryImpactPanel() {
       const r = await api.regimeInventoryLive(
         actualIn === '' ? undefined : Number(actualIn) * 1000,
         consensusIn === '' ? undefined : Number(consensusIn) * 1000,
+        series,
       ) as Inventory;
       if (r?.call) setOverride(r.call);
     } finally { setBusy(false); }
@@ -105,7 +106,7 @@ export function InventoryImpactPanel() {
 
   return (
     <Panel
-      title="Inventory Impact · EIA crude release — the call"
+      title={`Inventory Impact · EIA ${(data as any)?.series_label ?? 'crude'} release — the call`}
       subtitle={nr
         ? `next release: week ending ${nr.week_ending} · out ${nr.release_day_name} ${nr.release_date} · ${data.n_releases} releases backtested`
         : `${data.n_releases} releases backtested`}
