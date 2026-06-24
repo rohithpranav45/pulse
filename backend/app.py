@@ -51,7 +51,7 @@ from flask_cors import CORS
 from schemas import (
     PricesResponse, SignalResponse, TradeIdeaResponse, FundamentalsResponse,
     NewsResponse, PaperPositionsResponse, PaperPerformanceResponse,
-    HealthDetailResponse, respond,
+    HealthDetailResponse, NewsImpactResponse, NewsFactorsResponse, respond,
 )
 from dotenv import load_dotenv
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -1939,6 +1939,42 @@ def fundamentals():
 @app.route("/api/news")
 def news():
     return respond(NewsResponse, _fetch_news(), _now())
+
+
+@app.route("/api/news/impact")
+def news_impact_route():
+    """
+    News Headline Impact Model — the ranked 'what just printed and what is it
+    worth' feed. Each recent classified headline → {factor, direction, expected
+    Brent % move, t-stat, regime}. The expected move uses the empirically fitted
+    per-factor beta when it's statistically earned (basis="measured"), else a
+    labelled prior (basis="prior") — never a fabricated-precise number.
+
+    Read-only; serves the cached event-study betas (news_impact_betas.json) over
+    the live corpus. Regenerate the betas with
+    `python -m backend.research.news_impact.event_study`.
+    """
+    def _impact():
+        from research.news_impact import impact
+        return impact.to_results(limit=50)
+    return respond(NewsImpactResponse,
+                   safe_fetch(_impact, {"available": False, "feed": [], "factors": []}),
+                   _now())
+
+
+@app.route("/api/news/factors")
+def news_factors_route():
+    """
+    Per-factor beta table behind the impact model: every factor in the taxonomy
+    with its measured beta (when significant) or labelled prior, the t-stat / R²,
+    the WTI beta, the sentiment-aligned magnitude, and the curve-regime split.
+    """
+    def _factors():
+        from research.news_impact import impact
+        return impact.to_results(limit=0)
+    return respond(NewsFactorsResponse,
+                   safe_fetch(_factors, {"available": False, "feed": [], "factors": []}),
+                   _now())
 
 
 @app.route("/api/weather")
