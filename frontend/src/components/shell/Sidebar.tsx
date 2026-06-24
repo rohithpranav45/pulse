@@ -8,9 +8,10 @@ import {
   Radar,
   ScrollText,
   Droplets,
+  Newspaper,
 } from 'lucide-react';
 
-export type ViewKey = 'desk' | 'charts' | 'markets' | 'paper' | 'regime' | 'signals' | 'inventory';
+export type ViewKey = 'desk' | 'charts' | 'markets' | 'paper' | 'regime' | 'signals' | 'inventory' | 'news';
 
 // Phase 4.E — Intelligence tab cut entirely. Groq brief lives on DESK; the
 // stumpy analogs / news / correlation widgets were not regime-model inputs.
@@ -22,6 +23,7 @@ export const NAV_ITEMS: { key: ViewKey; label: string; icon: any; hint: string; 
   { key: 'regime',        label: 'Regime',           icon: Radar,            hint: '5', sub: 'Engine · A/B · drill' },
   { key: 'inventory',     label: 'Inventory',        icon: Droplets,         hint: '6', sub: 'EIA release framework' },
   { key: 'signals',       label: 'Signal Log',       icon: ScrollText,       hint: '7', sub: 'Realised performance' },
+  { key: 'news',          label: 'News Impact',      icon: Newspaper,        hint: '8', sub: 'Headline → % move' },
 ];
 
 export function Sidebar({ active, onSelect }: { active: ViewKey; onSelect: (k: ViewKey) => void }) {

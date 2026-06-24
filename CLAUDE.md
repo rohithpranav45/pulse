@@ -7,7 +7,18 @@ spread engine), and serves a React dashboard with a paper-trading book.
 - **Stack:** Flask 3 · React 18 + Vite + Tailwind · SQLite (cache + paper book) ·
   DuckDB/Parquet over a 3.5 GB `/Data` desk feed · sklearn + XGBoost/LightGBM/CatBoost
 - **Run (local):** `python start.py` from the repo root → http://127.0.0.1:5000
-- **Last updated:** 2026-06-22 (Phase 8 — per-spread gate: replaces the uniform global gate (BACK × winners × |z|≥0.5 on every spread) with a **per-spread enable decision** made walk-forward — the regime leg fires for a spread only where its OOS NET Sharpe beat baseline. **Lifts the gated/regime book +0.298 → +0.374 NET Sharpe, reaching baseline parity (+0.372)** by enabling regime on exactly {wti_m1_m2, wti_fly_123} and routing every other spread to the rolling-z baseline. Doesn't beat baseline (consistent with the whole 2.8.x arc) but finally makes the regime book competitive. Shared decision logic in `gate_config.py` (live ↔ walk-forward can't drift); live default-on, `PULSE_PERSPREAD_GATE=0` reverts. Prior: Phase 7 — 2.8.10 portfolio vol-targeting halved the gated book's max-DD −281 → −112 but traded away NET Sharpe +0.298 → +0.198 / Calmar 2.55 → 2.01)
+- **Last updated:** 2026-06-23 (**News Impact Model — Sprint 2: event study + the % move.** Turns the Sprint-1
+  GDELT headline corpus into an empirical headline → expected Brent % move: `event_study.py` fits a per-factor,
+  curve-regime-gated beta from the +1h/+4h/+1d forward return regressed on a signed crude-sentiment lexicon;
+  `impact.py` serves it through a **prior-then-learn gate** (measured beta only when |t|≥2 on ≥12 headlines,
+  else a labelled prior). New **News Impact tab (hotkey 8)** + `/api/news/impact` & `/api/news/factors`.
+  **Graded verdict:** on the corpus we could pull — **2,999 headlines, 2021-01→09 only** (GDELT IP-soft-banned
+  the historical backfill mid-pull; Groq 70b's daily token cap forced a fall to 8b + keyword, 80% NOISE) — **no
+  factor clears |t|≥2 at the 1d horizon, so every factor falls to its prior.** Signs are economically sensible
+  (GEOPOLITICAL +0.47 %/unit) but the thin/noisy tape doesn't earn a measured beta yet; the pipeline is the
+  deliverable, a broader/better-timestamped corpus is the unlock. 168 pytest pass (+16 hermetic). Prior: Phase 8
+  — per-spread gate lifted the regime book +0.298 → +0.374 NET Sharpe to baseline parity (+0.372) by enabling
+  regime on exactly {wti_m1_m2, wti_fly_123})
 - **Live:** https://rohithpranav45-pulse.hf.space (free HF Space, A/B book accumulating 24/7 — **Phase 8 deployed + verified live 2026-06-22**; regime endpoints healthy, `/api/regime/perspread_gate` serving, `PULSE_GATED_BLEND=1` set so the live per-spread gate is active. Runs on the baked parquet lake, so `as_of` = latest baked settle, not the desk `I:\` live feed)
 
 > 🧭 **Three docs, one per tense:**
@@ -553,6 +564,52 @@ metrics → empty cards. **Not a bug; a cadence mismatch.** Fix = surface the an
 - **Updating going forward:** merge to `main` → **Factory rebuild** the Space (no token on this desk; the
   keep-alive Action only pings `/api/health`, it does not rebuild).
 
+### ✅ News Impact Model — Sprint 2: event study + the % move (2026-06-23)
+Sprint 1 (merged `cf3fbd3`) shipped the timestamped GDELT headline corpus (`news_history` table) + the
+8-factor Groq/keyword classifier. Sprint 2 turns that tape into an empirical **headline → expected Brent %
+move**, the same conditional-reaction thesis as the inventory framework but the event is a headline.
+- **`event_study.py`** — for each classified, timestamped headline, align the Brent/WTI tape and measure the
+  **forward return at +1h / +4h / +1d** (intraday 5-min lake for 1h/4h, daily settle close-to-close for 1d,
+  asof-matched with a 90-min staleness guard so overnight/weekend headlines drop out). Each headline gets a
+  **signed crude-polarity sentiment** ∈ [−1,+1] from a deterministic lexicon (auditable; +1 = bullish for
+  crude — draws/outages/sanctions/strong demand). Regress forward return on sentiment **per factor, gated by
+  curve regime** (BACK/CONTANGO) → the per-factor beta (% Brent move per +1 unit sentiment) with t/R²/N, plus
+  a vol-normalised column (move ÷ horizon-scaled trailing-20d Brent vol). `_ols` cloned from
+  `inventory_impact`; `MIN_N=12`, `T_MIN=2`. Caches `news_impact_betas.json`.
+- **`impact.py`** — headline → `{factor, direction, expected_%_move, t_stat, regime_context}`. **Prior-then-
+  learn gate** (the `gate_config` per-spread pattern): show a **measured** beta only when |t|≥2 on ≥12
+  headlines, else a labelled, economically-reasoned **prior** (GEOPOLITICAL 0.90 %/unit … NOISE 0.0) — the
+  desk never sees a fabricated-precise number. `impact_feed` ranks recent headlines by |expected move|.
+- **API + frontend:** `GET /api/news/impact` (ranked feed) + `/api/news/factors` (per-factor beta table) via
+  Pydantic `NewsImpactResponse`/`NewsFactorsResponse` → regen TS. New **News Impact tab (hotkey 8)** +
+  `NewsImpactPanel` (feed) + `NewsFactorPanel` (beta table); sidebar 7→8, App hotkey map + help overlay +
+  `ViewKey` updated. **Also fixed a latent main bug the TS regen surfaced:** `ABBacktestVerdict` /
+  `ABBacktestArm` were hand-patched into `api-types.ts` but never modeled in `schemas/__init__.py`, so the
+  codegen would drop them (breaking `tsc`); now properly modeled (`backtest_verdict` on `ABReportData`).
+- **Corpus (honest):** **2,999 headlines, 2021-01 → 2021-09** (~8 months). The historical GDELT backfill
+  **IP-soft-banned mid-pull** (persistent 429s that session cooldowns wouldn't clear) so coverage capped at
+  2021; it's idempotent/resumable to extend later (+ live persistence grows it continuously). All classified:
+  **Groq-8b 870 / keyword 2,129** — the 70b model's free-tier **100k daily-token cap was exhausted**, so
+  classification fell to `llama-3.1-8b-instant` (separate quota; less reliable at batch JSON → keyword filled
+  ~70%). by_factor is NOISE-heavy (2,407/2,999, **80%**) — GDELT's broad MILITARY+energy theme pulls in
+  non-oil military news (the Kabul-drone-strike headline classifies GEOPOLITICAL).
+- **Verdict (graded, Phase-2.8.x tradition): on this thin/noisy 8-month corpus NO factor clears |t|≥2 at the
+  1d headline horizon → every factor falls back to its labelled prior.** Signs are mostly economically
+  sensible (GEOPOLITICAL **+0.47 %/unit**, WEATHER +0.43, both right-signed; aligned hit 57% for WEATHER) but
+  the t-stats don't clear. 1h flickers significant for DEMAND_MACRO (t=3.16, n=13) and INVENTORY (t=−2.98,
+  n=20) — too fragile, and **GDELT seendate lags true publication** so a +1h window can miss the reaction.
+  The prior-then-learn gate correctly keeps the desk on priors: **the pipeline is the deliverable; a broader,
+  better-timestamped corpus is what's needed before measured betas replace priors.** Endpoints verified via
+  Flask test client (`available=True`, n=2999, regime BACK; feed ranks GEOPOLITICAL LONG via prior; 0/9
+  measured at 1d).
+- **Tests:** new `tests/test_news_impact_event_study.py` (16 hermetic — sentiment lexicon, asof staleness,
+  intraday/daily forward returns, curve regime, panel build + no-coverage drop, OLS recovery + min-N,
+  factor-table significance flag, prior-then-learn measured↔prior switch, NOISE→NEUTRAL, taxonomy coverage,
+  impact_feed ranking, regime-graceful-without-tape). **168 pytest pass** (+16); the 1 failure
+  (`test_holiday_shifts_release_to_thursday`) is **pre-existing & unrelated** (a Memorial-Day-2026 holidays
+  calendar assertion in `inventory_impact`, untouched by this sprint). Frontend `npm run build` ✓ +
+  `tsc --noEmit` ✓ (clean).
+
 ### 🔄 In progress — **Phase 3.1: live analysis engine + signal log** (mentor directive, 2026-06-15)
 Mentor asked everyone past the historical-validation phase to **run the framework on live market
 data** and **add a dashboard signal log** (timestamp · regime · instrument · rationale · confidence ·
@@ -648,6 +705,9 @@ open 80/443 (security list + iptables), `docker compose up -d --build`, hand ove
 | Live recommendation on current market | `python -m backend.research.live_engine` |
 | Generate + list live signals | `python -m backend.research.signal_log` · `--update --list` |
 | Auto-desk dry-run (plan only) | `python -m backend.research.auto_desk` (`--live` to execute · `--wti`) |
+| News corpus backfill + classify (Sprint 1, one-off) | `python -m backend.research.news_impact --backfill --start 2021-01-01 --classify` |
+| Fit + cache news-impact event-study betas (Sprint 2) | `python -m backend.research.news_impact.event_study` |
+| Score the live news-impact feed (Sprint 2, standalone) | `python -m backend.research.news_impact.impact` |
 | Regenerate methodology PDF | `python -m backend.research.methodology_pdf` |
 | Production container | `docker compose up -d --build` (full runbook: `deploy/README.md`) |
 

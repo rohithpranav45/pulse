@@ -13,6 +13,7 @@ import { PaperView } from '@/views/PaperView';
 import { RegimeView } from '@/views/RegimeView';
 import { InventoryView } from '@/views/InventoryView';
 import { SignalLogView } from '@/views/SignalLogView';
+import { NewsView } from '@/views/NewsView';
 import { ChatDock } from '@/components/chat/ChatDock';
 import { OnboardingTour } from '@/components/onboarding/OnboardingTour';
 import { DailySheet } from '@/components/panels/DailySheet';
@@ -52,13 +53,13 @@ export default function App() {
 
   const [helpOpen, setHelpOpen] = useState(false);
 
-  // Keyboard shortcuts. Bare 1..7/R/F/P only fire outside form inputs; the
-  // modifier variant (Cmd/Ctrl+1..7) fires anywhere, so tab nav still works
+  // Keyboard shortcuts. Bare 1..8/R/F/P only fire outside form inputs; the
+  // modifier variant (Cmd/Ctrl+1..8) fires anywhere, so tab nav still works
   // while typing in the ChatDock or a paper-trade entry field.
   useEffect(() => {
     const map: Record<string, ViewKey> = {
       '1':'desk','2':'charts','3':'markets',
-      '4':'paper','5':'regime','6':'inventory','7':'signals',
+      '4':'paper','5':'regime','6':'inventory','7':'signals','8':'news',
     };
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
@@ -206,6 +207,7 @@ export default function App() {
                 {view === 'regime'        && <RegimeView />}
                 {view === 'inventory'     && <InventoryView all={merged} />}
                 {view === 'signals'       && <SignalLogView />}
+                {view === 'news'          && <NewsView />}
               </motion.div>
             </ErrorBoundary>
           </div>
@@ -240,8 +242,8 @@ function HelpOverlay({ open, onClose }: { open: boolean; onClose: () => void }) 
   const isMac = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform);
   const mod = isMac ? '⌘' : 'Ctrl';
   const rows: { keys: string; desc: string }[] = [
-    { keys: '1 – 6',         desc: 'Switch tab (outside text inputs)' },
-    { keys: `${mod}+1 – 6`,  desc: 'Switch tab (works inside inputs too)' },
+    { keys: '1 – 8',         desc: 'Switch tab (outside text inputs)' },
+    { keys: `${mod}+1 – 8`,  desc: 'Switch tab (works inside inputs too)' },
     { keys: '/',             desc: 'Open Ask PULSE chat' },
     { keys: 'R',             desc: 'Refresh all data' },
     { keys: 'F',             desc: 'Toggle fullscreen' },
