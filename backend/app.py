@@ -1449,8 +1449,11 @@ def regime_inventory_route():
 
         actual = request.args.get("actual", type=float)
         consensus = request.args.get("consensus", type=float)
-        call = framework.assess_release(actual_change=actual, consensus=consensus)
-        panel = regime_conditioning.build_daily_panel("seasonal")
+        series = (request.args.get("series") or "crude_ex_spr").lower()
+        if series not in ("crude_ex_spr", "gasoline", "distillate"):
+            series = "crude_ex_spr"
+        call = framework.assess_series(series, actual_change=actual, consensus=consensus)
+        panel = regime_conditioning.build_daily_panel("seasonal", series=series)
         cond = regime_conditioning.conditional_table(panel, "ret")
 
         def _f(v):
@@ -1460,13 +1463,13 @@ def regime_inventory_route():
             except (TypeError, ValueError):
                 return None
 
-        # recent releases — surprise history + quality, newest first
-        sp = eia_report.surprise_series("crude_ex_spr")
-        dec = eia_report.decomposition()
+        # recent releases — surprise history (+ quality for crude), newest first
+        sp = eia_report.surprise_series(series)
+        dec = eia_report.decomposition() if series == "crude_ex_spr" else None
         recent = []
         for we in sp.dropna(subset=["surprise"]).index[-12:][::-1]:
             rel = release_datetime(we).tz_convert("America/New_York")
-            q = dec.loc[we, "quality_of_draw"] if we in dec.index else None
+            q = (dec.loc[we, "quality_of_draw"] if (dec is not None and we in dec.index) else None)
             recent.append({
                 "week_ending":   str(we.date()),
                 "release_date":  str(rel.date()),
@@ -1510,9 +1513,13 @@ def regime_inventory_route():
 
         return {
             "available": True,
+            "series": series,
+            "series_label": call.get("series_label", series),
+            "series_options": ["crude_ex_spr", "gasoline", "distillate"],
             "call": call,
             "next_release": framework.next_release_context(),
-            "spread_betas": framework.spread_attribution_betas(),
+            # spread attribution is the crude→WTI event study; only meaningful for crude
+            "spread_betas": framework.spread_attribution_betas() if series == "crude_ex_spr" else None,
             "when_it_mattered": cond.to_dict("records"),
             "recent_releases": recent,
             "latest_report": latest_report,

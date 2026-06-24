@@ -327,6 +327,117 @@ def assess_release(actual_change: float | None = None,
     }
 
 
+_SERIES_LABEL = {"crude_ex_spr": "Crude (ex-SPR)", "gasoline": "Gasoline", "distillate": "Distillate"}
+_SERIES_SPREADS = {
+    "gasoline": {
+        "primary": "RBOB crack (gasoline–Brent)",
+        "ranked": ["RBOB crack (gasoline–Brent)", "Gasoline calendar (M1-M2)", "3-2-1 crack", "RBOB flat"],
+        "scores": {"RBOB crack (gasoline–Brent)": 1.6, "Gasoline calendar (M1-M2)": 1.0,
+                   "3-2-1 crack": 0.8, "RBOB flat": 0.6},
+    },
+    "distillate": {
+        "primary": "ULSD / heating-oil crack",
+        "ranked": ["ULSD / heating-oil crack", "Distillate calendar (M1-M2)", "Gasoil (ICE)", "3-2-1 crack"],
+        "scores": {"ULSD / heating-oil crack": 1.5, "Distillate calendar (M1-M2)": 1.0,
+                   "Gasoil (ICE)": 0.8, "3-2-1 crack": 0.7},
+    },
+}
+
+
+def assess_series(series: str = "crude_ex_spr", actual_change: float | None = None,
+                  consensus: float | None = None, as_of: str | None = None) -> dict:
+    """
+    Decision-ready call for ANY EIA series (crude_ex_spr | gasoline | distillate).
+    Crude delegates to ``assess_release`` (full richness: quality-of-draw, the
+    crude→WTI spread attribution). Gasoline/distillate get the regime-conditioned
+    core with their OWN series-specific betas — gasoline's reaction differs from
+    crude's (gasoline surprises are significant in backwardation, where crude's
+    are noise). The conditioning regime is the crude-market state throughout.
+    """
+    if series == "crude_ex_spr":
+        out = assess_release(actual_change, consensus, as_of)
+        out["series"] = "crude_ex_spr"
+        out["series_label"] = _SERIES_LABEL["crude_ex_spr"]
+        return out
+
+    sp = eia_report.surprise_series(series, "seasonal")
+    latest_we = sp.dropna(subset=["surprise"]).index.max()
+    if actual_change is None:
+        actual_change = float(sp.loc[latest_we, "actual_change"])
+        as_of = as_of or str(latest_we.date())
+    week_ending = str(latest_we.date())
+    try:
+        rel_dt = release_datetime(latest_we).tz_convert("America/New_York")
+        release_date, release_day_name = str(rel_dt.date()), rel_dt.strftime("%A")
+    except Exception:
+        release_date, release_day_name = None, None
+
+    std = float(sp["surprise"].std()) or 1.0
+    if consensus is not None:
+        surprise = actual_change - consensus
+        surprise_z = surprise / std
+        surprise_src = "consensus (real)"
+    else:
+        surprise = float(sp.loc[latest_we, "surprise"])
+        surprise_z = float(sp.loc[latest_we, "surprise_z"])
+        surprise_src = "seasonal proxy (no consensus supplied)"
+    bullish = surprise < 0
+
+    cr = regime_conditioning.current_regime(series=series)
+    beta = cr.get("applicable_beta") or {}
+    regime_beta = beta.get("beta", 0.0)
+    regime_t = beta.get("t", 0.0)
+    sensitive = abs(regime_t) >= 2.0
+    expected_move_pct = round(regime_beta * surprise_z, 3) if sensitive else 0.0
+
+    regime_weight = min(1.0, abs(regime_t) / 3.0)
+    lean = float(np.clip(np.tanh(-surprise_z * 0.6) * (0.4 + 0.6 * regime_weight), -1, 1))
+    p_bull = round(0.5 + 0.5 * lean, 2)
+    p_bear = round(0.5 - 0.5 * lean, 2)
+    neutral_band = 0.10 + 0.20 * (1 - regime_weight)
+    call = "NEUTRAL" if abs(lean) < neutral_band else ("BULLISH" if lean > 0 else "BEARISH")
+    big = abs(surprise_z) >= 1.0
+    confidence = "HIGH" if (sensitive and big) else "MEDIUM" if (sensitive or big) else "LOW"
+
+    spreads = _SERIES_SPREADS.get(series, {"primary": "—", "ranked": [], "scores": {}})
+
+    glut_beta = -1.0
+    try:
+        _tbl = regime_conditioning.conditional_table(
+            regime_conditioning.build_daily_panel("seasonal", series=series), "ret")
+        _g = _tbl[_tbl["regime"] == "HIGH stocks"]
+        if len(_g):
+            glut_beta = float(_g.iloc[0]["beta"])
+    except Exception:
+        pass
+    scenarios = scenario_tree(regime_beta, sensitive, std, glut_beta)
+
+    factors = [
+        f"Surprise vs expectation: {surprise:+,.0f} MBBL ({surprise_z:+.1f}σ, "
+        f"{'bullish' if bullish else 'bearish'}) — {surprise_src}",
+        f"Regime gate ({_SERIES_LABEL.get(series, series)}): {cr['regime_label']} → sensitivity "
+        f"{'HIGH' if sensitive else 'LOW'} (hist. beta {regime_beta:+.2f}%/σ, t={regime_t}). "
+        + ("This regime moves price." if sensitive
+           else "Surprises in this series have not moved flat price in this regime."),
+        f"Most-exposed instrument: {spreads['primary']}",
+    ]
+
+    return {
+        "series": series, "series_label": _SERIES_LABEL.get(series, series),
+        "as_of": as_of, "week_ending": week_ending, "release_date": release_date,
+        "release_day_name": release_day_name,
+        "actual_change_mbbl": round(actual_change, 0),
+        "surprise_mbbl": round(surprise, 0), "surprise_z": round(surprise_z, 2),
+        "surprise_source": surprise_src, "surprise_std_mbbl": round(std, 0),
+        "call": call, "p_bullish": p_bull, "p_bearish": p_bear, "confidence": confidence,
+        "expected_brent_move_pct": expected_move_pct,
+        "regime": cr, "regime_sensitive": sensitive,
+        "regime_beta_pct_per_sigma": regime_beta, "regime_t": regime_t,
+        "quality_of_draw": None,           # the quality decomposition is crude-only
+        "spreads": spreads, "scenario_tree": scenarios, "top_factors": factors,
+    }
+
+
 def _fmt(call: str) -> str:
     return {"BULLISH": "🟢 BULLISH", "BEARISH": "🔴 BEARISH", "NEUTRAL": "⚪ NEUTRAL"}.get(call, call)
 

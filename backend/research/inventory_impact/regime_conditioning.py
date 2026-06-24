@@ -92,22 +92,30 @@ def _brent_daily() -> pd.DataFrame:
     return b
 
 
-def build_daily_panel(method: str = "seasonal", force_refresh: bool = False) -> pd.DataFrame:
+def build_daily_panel(method: str = "seasonal", force_refresh: bool = False,
+                      series: str = "crude_ex_spr") -> pd.DataFrame:
     """
-    One row per EIA crude release 2015-2026 with:
+    One row per EIA release 2015-2026 for ``series`` (crude_ex_spr | gasoline |
+    distillate) with:
       surprise_z      the standardised surprise (method = seasonal | nowcast)
       ret             Brent front close-to-close return on the release trading day (%)
       d_m1_m2         change in Brent M1-M2 that day ($/bbl)
       front_contango  was the Brent front in contango at the settle
-      inv_bucket      HIGH / AVG / LOW  (stocks vs 5yr seasonal, from the regime axis)
-      inv_pct         stocks vs 5yr seasonal (%)
+      inv_bucket      HIGH / AVG / LOW  (CRUDE stocks vs 5yr seasonal — the market
+                      regime that conditions every series' reaction)
+      inv_pct         crude stocks vs 5yr seasonal (%)
       era             2015-2020 | 2021-2026
+    The surprise is the chosen series'; the regime (inv_bucket / contango / era) is
+    the crude-market regime throughout — the dominant oil-complex state.
     """
-    cache = _CACHE / f"daily_panel_{method}.parquet"
+    # crude keeps the original cache path for backward compatibility
+    fname = f"daily_panel_{method}.parquet" if series == "crude_ex_spr" \
+        else f"daily_panel_{series}_{method}.parquet"
+    cache = _CACHE / fname
     if not force_refresh and cache.exists():
         return pd.read_parquet(cache)
 
-    sp = eia_report.surprise_series("crude_ex_spr", method)
+    sp = eia_report.surprise_series(series, method)
     b = _brent_daily()
     inv = pd.read_parquet(_INV_HISTORY) if _INV_HISTORY.exists() else None
 
@@ -196,11 +204,15 @@ def _fresh_inventory_state() -> tuple[str, float, str]:
     return bucket, float(pct), str(s.index[i].date())
 
 
-def current_regime() -> dict:
+def current_regime(series: str = "crude_ex_spr") -> dict:
     """
     Classify today's inventory/curve regime and return the historical beta that
     applies to it — i.e. how much price has historically moved per 1σ surprise in
     *this* regime. This is what sets the live call's conviction.
+
+    The regime classification (bucket / contango) is the crude-market state; the
+    applicable beta is for ``series`` (gasoline's reaction differs from crude's —
+    gasoline surprises are significant in backwardation where crude's are noise).
 
     Reads the **fresh** EIA report for the inventory bucket (the crude_stocks
     cache can lag the live report by weeks — that staleness previously made the
@@ -211,7 +223,7 @@ def current_regime() -> dict:
     b = _brent_daily()
     contango = bool(b["front_contango"].iloc[-1])
 
-    panel = build_daily_panel("seasonal")
+    panel = build_daily_panel("seasonal", series=series)
     glut = panel[panel["inv_pct"] > 0]
     tight = panel[panel["inv_pct"] <= 0]
     applicable = _ols((glut if pct > 0 else tight)["surprise_z"].values,
