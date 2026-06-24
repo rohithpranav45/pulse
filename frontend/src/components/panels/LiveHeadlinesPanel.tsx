@@ -1,74 +1,54 @@
 import { useMemo } from 'react';
 import clsx from 'clsx';
 import { Panel } from '@/components/ui/Panel';
-import { Chip } from '@/components/ui/Chip';
 import { SkeletonRows } from '@/components/ui/Skeleton';
 import { api } from '@/lib/api';
-import type { NewsData, NewsArticle, NewsImpactData, NewsImpactItem } from '@/lib/api';
 import { usePolling } from '@/lib/hooks';
 
 /**
- * Live headlines strip — the current oil-news tape, straight from /api/news
- * (NewsAPI / GDELT / marketaux). Each headline is joined (by title) to the news-
- * impact feed, so when the model has scored it we show the factor + expected
- * Brent % move right on the row. Newest first, with source, sentiment tone, and
- * a relative timestamp.
+ * Live headlines strip — the current oil-news tape (NewsAPI / GDELT / marketaux),
+ * each headline already scored by the news-impact model server-side: factor +
+ * expected Brent % move + a clean UTC timestamp. Reads /api/news/live (which
+ * enriches the wire: corpus Groq-factor when known, else keyword; GDELT's compact
+ * timestamps normalised to ISO so they actually render). Newest first.
  */
+
+type LiveItem = {
+  title?: string; url?: string | null; source?: string | null;
+  published_at?: string | null; factor?: string; factor_label?: string;
+  direction?: string; expected_pct_move?: number | null; basis?: string;
+  t_stat?: number | null; n?: number | null; news_sentiment?: number | null;
+};
+type LiveData = { available?: boolean; articles?: LiveItem[] };
 
 const pctMove = (v: number | null | undefined) =>
   v == null ? '—' : `${v > 0 ? '+' : ''}${v.toFixed(2)}%`;
 
-function relAgo(iso: string | null | undefined): string {
-  if (!iso) return '';
-  const t = Date.parse(iso);
-  if (isNaN(t)) return '';
-  const s = Math.max(0, Math.round((Date.now() - t) / 1000));
-  if (s < 60) return `${s}s`;
-  if (s < 3600) return `${Math.round(s / 60)}m`;
-  if (s < 86400) return `${Math.round(s / 3600)}h`;
-  return `${Math.round(s / 86400)}d`;
+// Absolute UTC time (two lines: date over HH:mm) — the corpus/feed timestamps are
+// UTC. Handles ISO; the backend already normalised GDELT's compact form.
+function fmtTs(iso: string | null | undefined): { date: string; time: string } {
+  if (!iso) return { date: '—', time: '' };
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return { date: '—', time: '' };
+  return { date: d.toISOString().slice(0, 10), time: d.toISOString().slice(11, 16) + 'Z' };
 }
 
-const catTone = (c: string | null | undefined): 'bull' | 'bear' | 'neut' | 'muted' => {
-  switch ((c ?? '').toUpperCase()) {
-    case 'GEO':   return 'bear';
-    case 'OPEC':  return 'neut';
-    case 'MACRO': return 'neut';
-    case 'CRUDE': return 'muted';
-    default:      return 'muted';
-  }
-};
-
-function sentTone(a: NewsArticle): 'bull' | 'bear' | 'neut' {
-  const s = (a as any).sentiment_score ?? a.sentiment;
-  if (typeof s === 'number') return s > 0.05 ? 'bull' : s < -0.05 ? 'bear' : 'neut';
-  if (a.is_negative) return 'bear';
-  return 'neut';
+function sentToneOf(s: number | null | undefined): 'bull' | 'bear' | 'neut' {
+  if (typeof s !== 'number') return 'neut';
+  return s > 0.05 ? 'bull' : s < -0.05 ? 'bear' : 'neut';
 }
 
 export function LiveHeadlinesPanel() {
-  const { data, lastUpdated, error } = usePolling<NewsData>(
-    () => api.news() as Promise<NewsData>, 90_000,
+  const { data, lastUpdated, error } = usePolling<LiveData>(
+    () => api.newsLive() as Promise<LiveData>, 90_000,
   );
-  // Join to the impact feed so scored headlines show their factor + expected move.
-  const { data: impact } = usePolling<NewsImpactData>(
-    () => api.newsImpact() as Promise<NewsImpactData>, 120_000,
-  );
-  const impactByTitle = useMemo(() => {
-    const m = new Map<string, NewsImpactItem>();
-    for (const it of (impact?.feed ?? []) as NewsImpactItem[]) {
-      if (it.title) m.set(it.title.trim().toLowerCase(), it);
-    }
-    return m;
-  }, [impact]);
 
-  const articles = useMemo<NewsArticle[]>(() => {
-    const list = (data?.articles ?? []) as NewsArticle[];
-    // newest first by whatever timestamp the source provided
+  const articles = useMemo<LiveItem[]>(() => {
+    const list = (data?.articles ?? []) as LiveItem[];
     return [...list].sort((a, b) => {
-      const ta = Date.parse((a.published_at || a.published || a.time || '') as string) || 0;
-      const tb = Date.parse((b.published_at || b.published || b.time || '') as string) || 0;
-      return tb - ta;
+      const ta = Date.parse((a.published_at || '') as string) || 0;
+      const tb = Date.parse((b.published_at || '') as string) || 0;
+      return tb - ta;   // newest first
     });
   }, [data]);
 
@@ -87,7 +67,7 @@ export function LiveHeadlinesPanel() {
         <div className="text-[12px] font-mono text-text-tertiary px-3 py-6 text-center">
           {error
             ? `News endpoint unreachable: ${(error as any)?.message ?? String(error)}`
-            : 'No headlines on the wire right now (NewsAPI may be rate-limited).'}
+            : 'No headlines on the wire right now (sources may be rate-limited).'}
         </div>
       </Panel>
     );
@@ -96,7 +76,7 @@ export function LiveHeadlinesPanel() {
   return (
     <Panel
       title="Live headlines · oil tape"
-      subtitle="current wire · NewsAPI · GDELT · marketaux"
+      subtitle="current wire · scored · NewsAPI · GDELT · marketaux"
       accent="blue"
       source="news_live"
       staticMount
@@ -108,46 +88,50 @@ export function LiveHeadlinesPanel() {
         </span>
       }
     >
-      <div className="space-y-0.5 max-h-[360px] overflow-y-auto">
+      <div className="grid grid-cols-[78px_1fr_64px_96px] gap-2 text-[9.5px] font-mono text-text-muted uppercase tracking-wide px-1 mb-1">
+        <span>Time · UTC</span><span>Headline</span><span className="text-right">Exp move</span>
+        <span className="text-right">Factor / src</span>
+      </div>
+      <div className="space-y-0.5 max-h-[420px] overflow-y-auto">
         {articles.slice(0, 40).map((a, i) => {
-          const title = a.title || a.headline || '—';
-          const ago = relAgo((a.published_at || a.published || a.time) as string);
-          const st = sentTone(a);
-          const imp = title !== '—' ? impactByTitle.get(title.trim().toLowerCase()) : undefined;
-          const move = imp?.expected_pct_move;
+          const title = a.title || '—';
+          const ts = fmtTs(a.published_at);
+          const st = sentToneOf(a.news_sentiment);
+          const move = a.expected_pct_move;
+          const scored = a.factor && a.factor !== 'NOISE' && move != null;
           const moveTone = (move ?? 0) > 0 ? 'bull' : (move ?? 0) < 0 ? 'bear' : 'neut';
           const row = (
-            <div className="grid grid-cols-[40px_1fr_72px_auto] gap-2 items-center text-[10.5px] font-mono py-1 px-1 rounded hover:bg-bg-card/30">
-              <span className="text-text-muted tabular text-right text-[9.5px]">{ago || '—'}</span>
+            <div className="grid grid-cols-[78px_1fr_64px_96px] gap-2 items-center text-[10.5px] font-mono py-1 px-1 rounded hover:bg-bg-card/30">
+              <span className="flex flex-col leading-tight text-[9px]" title={a.published_at ?? ''}>
+                <span className="text-text-tertiary">{ts.date}</span>
+                <span className="text-text-muted">{ts.time}</span>
+              </span>
               <span className="flex items-center gap-1.5 min-w-0">
                 <span className={clsx('w-1.5 h-1.5 rounded-full flex-shrink-0',
                   st === 'bull' && 'bg-bull', st === 'bear' && 'bg-bear', st === 'neut' && 'bg-text-muted')} />
                 <span className="text-text-secondary truncate" title={title}>{title}</span>
               </span>
-              {/* impact (joined from the scored feed) — expected Brent move + factor */}
-              <span
-                className="flex flex-col items-end leading-tight"
-                title={imp ? `${imp.factor} · ${imp.basis === 'measured' ? `measured t=${imp.t_stat}` : 'prior'}` : 'not scored yet'}
-              >
-                {imp ? (
-                  <>
-                    <span className={clsx('tabular font-bold text-[10px]',
-                      moveTone === 'bull' && 'text-bull', moveTone === 'bear' && 'text-bear', moveTone === 'neut' && 'text-text-muted')}>
-                      {pctMove(move)}
-                    </span>
-                    <span className="text-text-muted text-[8px] uppercase tracking-wider truncate max-w-[72px]">
-                      {imp.factor}
-                    </span>
-                  </>
-                ) : (
-                  <span className="text-text-muted/40 text-[9px]">—</span>
-                )}
+              <span className={clsx('text-right tabular font-bold',
+                scored
+                  ? (moveTone === 'bull' ? 'text-bull' : moveTone === 'bear' ? 'text-bear' : 'text-text-muted')
+                  : 'text-text-muted/40')}>
+                {scored ? pctMove(move) : '—'}
               </span>
-              <span className="flex items-center gap-1.5 flex-shrink-0">
-                {a.category && <Chip tone={catTone(a.category) as any}>{a.category}</Chip>}
-                <span className="text-text-muted text-[9px] truncate max-w-[80px]" title={a.source ?? ''}>
-                  {a.source ?? ''}
+              <span className="text-right flex flex-col items-end leading-tight"
+                title={a.factor
+                  ? `${a.factor}${a.basis === 'measured' ? ` · measured t=${a.t_stat}, n=${a.n}` : ' · prior'}`
+                  : ''}>
+                <span className="text-text-tertiary text-[9px] uppercase tracking-wider truncate max-w-[96px]">
+                  {a.factor && a.factor !== 'NOISE' ? a.factor : '—'}
                 </span>
+                {scored && (
+                  <span className={clsx('text-[8px] uppercase tracking-wider px-1 rounded border',
+                    a.basis === 'measured'
+                      ? 'text-gold-bright bg-gold/10 border-gold/30'
+                      : 'text-text-muted bg-bg-card/40 border-border/40')}>
+                    {a.basis === 'measured' ? 'meas' : 'prior'}
+                  </span>
+                )}
               </span>
             </div>
           );
@@ -161,9 +145,9 @@ export function LiveHeadlinesPanel() {
         })}
       </div>
       <div className="mt-2 text-[10px] font-mono text-text-muted leading-relaxed">
-        The live wire. The <span className="text-bull">+/-%</span> is the model's expected Brent move for that
-        headline (factor below it) — shown once the headline has been classified + scored; a fresh headline reads
-        <span className="text-text-muted/60"> —</span> until the next ingest tick. NOISE headlines stay unscored.
+        The live wire, scored. <span className="text-bull">Exp move</span> = the model's expected Brent move for
+        that headline; <span className="text-gold-bright">meas</span> = fitted beta cleared the gate, else a
+        labelled prior. NOISE / non-oil headlines read <span className="text-text-muted/60">—</span>.
       </div>
     </Panel>
   );
