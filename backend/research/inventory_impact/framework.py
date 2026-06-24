@@ -307,12 +307,26 @@ def assess_release(actual_change: float | None = None,
     wti_t = wti_b.get("t", 0.0)
     wti_sensitive = abs(wti_t) >= 2.0
     expected_wti_move_pct = round(wti_beta * surprise_z, 3) if wti_sensitive else 0.0
+    # point_move_pct = the directional point estimate (beta x surprise), ALWAYS
+    # computed; expected_move_pct is the gated/tradeable signal (0 when the regime
+    # beta isn't significant — i.e. don't trade the print directionally there).
     price_reaction = {
         "wti":   {"beta_pct_per_sigma": wti_beta, "t": wti_t,
+                  "point_move_pct": round(wti_beta * surprise_z, 3),
                   "expected_move_pct": expected_wti_move_pct, "sensitive": wti_sensitive},
         "brent": {"beta_pct_per_sigma": regime_beta, "t": regime_t,
+                  "point_move_pct": round(regime_beta * surprise_z, 3),
                   "expected_move_pct": expected_move_pct, "sensitive": sensitive},
     }
+    # typical release-DAY range (1σ of the day's move) — price DOES move on the
+    # print; the surprise just isn't a reliable *direction* in this regime.
+    try:
+        _p = regime_conditioning.build_daily_panel("seasonal")
+        price_reaction["brent"]["day_range_pct"] = round(float(_p["ret"].std()), 2)
+        if "ret_wti" in _p.columns and _p["ret_wti"].notna().sum() >= 8:
+            price_reaction["wti"]["day_range_pct"] = round(float(_p["ret_wti"].std()), 2)
+    except Exception:
+        pass
 
     # --- per-spread impact (the WTI event study × today's surprise) ---
     spread_impacts = []
