@@ -22,16 +22,67 @@ Public API
 
 from __future__ import annotations
 
-from datetime import datetime, time
+import calendar
+from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 import pandas as pd
 
+_YEARS = range(2010, 2031)
+
+
+def _nth_weekday(year: int, month: int, weekday: int, n: int) -> date:
+    """The nth (n≥1) or last (n=-1) `weekday` (Mon=0 … Sun=6) in a month."""
+    if n > 0:
+        first = date(year, month, 1)
+        offset = (weekday - first.weekday()) % 7
+        return first + timedelta(days=offset + 7 * (n - 1))
+    last = date(year, month, calendar.monthrange(year, month)[1])
+    offset = (last.weekday() - weekday) % 7
+    return last - timedelta(days=offset)
+
+
+def _observed(d: date) -> date:
+    """Federal observed-date shift: a Saturday holiday is observed the Friday
+    before, a Sunday holiday the Monday after (so EIA's Mon–Wed delay check sees
+    the day offices actually close)."""
+    if d.weekday() == 5:        # Saturday → Friday
+        return d - timedelta(days=1)
+    if d.weekday() == 6:        # Sunday → Monday
+        return d + timedelta(days=1)
+    return d
+
+
+def _us_federal_holidays(years) -> set[date]:
+    """Self-contained set of *observed* US federal holiday dates — the only ones
+    that delay an EIA release. Used so the calendar stays correct even when the
+    optional `holidays` package isn't installed (a silent empty set would mis-date
+    every release — see the module docstring on why that's load-bearing)."""
+    out: set[date] = set()
+    for y in years:
+        out.add(_observed(date(y, 1, 1)))        # New Year's Day
+        out.add(_nth_weekday(y, 1, 0, 3))        # MLK Day        — 3rd Mon Jan
+        out.add(_nth_weekday(y, 2, 0, 3))        # Presidents' Day— 3rd Mon Feb
+        out.add(_nth_weekday(y, 5, 0, -1))       # Memorial Day   — last Mon May
+        if y >= 2021:
+            out.add(_observed(date(y, 6, 19)))   # Juneteenth (federal since 2021)
+        out.add(_observed(date(y, 7, 4)))        # Independence Day
+        out.add(_nth_weekday(y, 9, 0, 1))        # Labor Day      — 1st Mon Sep
+        out.add(_nth_weekday(y, 10, 0, 2))       # Columbus Day   — 2nd Mon Oct
+        out.add(_observed(date(y, 11, 11)))      # Veterans Day
+        out.add(_nth_weekday(y, 11, 3, 4))       # Thanksgiving   — 4th Thu Nov
+        out.add(_observed(date(y, 12, 25)))      # Christmas Day
+    return out
+
+
+# Prefer the `holidays` package when installed (full observance fidelity); fall
+# back to the self-contained federal set otherwise. The old fallback was an empty
+# dict, which silently disabled every holiday delay — the bug this replaces.
 try:
     import holidays as _holidays_pkg
-    _US_HOLIDAYS = _holidays_pkg.US(years=range(2010, 2031))
-except Exception:  # pragma: no cover - holidays is a hard dep but degrade gracefully
-    _US_HOLIDAYS = {}
+    _US_HOLIDAYS = _holidays_pkg.US(years=_YEARS)
+except Exception:
+    _US_HOLIDAYS = _us_federal_holidays(_YEARS)
 
 _ET = ZoneInfo("America/New_York")
 _UTC = ZoneInfo("UTC")
