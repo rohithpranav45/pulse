@@ -152,8 +152,8 @@ def build_panel(force_refresh: bool = False) -> pd.DataFrame:
     if not force_refresh and _PANEL_PARQUET.exists():
         return pd.read_parquet(_PANEL_PARQUET)
 
-    # report-side features
-    sp = eia_report.surprise_series("crude_ex_spr")
+    # report-side features — surprise vs REAL analyst consensus (seasonal fallback)
+    sp = eia_report.surprise_series("crude_ex_spr", eia_report.DEFAULT_SURPRISE_METHOD)
     dec = eia_report.decomposition()
     wf = eia_report.weekly_frame()
 

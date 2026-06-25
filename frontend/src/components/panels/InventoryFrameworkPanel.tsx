@@ -31,9 +31,20 @@ type ConsensusSharpening = {
   series: string; rows: SharpRow[]; n_sharper: number; n_cuts: number;
   key_sharper: number; n_key: number; n_sig_seasonal: number; n_sig_consensus: number; verdict: string;
 };
+type AccRow = {
+  regime: string; hit: number; n: number; p: number; significant: boolean;
+  hit_big: number | null; n_big: number | null; p_big: number | null; significant_big: boolean | null;
+};
+type Accuracy = {
+  series: string; regime_label: string;
+  applicable?: { hit: number | null; regime: string | null; significant: boolean; basis: string };
+  best_series_now?: { recommended_series: string | null; note: string };
+  by_regime?: AccRow[]; note?: string;
+};
 type Inventory = {
   available: boolean; when_it_mattered?: WhenRow[]; when_it_mattered_wti?: WhenRow[] | null;
   wti_compare?: WtiCompare | null; consensus_sharpening?: ConsensusSharpening | null;
+  accuracy?: Accuracy | null;
   charts?: string[]; span?: [string, string]; n_releases?: number;
 };
 
@@ -80,6 +91,7 @@ export function InventoryFrameworkPanel({ series = 'crude_ex_spr' }: { series?: 
   const wtiRows = useMemo(() => data?.when_it_mattered_wti ?? [], [data]);
   const cmp = data?.wti_compare ?? null;
   const sharp = data?.consensus_sharpening ?? null;
+  const acc = data?.accuracy ?? null;
   // share the bar scale across both benchmarks so the betas are visually comparable
   const maxAbs = useMemo(
     () => [...rows, ...wtiRows].reduce((m, r) => Math.max(m, Math.abs(r.beta)), 0.01),
@@ -117,6 +129,56 @@ export function InventoryFrameworkPanel({ series = 'crude_ex_spr' }: { series?: 
             {rows.map(r => <BetaRow key={`b-${r.conditioner}-${r.regime}`} r={r} maxAbs={maxAbs} tone="bull" />)}
           </div>
         </>
+      )}
+
+      {/* Directional TRACK RECORD — how often the call's sign was right, by regime */}
+      {acc?.by_regime && acc.by_regime.length > 0 && (
+        <div className="rounded border border-bull/30 bg-bull/[0.04] p-2.5 mb-4">
+          <div className="text-[10px] font-mono uppercase tracking-[0.15em] text-bull mb-1.5">
+            Directional track record · {acc.series} call right %, by regime
+            {' '}<span className="text-text-muted normal-case tracking-normal">— the honest hit-rate (sign of the call vs the actual release-day move), not one print</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-[9.5px] font-mono">
+              <thead>
+                <tr className="text-text-tertiary text-left">
+                  <th className="pr-2 font-normal">regime</th>
+                  <th className="pr-2 font-normal text-right">hit %</th>
+                  <th className="pr-2 font-normal text-right">n</th>
+                  <th className="pr-2 font-normal text-right">p</th>
+                  <th className="pr-2 font-normal text-right">big |z|≥1</th>
+                  <th className="font-normal text-right">verdict</th>
+                </tr>
+              </thead>
+              <tbody>
+                {acc.by_regime.map(r => (
+                  <tr key={r.regime} className="text-text-secondary">
+                    <td className="pr-2 text-text-muted">{r.regime}</td>
+                    <td className={clsx('pr-2 text-right tabular font-bold',
+                      r.significant ? 'text-bull' : r.hit >= 0.5 ? 'text-text-secondary' : 'text-text-muted')}>
+                      {(r.hit * 100).toFixed(0)}%
+                    </td>
+                    <td className="pr-2 text-right tabular text-text-muted">{r.n}</td>
+                    <td className="pr-2 text-right tabular text-text-muted">{r.p}</td>
+                    <td className={clsx('pr-2 text-right tabular', r.significant_big ? 'text-bull font-bold' : 'text-text-muted')}>
+                      {r.hit_big != null ? `${(r.hit_big * 100).toFixed(0)}% (${r.n_big})` : '—'}
+                    </td>
+                    <td className="text-right">
+                      {r.significant
+                        ? <span className="text-bull font-bold">✓ edge</span>
+                        : <span className="text-text-muted">coin flip</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="text-[9.5px] font-mono text-text-tertiary leading-snug mt-2">
+            <span className="text-bull font-bold">Read · </span>the call is genuinely accurate only where it clears 50% with a real p-value
+            (green ✓). The framework now <span className="text-text-primary">abstains on the flat direction</span> elsewhere and
+            redirects to the series/regime that carries the edge. {acc.note}
+          </div>
+        </div>
       )}
 
       {/* Real consensus vs seasonal proxy — does the signal sharpen? (graded) */}

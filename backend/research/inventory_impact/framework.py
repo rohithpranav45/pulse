@@ -34,10 +34,23 @@ _BACKEND = Path(__file__).resolve().parent.parent.parent
 if str(_BACKEND) not in sys.path:
     sys.path.insert(0, str(_BACKEND))
 
-from research.inventory_impact import eia_report, regime_conditioning  # noqa: E402
+from research.inventory_impact import accuracy, eia_report, regime_conditioning  # noqa: E402
 from research.inventory_impact.release_calendar import release_datetime  # noqa: E402
 
 log = logging.getLogger("pulse.inventory_impact.framework")
+
+
+def _confidence_from(hit: dict, sensitive: bool, big_surprise: bool, quality_confirm: bool) -> str:
+    """Confidence now leads with the measured directional hit-rate (precision over
+    recall): HIGH only when this series/regime has a PROVEN edge (significant
+    hit-rate) and the surprise is big; MEDIUM on a proven edge OR a sensitive
+    regime/big-confirmed surprise; LOW (abstain on the flat direction) otherwise."""
+    tradeable = bool(hit.get("significant"))
+    if tradeable and big_surprise:
+        return "HIGH"
+    if tradeable or sensitive or (big_surprise and quality_confirm):
+        return "MEDIUM"
+    return "LOW"
 
 
 def next_release_context() -> dict:
@@ -279,14 +292,24 @@ def assess_release(actual_change: float | None = None,
     else:
         call = "BULLISH" if lean > 0 else "BEARISH"
 
-    # --- confidence ---
+    # --- measured directional accuracy (the track record, not one print) ---
+    hist = accuracy.applicable_hit_rate(
+        "crude_ex_spr", cr.get("inv_bucket"), cr.get("front_contango"),
+        cr.get("inv_vs_5yr_pct"), surprise_z)
+    # which series carries the proven edge in TODAY's regime (redirect conviction)
+    z_by = {}
+    for s in ("crude_ex_spr", "gasoline", "distillate"):
+        try:
+            spz = eia_report.surprise_series(s, "consensus").dropna(subset=["surprise_z"])
+            z_by[s] = float(spz["surprise_z"].iloc[-1]) if len(spz) else None
+        except Exception:
+            z_by[s] = None
+    best_series = accuracy.best_series_now(
+        cr.get("inv_bucket"), cr.get("front_contango"), cr.get("inv_vs_5yr_pct"), z_by)
+
+    # --- confidence (leads with the measured hit-rate) ---
     big_surprise = abs(surprise_z) >= 1.0
-    if sensitive and big_surprise and quality_confirm:
-        confidence = "HIGH"
-    elif sensitive or (big_surprise and quality_confirm):
-        confidence = "MEDIUM"
-    else:
-        confidence = "LOW"
+    confidence = _confidence_from(hist, sensitive, big_surprise, quality_confirm)
 
     # --- spread attribution ---
     attribution = _spread_attribution(dec_row)
@@ -383,6 +406,9 @@ def assess_release(actual_change: float | None = None,
         "p_bullish": p_bull,
         "p_bearish": p_bear,
         "confidence": confidence,
+        "tradeable": bool(hist.get("significant")),
+        "historical_accuracy": hist,
+        "best_series_now": best_series,
         "expected_brent_move_pct": expected_move_pct,
         "regime": cr,
         "regime_sensitive": sensitive,
@@ -467,7 +493,21 @@ def assess_series(series: str = "crude_ex_spr", actual_change: float | None = No
     neutral_band = 0.10 + 0.20 * (1 - regime_weight)
     call = "NEUTRAL" if abs(lean) < neutral_band else ("BULLISH" if lean > 0 else "BEARISH")
     big = abs(surprise_z) >= 1.0
-    confidence = "HIGH" if (sensitive and big) else "MEDIUM" if (sensitive or big) else "LOW"
+
+    # measured directional accuracy for THIS series in today's regime (the track record)
+    hist = accuracy.applicable_hit_rate(
+        series, cr.get("inv_bucket"), cr.get("front_contango"),
+        cr.get("inv_vs_5yr_pct"), surprise_z)
+    z_by = {}
+    for s in ("crude_ex_spr", "gasoline", "distillate"):
+        try:
+            spz = eia_report.surprise_series(s, "consensus").dropna(subset=["surprise_z"])
+            z_by[s] = float(spz["surprise_z"].iloc[-1]) if len(spz) else None
+        except Exception:
+            z_by[s] = None
+    best_series = accuracy.best_series_now(
+        cr.get("inv_bucket"), cr.get("front_contango"), cr.get("inv_vs_5yr_pct"), z_by)
+    confidence = _confidence_from(hist, sensitive, big, quality_confirm=False)
 
     spreads = _SERIES_SPREADS.get(series, {"primary": "—", "ranked": [], "scores": {}})
 
@@ -500,6 +540,9 @@ def assess_series(series: str = "crude_ex_spr", actual_change: float | None = No
         "surprise_mbbl": round(surprise, 0), "surprise_z": round(surprise_z, 2),
         "surprise_source": surprise_src, "surprise_std_mbbl": round(std, 0),
         "call": call, "p_bullish": p_bull, "p_bearish": p_bear, "confidence": confidence,
+        "tradeable": bool(hist.get("significant")),
+        "historical_accuracy": hist,
+        "best_series_now": best_series,
         "expected_brent_move_pct": expected_move_pct,
         "expected_wti_move_pct": None,     # WTI event study is crude-specific
         "price_reaction": {

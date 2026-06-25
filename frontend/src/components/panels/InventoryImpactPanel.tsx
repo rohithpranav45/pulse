@@ -18,18 +18,30 @@ type Scenario = {
   expected_brent_move_pct: number; glut_regime_move_pct: number;
   direction: string; conviction: string;
 };
+type HistAccuracy = {
+  regime: string | null; hit: number | null; n: number; p?: number;
+  significant: boolean; tradeable: boolean; size?: string; basis: string;
+} | null;
+type BestSeriesNow = {
+  recommended_series: string | null; recommended_hit: number | null;
+  recommended_regime: string | null; note: string;
+} | null;
 type Call = {
   week_ending?: string; release_date?: string; release_day_name?: string;
   actual_change_mbbl: number; surprise_mbbl: number; surprise_z: number;
   surprise_source: string; surprise_std_mbbl?: number;
   call: 'BULLISH' | 'BEARISH' | 'NEUTRAL'; p_bullish: number; p_bearish: number;
   confidence: 'HIGH' | 'MEDIUM' | 'LOW'; expected_brent_move_pct: number;
+  tradeable?: boolean; historical_accuracy?: HistAccuracy; best_series_now?: BestSeriesNow;
   regime: { regime_label: string; inv_vs_5yr_pct: number | null; sensitivity: string; applicable_beta: Beta };
   regime_sensitive: boolean; regime_beta_pct_per_sigma?: number; regime_t?: number;
   quality_of_draw: number | null;
   spreads: { primary: string; ranked: string[] };
   scenario_tree?: Scenario[];
   top_factors: string[];
+};
+const SERIES_LABEL_SHORT: Record<string, string> = {
+  crude_ex_spr: 'Crude', gasoline: 'Gasoline', distillate: 'Distillate',
 };
 type NextRelease = {
   week_ending: string; release_date: string; release_day_name: string;
@@ -192,6 +204,48 @@ export function InventoryImpactPanel({ series = 'crude_ex_spr' }: { series?: str
       accent="gold" source="inventory_impact" staticMount
       lastSuccess={lastUpdated} fetchError={error}
     >
+      {/* ── TRACK RECORD + redirect (the honest accuracy fix) ──────── */}
+      {live.historical_accuracy && (() => {
+        const h = live.historical_accuracy!;
+        const bs = live.best_series_now;
+        const hitPct = h.hit != null ? Math.round(h.hit * 100) : null;
+        const redirect = bs?.recommended_series && bs.recommended_series !== series;
+        return (
+          <div className={clsx('rounded-lg border p-3 mb-4',
+            h.tradeable ? 'border-bull/40 bg-bull/5' : 'border-neut/40 bg-neut/[0.06]')}>
+            <div className="flex items-baseline justify-between flex-wrap gap-2">
+              <div className="text-[10px] font-mono uppercase tracking-[0.15em] text-text-tertiary">
+                Track record · this {SERIES_LABEL_SHORT[series] ?? series} call, this regime
+              </div>
+              <span className={clsx('text-[9.5px] font-mono font-bold px-2 py-0.5 rounded border',
+                h.tradeable ? 'text-bull border-bull/40 bg-bull/10' : 'text-neut border-neut/40 bg-neut/10')}>
+                {h.tradeable ? '✓ TRADEABLE' : '⊘ COIN FLIP — ABSTAIN ON FLAT'}
+              </span>
+            </div>
+            <div className="flex items-baseline gap-3 mt-1.5 flex-wrap">
+              <span className={clsx('text-2xl font-display font-extrabold leading-none',
+                h.tradeable ? 'text-bull' : 'text-neut')}>
+                {hitPct != null ? `${hitPct}%` : '—'}
+              </span>
+              <span className="text-[10.5px] font-mono text-text-tertiary">
+                directional hit-rate in <span className="text-text-secondary">{h.regime ?? 'this regime'}</span>
+                {h.size ? ` · ${h.size}` : ''} · n={h.n}{h.p != null ? ` · p=${h.p}` : ''}
+              </span>
+            </div>
+            <div className="text-[9.5px] font-mono text-text-muted leading-snug mt-1">{h.basis}</div>
+            {/* redirect to the series with the proven edge today */}
+            {bs?.recommended_series && (
+              <div className={clsx('mt-2 rounded border px-2.5 py-1.5 text-[10px] font-mono leading-snug',
+                redirect ? 'border-gold/40 bg-gold/[0.07] text-text-secondary' : 'border-border/40 text-text-tertiary')}>
+                {redirect
+                  ? <>↪ <span className="text-gold font-bold">Trade {SERIES_LABEL_SHORT[bs.recommended_series] ?? bs.recommended_series} today</span> — it carries the proven edge ({bs.recommended_hit != null ? `${Math.round(bs.recommended_hit * 100)}%` : '—'} in {bs.recommended_regime}). {bs.note}</>
+                  : <>{bs.note}</>}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       {/* ── HERO ───────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-4">
         {/* DELIVERABLE 1 — expectation */}
