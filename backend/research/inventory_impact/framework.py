@@ -228,6 +228,9 @@ def assess_release(actual_change: float | None = None,
     dec = eia_report.decomposition()
     latest_we = sp.dropna(subset=["surprise"]).index.max()
 
+    # the ACTUAL comes from the live EIA v2 API (weekly_frame) by default; "supplied"
+    # only when the caller passes an explicit number.
+    actual_source = "supplied" if actual_change is not None else "eia_api (live)"
     if actual_change is None:
         actual_change = float(sp.loc[latest_we, "actual_change"])
         as_of = as_of or str(latest_we.date())
@@ -398,6 +401,7 @@ def assess_release(actual_change: float | None = None,
         "release_date": release_date,
         "release_day_name": release_day_name,
         "actual_change_mbbl": round(actual_change, 0),
+        "actual_source": actual_source,
         "surprise_mbbl": round(surprise, 0),
         "surprise_z": round(surprise_z, 2),
         "surprise_source": surprise_src,
@@ -456,6 +460,7 @@ def assess_series(series: str = "crude_ex_spr", actual_change: float | None = No
 
     sp = eia_report.surprise_series(series, eia_report.DEFAULT_SURPRISE_METHOD)
     latest_we = sp.dropna(subset=["surprise"]).index.max()
+    actual_source = "supplied" if actual_change is not None else "eia_api (live)"
     if actual_change is None:
         actual_change = float(sp.loc[latest_we, "actual_change"])
         as_of = as_of or str(latest_we.date())
@@ -536,7 +541,7 @@ def assess_series(series: str = "crude_ex_spr", actual_change: float | None = No
         "series": series, "series_label": _SERIES_LABEL.get(series, series),
         "as_of": as_of, "week_ending": week_ending, "release_date": release_date,
         "release_day_name": release_day_name,
-        "actual_change_mbbl": round(actual_change, 0),
+        "actual_change_mbbl": round(actual_change, 0), "actual_source": actual_source,
         "surprise_mbbl": round(surprise, 0), "surprise_z": round(surprise_z, 2),
         "surprise_source": surprise_src, "surprise_std_mbbl": round(std, 0),
         "call": call, "p_bullish": p_bull, "p_bearish": p_bear, "confidence": confidence,
