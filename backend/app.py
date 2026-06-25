@@ -1561,11 +1561,20 @@ def regime_inventory_reaction_route():
         from research.inventory_impact import framework, release_reaction
         actual = request.args.get("actual", type=float)
         consensus = request.args.get("consensus", type=float)
-        call = framework.assess_release(actual_change=actual, consensus=consensus)
+        series = (request.args.get("series") or "crude_ex_spr").lower()
+        if series not in ("crude_ex_spr", "gasoline", "distillate"):
+            series = "crude_ex_spr"
+        call = framework.assess_series(series, actual_change=actual, consensus=consensus)
         rx = release_reaction.compute_reaction()
         return {
             "available": bool(rx.get("available")),
             "reason": rx.get("reason"),
+            "series": series,
+            "series_label": call.get("series_label", series),
+            # the desk feed is crude-only (WTI/Brent) — gasoline/distillate product
+            # cracks (RBOB/ULSD) aren't recorded, so for those series the "actual"
+            # is the crude-complex reaction to the joint 10:30 ET release.
+            "crude_only_feed": True,
             "predicted": {
                 "call": call.get("call"),
                 "confidence": call.get("confidence"),
@@ -1574,6 +1583,7 @@ def regime_inventory_reaction_route():
                 "surprise_source": call.get("surprise_source"),
                 "price_reaction": call.get("price_reaction"),
                 "spread_impacts": call.get("spread_impacts"),
+                "product_spread": call.get("spreads", {}).get("primary"),
                 "regime": call.get("regime", {}).get("regime_label"),
                 "regime_sensitive": call.get("regime_sensitive"),
             },
