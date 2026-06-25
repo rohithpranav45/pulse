@@ -627,15 +627,23 @@ regime_conditioning,release_reaction}.py`, `/api/regime/inventory[?series=][/rea
   panel anchors today's prediction on the **API −0.765M as a proxy** for the EIA actual — re-anchor on the real
   printed EIA number for an exact grade.
 
-### 📥 Real EIA consensus history staged (pending wiring) (2026-06-25)
-User scraped investing.com's EIA Crude Oil Inventories event history (event 75) into
-`backend/data/research/inventory_impact/eia_consensus_history.csv` — **548 weekly releases, 2015-12 → 2026-06**,
-with `actual / forecast(=consensus) / previous` in **millions of bbl** (loader must ×1000 → MBBL thousands). Validated:
-2 empty-forecast artifact rows to drop, `previous[t]≈actual[t-1]` to ~32 MBBL (clean), real surprise std ≈4.8M bbl.
-**Not yet wired** — this is the input for item 3 (sharpen the nowcast): replace the seasonal-proxy "expected" with the
-real consensus so `surprise = actual − consensus` across all history; add a `method="consensus"` path to
-`eia_report.surprise_series`, re-fit the regime study on the real surprise, and re-anchor the live reaction grade on
-the real printed EIA actual (e.g. 24-Jun −6.088M). Next-session work.
+### 📥 Real EIA consensus + API leading-indicator history staged (pending wiring) (2026-06-25)
+User scraped investing.com event histories (DOM scrape — the old `more-history` AJAX endpoint now 404s; logged-in,
+manually-expanded, then read the rendered table) into `backend/data/research/inventory_impact/`. **Four datasets, all
+`actual / forecast(=consensus) / previous` in millions of bbl** (loader must ×1000 → MBBL thousands; drop the 1-2
+empty-forecast mis-dated `:29/:25` split rows per file; parse `release_date` as `%d-%m-%Y`):
+- `eia_consensus_history.csv` — **crude (ex-SPR)**, 548 wk 2015-12→2026-06, 99% forecast, surprise std ≈4.8M bbl.
+- `eia_consensus_gasoline.csv` — **gasoline**, 548 wk, 98% forecast, std ≈2.6M, `prev[t]≈actual[t-1]` to 14 MBBL.
+- `eia_consensus_distillate.csv` — **distillate**, 558 wk 2015-10→2026-06, 98% forecast, std ≈2.4M, clean to 7 MBBL.
+- `api_crude_history.csv` — **API weekly crude** (the Tue leading indicator), 389 wk 2019-01→2026-06. Forecast sparse
+  (73% — use the API **actual**, not its consensus). **Validated as a real leading indicator:** asof-aligned to the
+  EIA print, corr(API actual, EIA actual)=**0.77**, and API actual predicts the EIA **consensus surprise** at
+  corr **0.64** / slope **0.63** (n=383) — the Tue API release front-runs the Wed EIA number.
+**Not yet wired** — input for item 3 (sharpen the nowcast): add a `method="consensus"` path to
+`eia_report.surprise_series` (all 3 series) so `surprise = actual − consensus` across history; feed the API actual as a
+nowcast feature for the upcoming EIA print; re-fit the regime study on the real surprise; re-anchor the live reaction
+grade on the real printed EIA actual (24-Jun crude −6.088M). Cushing skipped (investing carries no Cushing consensus;
+levels already come from the EIA API). Next-session work.
 
 ### ✅ Inventory: "when it mattered" re-run vs WTI (2026-06-25)
 Priority item 1 of the inventory-improvement backlog. The regime "when-it-mattered" study (`surprise_z → release-day
