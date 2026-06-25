@@ -177,6 +177,137 @@ def test_wti_sharpness_compare_returns_none_without_wti():
     assert rc.wti_sharpness_compare(panel) is None
 
 
+# ── real-consensus surprise + API nowcast (item 3) ────────────────────────────
+def test_parse_mbbl_and_prev_friday():
+    """The consensus loader's primitives: millions→MBBL parse + release→week-ending."""
+    assert eia_report._parse_mbbl("-3.900M") == pytest.approx(-3900.0)
+    assert eia_report._parse_mbbl("2.064M") == pytest.approx(2064.0)
+    assert np.isnan(eia_report._parse_mbbl(""))
+    assert np.isnan(eia_report._parse_mbbl("nan"))
+    # Wed 2026-06-24 release → week ending Fri 2026-06-19
+    assert eia_report._prev_friday(pd.Timestamp("2026-06-24")) == pd.Timestamp("2026-06-19")
+    # Tue 2026-06-23 API → same week ending Fri 2026-06-19
+    assert eia_report._prev_friday(pd.Timestamp("2026-06-23")) == pd.Timestamp("2026-06-19")
+    # a Friday itself maps back a full week (the prior Friday), never to itself
+    assert eia_report._prev_friday(pd.Timestamp("2026-06-19")) == pd.Timestamp("2026-06-12")
+
+
+@pytest.mark.skipif(not (_CACHE / "eia_consensus_history.csv").exists(),
+                    reason="consensus history CSV not present")
+def test_consensus_loader_aligns_to_parquet_actuals():
+    """The CSV's own `actual` (×1000) must match the report parquet's actual_change
+    on the prev-Friday-aligned week — the proof the alignment is correct."""
+    if not (_CACHE / "eia_report_history.parquet").exists():
+        pytest.skip("EIA report cache not present")
+    c = eia_report._load_consensus_csv("crude_ex_spr")
+    assert not c.empty and c.index.is_unique  # de-duped, no holiday-stray collisions
+    actual_chg = eia_report.weekly_frame()["crude_ex_spr"].diff()
+    j = c.join(actual_chg.rename("parquet"), how="inner").dropna(subset=["actual", "parquet"])
+    match = (j["actual"] - j["parquet"]).abs().lt(200).mean()
+    assert match > 0.95  # 99%+ in practice
+
+
+@pytest.mark.skipif(not (_CACHE / "eia_consensus_history.csv").exists(),
+                    reason="consensus history CSV not present")
+@pytest.mark.skipif(not (_CACHE / "eia_report_history.parquet").exists(),
+                    reason="EIA report cache not present")
+@pytest.mark.parametrize("series", ["crude_ex_spr", "gasoline", "distillate"])
+def test_consensus_method_surprise_uses_real_consensus(series):
+    """method='consensus' yields surprise = actual − real consensus, flags the
+    expected_source, and falls back to seasonal where a week has no consensus row."""
+    sp = eia_report.surprise_series(series, "consensus")
+    assert "expected_source" in sp.columns
+    rows = sp.dropna(subset=["surprise"])
+    sources = set(rows["expected_source"].unique())
+    assert sources <= {"consensus", "seasonal_fallback", "seasonal"}
+    assert (rows["expected_source"] == "consensus").mean() > 0.9  # ~97% coverage
+    # on a consensus-sourced week the surprise equals actual − the loaded consensus
+    cons = eia_report.consensus_series(series)
+    we = rows[rows["expected_source"] == "consensus"].index[-1]
+    assert sp.loc[we, "surprise"] == pytest.approx(
+        sp.loc[we, "actual_change"] - cons.loc[we], abs=1.0)
+
+
+@pytest.mark.skipif(not (_CACHE / "eia_consensus_history.csv").exists(),
+                    reason="consensus history CSV not present")
+def test_latest_release_is_the_freshest_print():
+    """latest_release returns the real printed actual + consensus + surprise."""
+    lr = eia_report.latest_release("crude_ex_spr")
+    assert lr is not None
+    assert lr["surprise_mbbl"] == pytest.approx(lr["actual_mbbl"] - lr["consensus_mbbl"], abs=1.0)
+    assert pd.Timestamp(lr["week_ending"]) < pd.Timestamp(lr["release_date"])  # Fri before Wed
+
+
+@pytest.mark.skipif(not (_CACHE / "api_crude_history.csv").exists(),
+                    reason="API crude CSV not present")
+def test_api_nowcast_returns_leading_indicator_or_none():
+    """The API nowcast resolves the Tuesday leading indicator for a covered week and
+    returns None (graceful) for an uncovered / pre-2019 week."""
+    api = eia_report._load_api_crude()
+    assert not api.empty
+    we = api.index.max()
+    nc = eia_report.api_nowcast(we)
+    assert nc is not None and nc["api_actual_mbbl"] is not None
+    # pre-2019 (no API coverage) → None
+    assert eia_report.api_nowcast(pd.Timestamp("2016-01-08")) is None
+
+
+def test_consensus_method_falls_back_to_seasonal_without_csv(monkeypatch):
+    """No consensus CSV → consensus_series empty → method='consensus' degrades to a
+    pure seasonal surprise (hermetic: a synthetic weekly_frame, no /Data)."""
+    idx = pd.date_range("2020-01-03", periods=160, freq="W-FRI")
+    rng = np.random.default_rng(3)
+    wf = pd.DataFrame({"crude_ex_spr": 450000 + np.cumsum(rng.normal(0, 1500, len(idx)))}, index=idx)
+    monkeypatch.setattr(eia_report, "weekly_frame", lambda *a, **k: wf)
+    monkeypatch.setattr(eia_report, "consensus_series", lambda series="crude_ex_spr": pd.Series(dtype=float))
+    sp_con = eia_report.surprise_series("crude_ex_spr", "consensus")
+    sp_sea = eia_report.surprise_series("crude_ex_spr", "seasonal")
+    # with no consensus, the consensus method must equal the seasonal surprise
+    pd.testing.assert_series_equal(
+        sp_con["surprise"].dropna(), sp_sea["surprise"].dropna(), check_names=False)
+    assert (sp_con["expected_source"] == "seasonal_fallback").all()
+
+
+def test_consensus_sharpening_compare_hermetic(monkeypatch):
+    """consensus_sharpening_compare tallies sharper cuts + a verdict from synthetic
+    seasonal/consensus panels — no /Data."""
+    from backend.research.inventory_impact import regime_conditioning as rc
+    rng = np.random.default_rng(5)
+    n = 200
+    z = rng.normal(0, 1, n)
+
+    def panel(noise):
+        return pd.DataFrame({
+            "surprise_z": z + rng.normal(0, noise, n),
+            "ret": -0.8 * z + rng.normal(0, 0.5, n),
+            "d_m1_m2": rng.normal(0, 0.1, n),
+            "front_contango": rng.random(n) < 0.3,
+            "inv_bucket": rng.choice(["HIGH", "AVG", "LOW"], n),
+            "inv_pct": rng.normal(0, 5, n),
+            "era": np.where(np.arange(n) < 100, "2015-2020", "2021-2026"),
+        }, index=pd.date_range("2016-01-06", periods=n, freq="W-WED"))
+
+    # seasonal panel carries more surprise noise than the consensus panel → consensus sharper
+    monkeypatch.setattr(rc.eia_report, "consensus_series",
+                        lambda series="crude_ex_spr": pd.Series([1.0], index=[pd.Timestamp("2016-01-08")]))
+    monkeypatch.setattr(rc, "build_daily_panel",
+                        lambda method="consensus", **k: panel(0.05 if method == "consensus" else 0.6))
+    out = rc.consensus_sharpening_compare("crude_ex_spr")
+    assert out is not None
+    assert out["n_cuts"] >= 1 and 0 <= out["n_sharper"] <= out["n_cuts"]
+    assert out["n_sharper"] > out["n_cuts"] / 2          # consensus is the cleaner panel
+    assert "SHARPEN" in out["verdict"].upper()
+    for r in out["rows"]:
+        assert r["sharper"] == (r["d_abs_t"] > 0)
+
+
+def test_consensus_sharpening_returns_none_without_consensus(monkeypatch):
+    from backend.research.inventory_impact import regime_conditioning as rc
+    monkeypatch.setattr(rc.eia_report, "consensus_series",
+                        lambda series="crude_ex_spr": pd.Series(dtype=float))
+    assert rc.consensus_sharpening_compare("crude_ex_spr") is None
+
+
 def test_release_reaction_computes_horizon_moves(tmp_path, monkeypatch):
     """Hermetic: a synthetic 1-min CO/CL feed with a known post-release ramp →
     compute_reaction returns the right %/$ moves at each horizon."""

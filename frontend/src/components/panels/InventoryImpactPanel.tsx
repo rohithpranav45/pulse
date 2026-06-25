@@ -34,6 +34,8 @@ type Call = {
 type NextRelease = {
   week_ending: string; release_date: string; release_day_name: string;
   iso_week: number; seasonal_expected_change_mbbl: number | null;
+  api_nowcast_mbbl?: number | null; blended_nowcast_mbbl?: number | null;
+  api_nowcast?: { api_release_date?: string } | null; nowcast_note?: string;
 };
 type Inventory = {
   available: boolean; error?: string; call?: Call; next_release?: NextRelease;
@@ -266,6 +268,24 @@ export function InventoryImpactPanel({ series = 'crude_ex_spr' }: { series?: str
 
       {/* ── PRICE REACTION · WTI vs Brent + per-spread impact ──────── */}
       <PriceReaction live={live as any} />
+
+      {/* ── API leading-indicator nowcast (pre-release) ──────────── */}
+      {nr?.api_nowcast_mbbl != null && (
+        <div className="rounded-lg border border-blue/30 bg-blue/[0.06] p-3 mb-4">
+          <div className="text-[10px] font-mono uppercase tracking-[0.15em] text-blue mb-1.5">
+            Pre-release nowcast · API crude leading indicator (Tue)
+          </div>
+          <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-[11px] font-mono">
+            <span className="text-text-tertiary">API actual{nr.api_nowcast?.api_release_date ? ` (${nr.api_nowcast.api_release_date})` : ''}:{' '}
+              <span className="text-text-primary font-bold">{mm(nr.api_nowcast_mbbl)}</span></span>
+            <span className="text-text-tertiary">seasonal: <span className="text-text-secondary">{mm(nr.seasonal_expected_change_mbbl)}</span></span>
+            <span className="text-text-tertiary">blended nowcast: <span className="text-blue font-bold">{mm(nr.blended_nowcast_mbbl)}</span></span>
+          </div>
+          <div className="mt-1.5 text-[9.5px] font-mono text-text-muted leading-snug">
+            {nr.nowcast_note ?? 'API crude (Tue) front-runs the EIA by ~1 day (corr 0.77 w/ the EIA actual, 2019+). A pre-release input — not the EIA number; the real consensus arrives Wednesday.'}
+          </div>
+        </div>
+      )}
 
       {/* ── consensus calculator ───────────────────────────────── */}
       <div className="rounded-lg border border-gold/30 bg-gold/5 p-3 mb-4">

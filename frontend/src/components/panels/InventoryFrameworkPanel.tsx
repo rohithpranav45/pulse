@@ -22,9 +22,19 @@ type WtiCompare = {
   rows: CmpRow[]; wti_sharper_overall: boolean | null; wti_sharper_count: number;
   wti_right_signed_count: number; n_cuts: number; verdict: string; note: string;
 };
+type SharpRow = {
+  conditioner: string; regime: string;
+  beta_seasonal: number; t_seasonal: number;
+  beta_consensus: number; t_consensus: number; n: number; d_abs_t: number; sharper: boolean;
+};
+type ConsensusSharpening = {
+  series: string; rows: SharpRow[]; n_sharper: number; n_cuts: number;
+  key_sharper: number; n_key: number; n_sig_seasonal: number; n_sig_consensus: number; verdict: string;
+};
 type Inventory = {
   available: boolean; when_it_mattered?: WhenRow[]; when_it_mattered_wti?: WhenRow[] | null;
-  wti_compare?: WtiCompare | null; charts?: string[]; span?: [string, string]; n_releases?: number;
+  wti_compare?: WtiCompare | null; consensus_sharpening?: ConsensusSharpening | null;
+  charts?: string[]; span?: [string, string]; n_releases?: number;
 };
 
 /** A regime-beta bar row, reused for the Brent and WTI tables. */
@@ -48,7 +58,7 @@ function BetaRow({ r, maxAbs, tone }: { r: WhenRow; maxAbs: number; tone: 'bull'
 }
 
 const LAYERS = [
-  { k: 'L0', t: 'Surprise', d: 'actual − expected, z-scored. Headline = commercial crude ex-SPR (the number the market forecasts). Expected = seasonal/nowcast proxy now, real consensus on the day.' },
+  { k: 'L0', t: 'Surprise', d: 'actual − expected, z-scored. Headline = commercial crude ex-SPR (the number the market forecasts). Expected = REAL analyst consensus (2015-26 history), seasonal proxy only where a week has no consensus row.' },
   { k: 'L2', t: 'Quality of draw', d: 'the whole report, not the headline — Cushing, runs, imports, exports, implied demand + a reconstructed supply-balance adjustment. Flags mechanical (export-driven) draws to fade.' },
   { k: 'L1', t: 'Reaction function', d: 'intraday event study on the 1-min tape (2021-26, 281 releases) — conditional betas, decay, and a placebo vol test.' },
   { k: '★',  t: 'Regime conditioning', d: 'the centerpiece — 535 daily releases (2015-26): surprise→price strength is conditional on the inventory/curve regime. Glut ⇒ it bites; tight ⇒ noise.' },
@@ -69,6 +79,7 @@ export function InventoryFrameworkPanel({ series = 'crude_ex_spr' }: { series?: 
   const rows = useMemo(() => data?.when_it_mattered ?? [], [data]);
   const wtiRows = useMemo(() => data?.when_it_mattered_wti ?? [], [data]);
   const cmp = data?.wti_compare ?? null;
+  const sharp = data?.consensus_sharpening ?? null;
   // share the bar scale across both benchmarks so the betas are visually comparable
   const maxAbs = useMemo(
     () => [...rows, ...wtiRows].reduce((m, r) => Math.max(m, Math.abs(r.beta)), 0.01),
@@ -106,6 +117,45 @@ export function InventoryFrameworkPanel({ series = 'crude_ex_spr' }: { series?: 
             {rows.map(r => <BetaRow key={`b-${r.conditioner}-${r.regime}`} r={r} maxAbs={maxAbs} tone="bull" />)}
           </div>
         </>
+      )}
+
+      {/* Real consensus vs seasonal proxy — does the signal sharpen? (graded) */}
+      {sharp && (
+        <div className="rounded border border-bull/30 bg-bull/[0.04] p-2.5 mb-4">
+          <div className="text-[10px] font-mono uppercase tracking-[0.15em] text-bull mb-1.5">
+            Real consensus vs seasonal proxy · does the signal sharpen?
+            {' '}<span className="text-text-muted normal-case tracking-normal">— sharper in {sharp.n_sharper}/{sharp.n_cuts} cuts · sig {sharp.n_sig_seasonal}→{sharp.n_sig_consensus}</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-[9.5px] font-mono">
+              <thead>
+                <tr className="text-text-tertiary text-left">
+                  <th className="pr-2 font-normal">regime</th>
+                  <th className="pr-2 font-normal text-right">seasonal β/t</th>
+                  <th className="pr-2 font-normal text-right">consensus β/t</th>
+                  <th className="font-normal text-right">Δ|t|</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sharp.rows.map(r => (
+                  <tr key={`${r.conditioner}-${r.regime}`} className="text-text-secondary">
+                    <td className="pr-2 text-text-muted">{r.regime}</td>
+                    <td className="pr-2 text-right tabular">{r.beta_seasonal.toFixed(2)} / {r.t_seasonal}</td>
+                    <td className={clsx('pr-2 text-right tabular', Math.abs(r.t_consensus) >= 2 && 'text-bull font-bold')}>
+                      {r.beta_consensus.toFixed(2)} / {r.t_consensus}
+                    </td>
+                    <td className={clsx('text-right tabular', r.sharper ? 'text-bull' : 'text-text-muted')}>
+                      {r.d_abs_t > 0 ? '+' : ''}{r.d_abs_t.toFixed(2)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="text-[9.5px] font-mono text-text-tertiary leading-snug mt-2">
+            <span className="text-bull font-bold">Verdict · </span>{sharp.verdict}
+          </div>
+        </div>
       )}
 
       {/* WTI re-run — US crude inventories are a US signal, so WTI should be sharper */}

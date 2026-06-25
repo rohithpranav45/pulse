@@ -7,16 +7,18 @@ spread engine), and serves a React dashboard with a paper-trading book.
 - **Stack:** Flask 3 · React 18 + Vite + Tailwind · SQLite (cache + paper book) ·
   DuckDB/Parquet over a 3.5 GB `/Data` desk feed · sklearn + XGBoost/LightGBM/CatBoost
 - **Run (local):** `python start.py` from the repo root → http://127.0.0.1:5000
-- **Last updated:** 2026-06-25 (**Inventory: "when it mattered" re-run vs WTI** [branch
-  `phase4-live-feature-overlay`, see §1 entry]. **Graded verdict: regime conditioning is NOT sharper on WTI flat
-  returns — but not because WTI under-reacts.** Synth WTI settlements start 2021, so the WTI panel has **zero
-  glut/HIGH-stocks rows** — the exact regime where inventories bit on Brent (β −1.03, t −3.4) has no WTI history. In
-  the matched 2021-26 tight window both flat reactions are statistically null, but **WTI is correctly signed in 3/4
-  cuts where Brent perversely flips**, and the only near-significant matched cut is the US-specific **WTI-Brent
-  spread** (AVG stocks β −0.37, t −1.80) — consistent with US crude inventories being a US signal. The 17× ratio
-  quoted earlier is a within-tight-regime intraday-*spread* result; on daily flat returns the "glut bites" headline
-  stays Brent-only for lack of WTI history. A real pre-2021 WTI daily settlement file (gotcha 11) is the unlock.
-  Prior: **Inventory prediction framework — productionised + live-graded**. The EIA-release impact model now (1) covers **all 3 series**
+- **Last updated:** 2026-06-25 (**Inventory: real consensus + API nowcast wired (item 3)** [branch
+  `phase4-live-feature-overlay`, see §1 entry]. The framework now surprises against the **REAL analyst consensus**
+  (548-wk investing.com history, all 3 series) instead of the seasonal proxy, with the **API crude leading
+  indicator** as a pre-release nowcast. **Graded verdict: real consensus SHARPENS the "when it mattered" signal** —
+  9/10 regime cuts get a bigger |t| (5/5 of the cells where inventories should bite), significant cuts 4→5, ALL-
+  releases t −1.71→−2.48, glut HIGH-stocks β −1.03/t −3.36 → β −1.14/t −3.89, the 2015-20 glut era t −2.94→−3.79 —
+  while the tight/backwardation cells stay null, exactly the pattern a real (vs proxy) surprise should produce, so
+  the framework's headline is **not a seasonal artefact**. Re-anchored the live reaction grade on the **real printed
+  EIA actual** (24-Jun crude −6.088M vs consensus −3.900M = a −2,188 MBBL *bullish* surprise) — the old API proxy
+  −0.765M had the **wrong sign**. Prior: **Inventory: "when it mattered" re-run vs WTI** — regime conditioning is NOT
+  sharper on WTI flat returns (synth WTI starts 2021 → no glut rows), but WTI is correctly signed where Brent flips;
+  the near-significant matched cut is the US-specific WTI-Brent spread. Prior: **Inventory prediction framework — productionised + live-graded**. The EIA-release impact model now (1) covers **all 3 series**
   (Crude/Gasoline/Distillate) via a series toggle, each with its OWN regime betas — gasoline reacts in
   backwardation where crude is noise; (2) headlines the **WTI** move (US crude inventories move WTI ~17× more than
   Brent — proven by the spread attribution) + per-spread impacts; (3) shows a directional **point estimate +
@@ -627,7 +629,48 @@ regime_conditioning,release_reaction}.py`, `/api/regime/inventory[?series=][/rea
   panel anchors today's prediction on the **API −0.765M as a proxy** for the EIA actual — re-anchor on the real
   printed EIA number for an exact grade.
 
-### 📥 Real EIA consensus + API leading-indicator history staged (pending wiring) (2026-06-25)
+### ✅ Inventory item 3 — real consensus surprise + API nowcast wired (2026-06-25)
+Branch `phase4-live-feature-overlay` (not merged to main). Turned the staged datasets below into the live surprise:
+the framework now defaults to **surprise = actual − REAL analyst consensus** (with the seasonal proxy as a per-week
+fallback) across all 3 series, plus the **API crude leading indicator** as a pre-release nowcast and a re-anchored
+live reaction grade. Files: `eia_report.py` (loaders + `method="consensus"`), `regime_conditioning.py`
+(`consensus_sharpening_compare()` + default method), `framework.py` (nowcast + labels), `app.py`
+(`/api/regime/inventory[/reaction]`), frontend `Inventory{Impact,Framework}Panel.tsx` + `InventoryView.tsx`.
+- **Real-consensus surprise (all 3 series).** New `eia_report._load_consensus_csv(series)` parses the investing.com
+  history (×1000 → MBBL, drops empty-forecast `:29/:25` split rows, de-dupes the one holiday-stray week, keys by the
+  **prev-Friday** week-ending). **Validated:** the CSV's own `actual` matches the report parquet's `actual_change` to
+  **median 0 / 99%+ within 200 MBBL**, proving the alignment. `surprise_series(series, method="consensus")` →
+  `actual − consensus`, seasonal fallback where a week has no consensus row, + an honest **`expected_source`** column
+  (`consensus` ~97% of weeks vs `seasonal_fallback`). `framework`/`regime_conditioning`/the API all default to it.
+- **Graded verdict (item 3 deliverable): real consensus SHARPENS the "when it mattered" signal.** Re-fit on the real
+  surprise, **9/10 regime cuts get a bigger |t|** than the seasonal proxy (the only one that doesn't is the already-
+  null 2021-26 era), **5/5 of the cells where inventories should bite**, significant cuts **4 → 5**. Key betas:
+  ALL-releases t **−1.71 → −2.48** (now significant); HIGH-stocks (glut) β −1.03/t −3.36 → **β −1.14/t −3.89**;
+  above-5yr glut t −3.05 → −3.54; contango front t −2.06 → −2.36; 2015-20 glut era t −2.94 → **−3.79**. The
+  tight/backwardation cells **stay null** (LOW-stocks t −0.17 → −0.65, still « 2). So removing the proxy measurement
+  error tightens exactly the glut/contango regime where the thesis says inventories bite while leaving the noise
+  cells noisy — confirming the headline is **not a seasonal artefact**. Surfaced as `consensus_sharpening` on
+  `/api/regime/inventory` + a per-series table in `InventoryFrameworkPanel`. (Per-series honesty: crude sharpens
+  9/10, gasoline only 4/10 — the seasonal proxy was already a faithful stand-in for gasoline consensus.)
+- **API nowcast (pre-release input).** New `eia_report._load_api_crude()` + `api_nowcast(week_ending)` expose the Tue
+  API crude print (corr **0.77** w/ the EIA actual, 2019+ coverage) for the upcoming EIA week; `next_release_context`
+  surfaces the API actual + a labelled **50/50 blend with the seasonal expectation** (clearly NOT the EIA number —
+  the real consensus arrives Wednesday). Rendered as a blue pre-release card in `InventoryImpactPanel`.
+- **Re-anchored live reaction grade on the REAL printed EIA actual.** `eia_report.latest_release(series)` returns the
+  freshest printed actual+consensus from the history (one week ahead of the report parquet); the reaction route
+  auto-anchors on it when the caller supplies nothing (`anchored_on="real_eia_print"`), and the frontend stopped
+  hard-coding the API proxy. **This flips a sign:** 24-Jun crude **actual −6.088M vs consensus −3.900M = −2,188 MBBL
+  bullish** surprise (bigger draw than expected), where the old API-proxy actual −0.765M gave a +3,135 *bearish*
+  surprise — the proxy had the wrong sign.
+- **Tests:** +8 in `tests/test_inventory_impact.py` (parse/prev-Friday primitives, consensus↔parquet alignment,
+  consensus-method surprise + source flag ×3 series, latest_release, API nowcast covered/uncovered, no-CSV →
+  seasonal fallback, sharpening hermetic + None-without-consensus). **188 pytest green** (was 178; +8 here, +2
+  elsewhere). Frontend `tsc` + `vite build` clean (only the pre-existing TS5101 `baseUrl` deprecation). New consensus
+  panels committed (`daily_panel_{,gasoline_,distillate_}consensus.parquet`). **Still open** (next-session): re-fit
+  the intraday event study on the real surprise too; a real pre-2021 WTI daily settlement (gotcha 11) for the WTI
+  glut regime; Cushing consensus (investing carries none).
+
+### 📥 Real EIA consensus + API leading-indicator history staged (✅ now wired — see entry above) (2026-06-25)
 User scraped investing.com event histories (DOM scrape — the old `more-history` AJAX endpoint now 404s; logged-in,
 manually-expanded, then read the rendered table) into `backend/data/research/inventory_impact/`. **Four datasets, all
 `actual / forecast(=consensus) / previous` in millions of bbl** (loader must ×1000 → MBBL thousands; drop the 1-2
