@@ -1052,6 +1052,26 @@ def _paper_mtm():
 
 _scheduler.add_job(_paper_mtm, "interval", seconds=60, id="_paper_mtm")
 
+# EIA Weekly Petroleum Status Report — pull the ACTUAL number live from the EIA v2
+# API so the inventory framework grades against the real printed release (not the
+# static scrape). Throttled internally; runs ~2 min after boot then every 6h, so the
+# Wednesday 10:30-ET release is reflected within hours. Opt out: PULSE_EIA_REFRESH_DISABLED=1.
+TTL_EIA_REPORT = 21600  # 6h
+def _eia_report_refresh():
+    if os.environ.get("PULSE_EIA_REFRESH_DISABLED") == "1":
+        return
+    try:
+        from research.inventory_impact import eia_report
+        s = eia_report.refresh_report(force=True)
+        if s.get("refreshed"):
+            log.info("EIA report refreshed live: latest week %s (%s weeks)",
+                     s.get("latest_week"), s.get("n_weeks"))
+    except Exception as exc:
+        log.warning("EIA report live refresh failed: %s", exc)
+
+_scheduler.add_job(_eia_report_refresh, "interval", seconds=TTL_EIA_REPORT,
+                   next_run_time=_NOW + timedelta(minutes=2), id="_eia_report_refresh")
+
 # Phase 2.8.6-followup A/B harness — dual-push pooled + gated arms once per day.
 # Idempotent: ab_test.tick() dedups on open (asset, direction, ab_mode), so
 # multiple firings within a session are safe.
@@ -1582,22 +1602,23 @@ def regime_inventory_reaction_route():
         series = (request.args.get("series") or "crude_ex_spr").lower()
         if series not in ("crude_ex_spr", "gasoline", "distillate"):
             series = "crude_ex_spr"
-        # Re-anchor the live grade on the real PRINTED EIA actual + consensus from
-        # the consensus history (one week ahead of the report parquet) when the
-        # caller doesn't supply them — instead of an API proxy. e.g. 24-Jun crude
-        # actual -6.088M vs consensus -3.900M (a bullish surprise the API proxy
-        # -0.765M got the WRONG sign on).
+        # Re-anchor the live grade on the ACTUAL EIA number pulled LIVE from the EIA
+        # v2 API (authoritative) + the real consensus, when the caller supplies
+        # nothing — not the static scrape or the API/industry proxy. refresh=True
+        # triggers a throttled live pull so we grade against the real printed number
+        # the moment it's out. e.g. 24-Jun crude actual -6.088M vs consensus -3.900M.
+        do_refresh = request.args.get("refresh") in ("1", "true", "yes")
+        lr = eia_report.latest_release(series, refresh=(do_refresh or (actual is None and consensus is None)))
         anchored_on = "supplied" if (actual is not None or consensus is not None) else None
-        if actual is None and consensus is None:
-            lr = eia_report.latest_release(series)
-            if lr:
-                actual, consensus = lr["actual_mbbl"], lr["consensus_mbbl"]
-                anchored_on = "real_eia_print"
+        if actual is None and consensus is None and lr:
+            actual, consensus = lr["actual_mbbl"], lr["consensus_mbbl"]
+            anchored_on = lr.get("actual_source", "real_eia_print")
         call = framework.assess_series(series, actual_change=actual, consensus=consensus)
         rx = release_reaction.compute_reaction()
         return {
             "anchored_on": anchored_on,
-            "latest_release": eia_report.latest_release(series),
+            "actual_source": (lr or {}).get("actual_source"),
+            "latest_release": lr,
             "available": bool(rx.get("available")),
             "reason": rx.get("reason"),
             "series": series,

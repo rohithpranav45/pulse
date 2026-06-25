@@ -131,27 +131,73 @@ def consensus_series(series: str = "crude_ex_spr") -> pd.Series:
         else pd.Series(dtype=float)
 
 
-def latest_release(series: str = "crude_ex_spr") -> dict | None:
+_last_report_refresh = 0.0   # monotonic-ish wall clock of the last live EIA pull
+
+
+def refresh_report(force: bool = False, min_interval_hours: float = 6.0) -> dict:
     """
-    The freshest *printed* release from the consensus history (one week ahead of the
-    report parquet, which lags the live print). Returns the real actual + consensus +
-    surprise so the live reaction grade can anchor on the printed EIA number instead
-    of an API proxy. None when no consensus file / no row with a real actual.
+    Pull the **actual EIA Weekly Petroleum Status Report from the live EIA v2 API**
+    and re-cache it, so the framework grades against the real printed number the
+    moment it's out — not the static consensus scrape or an industry proxy. Throttled
+    to one live pull per `min_interval_hours` (the report is weekly), unless `force`.
+    The scheduler calls this after each release window; routes can trigger a throttled
+    pull with `?refresh=1`.
     """
+    global _last_report_refresh
+    import time
+    now = time.time()
+    if not force and (now - _last_report_refresh) < min_interval_hours * 3600:
+        return {"refreshed": False, "reason": "throttled (recent live pull)"}
+    if not _EIA_KEY:
+        return {"refreshed": False, "reason": "no EIA_API_KEY"}
+    try:
+        df = fetch_report_history(force_refresh=True)
+        _last_report_refresh = now
+        return {"refreshed": True, "latest_week": str(df.index.max().date()),
+                "n_weeks": int(len(df)), "source": "eia_api_v2"}
+    except Exception as exc:
+        log.warning("live EIA report refresh failed: %s", exc)
+        return {"refreshed": False, "reason": str(exc)}
+
+
+def latest_release(series: str = "crude_ex_spr", refresh: bool = False) -> dict | None:
+    """
+    The freshest *printed* release, anchored on the **actual EIA number from the live
+    EIA v2 API** (authoritative) with the real analyst consensus from the history. The
+    EIA report is the live feed for the ACTUAL; the consensus CSV supplies the forecast.
+
+    `actual_source` is "eia_api (live)" once the live report carries the week, else
+    "consensus_csv_scrape" (the investing.com scrape, which equals the EIA print — used
+    only while the live API hasn't yet published that week). `refresh=True` triggers a
+    throttled live pull first. None when there's no printed release to grade.
+    """
+    if refresh:
+        refresh_report()
     c = _load_consensus_csv(series)
     c = c[c["actual"].notna()]
     if c.empty:
         return None
     we = c.index.max()
     row = c.loc[we]
-    actual, cons = float(row["actual"]), float(row["consensus"])
+    consensus = float(row["consensus"])
+    actual, actual_source = float(row["actual"]), "consensus_csv_scrape"
+    # prefer the AUTHORITATIVE actual from the live EIA API for this week when present
+    try:
+        wf = weekly_frame()
+        if series in wf:
+            chg = wf[series].diff()
+            if we in chg.index and pd.notna(chg.loc[we]):
+                actual, actual_source = float(chg.loc[we]), "eia_api (live)"
+    except Exception:
+        pass
     return {
         "series": series,
         "week_ending": str(we.date()),
         "release_date": str(pd.Timestamp(row["release_date"]).date()),
         "actual_mbbl": round(actual, 0),
-        "consensus_mbbl": round(cons, 0),
-        "surprise_mbbl": round(actual - cons, 0),
+        "consensus_mbbl": round(consensus, 0),
+        "surprise_mbbl": round(actual - consensus, 0),
+        "actual_source": actual_source,
     }
 
 

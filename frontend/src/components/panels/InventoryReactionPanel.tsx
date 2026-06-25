@@ -19,6 +19,11 @@ type Horizon = {
 type Reaction = {
   available: boolean; reason?: string;
   series?: string; series_label?: string; crude_only_feed?: boolean;
+  anchored_on?: string; actual_source?: string;
+  latest_release?: {
+    week_ending?: string; release_date?: string; actual_mbbl?: number;
+    consensus_mbbl?: number; surprise_mbbl?: number; actual_source?: string;
+  } | null;
   predicted?: {
     call?: string; confidence?: string; surprise_mbbl?: number; surprise_z?: number;
     surprise_source?: string; regime?: string; regime_sensitive?: boolean;
@@ -130,6 +135,23 @@ export function InventoryReactionPanel({ actual, consensus, series = 'crude_ex_s
           </span>
           <span className="text-[10px] font-mono text-text-muted">{p.regime}</span>
         </div>
+        {/* live EIA actual provenance — the number we grade against */}
+        {data.latest_release?.actual_mbbl != null && (
+          <div className="flex items-baseline gap-2 flex-wrap mt-1.5 text-[10px] font-mono">
+            <span className="text-text-muted">EIA actual:</span>
+            <span className="text-text-secondary font-bold">
+              {data.latest_release.actual_mbbl > 0 ? '+' : ''}{(data.latest_release.actual_mbbl / 1000).toFixed(1)} MMbbl
+            </span>
+            <span className="text-text-muted">vs consensus {data.latest_release.consensus_mbbl != null
+              ? `${data.latest_release.consensus_mbbl > 0 ? '+' : ''}${(data.latest_release.consensus_mbbl / 1000).toFixed(1)}` : '—'} MMbbl</span>
+            <span className={clsx('text-[8.5px] uppercase tracking-wider px-1.5 py-0.5 rounded border',
+              (data.actual_source ?? '').includes('eia_api')
+                ? 'text-bull border-bull/40 bg-bull/10' : 'text-neut border-neut/40 bg-neut/10')}>
+              {(data.actual_source ?? '').includes('eia_api') ? '● EIA API · live' : '◌ scrape (API not yet updated)'}
+            </span>
+            <span className="text-text-muted">week ending {data.latest_release.week_ending}</span>
+          </div>
+        )}
       </div>
 
       {/* crude-only feed caveat for product series */}

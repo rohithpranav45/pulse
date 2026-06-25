@@ -7,8 +7,13 @@ spread engine), and serves a React dashboard with a paper-trading book.
 - **Stack:** Flask 3 · React 18 + Vite + Tailwind · SQLite (cache + paper book) ·
   DuckDB/Parquet over a 3.5 GB `/Data` desk feed · sklearn + XGBoost/LightGBM/CatBoost
 - **Run (local):** `python start.py` from the repo root → http://127.0.0.1:5000
-- **Last updated:** 2026-06-25 (**Inventory: directional accuracy backtest + selective-confidence ("best
-  results")** [branch `phase4-live-feature-overlay`, see §1 entry]. The honest "is the call any good?" fix —
+- **Last updated:** 2026-06-25 (**Inventory: actual EIA number pulled LIVE from the EIA v2 API** [branch
+  `phase4-live-feature-overlay`, see §1 entry]. The reaction grade + the default call now anchor the ACTUAL on
+  the **authoritative live EIA Weekly Petroleum Status Report API** (force-refreshed after each release via a new
+  scheduler job + `?refresh=1`), not the static investing.com scrape or the API/industry proxy. Verified live:
+  week ending 2026-06-19 crude actual **−6,088 MBBL** from the EIA API, vs consensus −3,900 = −2,188 surprise;
+  `actual_source: "eia_api (live)"`. Falls back to the scrape only while the API hasn't yet published the week.
+  Prior: **directional accuracy backtest + selective-confidence ("best results")** [see §1 entry]. The honest "is the call any good?" fix —
   measure the **directional hit-rate across all 2015-26 releases** (on real consensus), sliced by series ×
   regime × surprise-size, then make the framework **commit a directional call ONLY where history proves an
   edge** and abstain elsewhere. **The edge map:** crude flat is **75-81% in a glut/HIGH-stocks** regime
@@ -638,6 +643,31 @@ regime_conditioning,release_reaction}.py`, `/api/regime/inventory[?series=][/rea
 - **Tests:** +4 (`test_assess_series_all_three` ×3, `test_release_reaction_computes_horizon_moves`). The reaction
   panel anchors today's prediction on the **API −0.765M as a proxy** for the EIA actual — re-anchor on the real
   printed EIA number for an exact grade.
+
+### ✅ Inventory — actual EIA number pulled LIVE from the EIA v2 API (2026-06-25)
+Branch `phase4-live-feature-overlay` (not merged to main). User: "take actual and correct EIA data after the
+release from the live feed." The reaction grade was anchoring on the static investing.com consensus-CSV scrape
+(and earlier an API/industry proxy). Now the **ACTUAL is sourced from the authoritative live EIA Weekly Petroleum
+Status Report (EIA v2 API)**, force-refreshed after each release, with the consensus from the history CSV.
+- **`eia_report.refresh_report(force, min_interval_hours=6)`** — pulls the report live from the EIA v2 API and
+  re-caches `eia_report_history.parquet`; throttled to one live pull / 6h (the report is weekly) unless forced;
+  no-ops without `EIA_API_KEY`. **`latest_release(series, refresh=False)`** now anchors the ACTUAL on the live
+  EIA report (`weekly_frame`) where it carries the week — `actual_source="eia_api (live)"` — pairing it with the
+  real consensus; it falls back to the CSV scrape (`actual_source="consensus_csv_scrape"`, which equals the EIA
+  print) only while the API hasn't yet published that week. `assess_release`/`assess_series` add `actual_source`
+  (default path reads the EIA-API-backed `weekly_frame` → "eia_api (live)"; "supplied" when a number is passed).
+- **Scheduler `_eia_report_refresh`** (app.py, ~2 min after boot then every 6h, opt-out
+  `PULSE_EIA_REFRESH_DISABLED=1`) keeps the cached report current with the live EIA actual, so the Wed 10:30-ET
+  release is reflected within hours; the reaction route also accepts **`?refresh=1`** for an on-demand throttled
+  pull. **Verified live:** the EIA API published week ending **2026-06-19** with crude actual **−6,088 MBBL**
+  (was missing from the stale parquet, latest 06-12); reaction route now reports `anchored_on / actual_source =
+  "eia_api (live)"`, actual −6,088 vs consensus −3,900 = −2,188 surprise.
+- **Dashboard:** `InventoryReactionPanel` "Our call" block gains an **EIA-actual provenance line** — the actual +
+  consensus + a `● EIA API · live` (or `◌ scrape` fallback) chip + the week-ending — so the desk sees the number
+  it's graded against came from the EIA feed, live.
+- **Tests:** +3 hermetic (`latest_release` prefers the live EIA actual; falls back to the scrape when the API
+  lags; `refresh_report` throttle + no-key no-op). **195 pytest green** (was 192). Frontend `tsc` + `vite build`
+  clean. Server restarted; reaction route verified anchoring on the live EIA actual.
 
 ### ✅ Inventory — directional accuracy backtest + selective confidence ("best results") (2026-06-25)
 Branch `phase4-live-feature-overlay` (not merged to main). User asked to "do everything to fix accuracy — I want

@@ -389,6 +389,59 @@ def test_accuracy_best_series_none_when_all_coin_flips(monkeypatch):
     assert "spread" in out["note"].lower() or "quality" in out["note"].lower()
 
 
+# ── actual EIA number from the live EIA v2 API (authoritative) ────────────────
+def test_latest_release_prefers_live_eia_actual(monkeypatch):
+    """latest_release anchors the ACTUAL on the live EIA API (weekly_frame) where it
+    carries the week, over the static consensus-CSV scrape."""
+    we = pd.Timestamp("2026-06-19")
+    csv = pd.DataFrame({"consensus": [-3900.0], "actual": [-5000.0],  # stale scrape value
+                        "release_date": [pd.Timestamp("2026-06-24")]}, index=[we])
+    # the live EIA report has the authoritative actual change of -6088 for that week
+    idx = pd.date_range("2026-06-12", periods=2, freq="W-FRI")
+    wf = pd.DataFrame({"crude_ex_spr": [100000.0, 100000.0 - 6088.0]}, index=idx)
+    monkeypatch.setattr(eia_report, "_load_consensus_csv", lambda s: csv)
+    monkeypatch.setattr(eia_report, "weekly_frame", lambda *a, **k: wf)
+    lr = eia_report.latest_release("crude_ex_spr")
+    assert lr["actual_source"] == "eia_api (live)"
+    assert lr["actual_mbbl"] == -6088.0           # the live API value, not the -5000 scrape
+    assert lr["consensus_mbbl"] == -3900.0
+    assert lr["surprise_mbbl"] == -2188.0          # -6088 - (-3900)
+
+
+def test_latest_release_falls_back_to_scrape_when_api_lagging(monkeypatch):
+    """When the live EIA report hasn't published the week yet, latest_release uses the
+    consensus-CSV scrape (which equals the EIA print) and says so."""
+    we = pd.Timestamp("2026-06-19")
+    csv = pd.DataFrame({"consensus": [-3900.0], "actual": [-6088.0],
+                        "release_date": [pd.Timestamp("2026-06-24")]}, index=[we])
+    older = pd.date_range("2026-06-05", periods=2, freq="W-FRI")  # report stops before 06-19
+    wf = pd.DataFrame({"crude_ex_spr": [100000.0, 99000.0]}, index=older)
+    monkeypatch.setattr(eia_report, "_load_consensus_csv", lambda s: csv)
+    monkeypatch.setattr(eia_report, "weekly_frame", lambda *a, **k: wf)
+    lr = eia_report.latest_release("crude_ex_spr")
+    assert lr["actual_source"] == "consensus_csv_scrape"
+    assert lr["actual_mbbl"] == -6088.0
+
+
+def test_refresh_report_throttle_and_no_key(monkeypatch):
+    """refresh_report throttles repeat live pulls and no-ops without an EIA key."""
+    monkeypatch.setattr(eia_report, "_last_report_refresh", 0.0)
+    calls = {"n": 0}
+
+    def fake_fetch(force_refresh=False):
+        calls["n"] += 1
+        return pd.DataFrame({"crude_ex_spr": [1.0]}, index=[pd.Timestamp("2026-06-19")])
+    monkeypatch.setattr(eia_report, "fetch_report_history", fake_fetch)
+    monkeypatch.setattr(eia_report, "_EIA_KEY", "k")
+    r1 = eia_report.refresh_report(force=True)
+    assert r1["refreshed"] is True and calls["n"] == 1
+    r2 = eia_report.refresh_report()  # throttled — no second pull
+    assert r2["refreshed"] is False and calls["n"] == 1
+    monkeypatch.setattr(eia_report, "_EIA_KEY", None)
+    monkeypatch.setattr(eia_report, "_last_report_refresh", 0.0)
+    assert eia_report.refresh_report()["refreshed"] is False
+
+
 def test_release_reaction_computes_horizon_moves(tmp_path, monkeypatch):
     """Hermetic: a synthetic 1-min CO/CL feed with a known post-release ramp →
     compute_reaction returns the right %/$ moves at each horizon."""
