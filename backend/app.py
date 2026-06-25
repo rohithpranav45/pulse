@@ -1548,6 +1548,40 @@ def regime_inventory_chart_route(name):
     return send_file(path, mimetype="image/png")
 
 
+@app.route("/api/regime/inventory/reaction")
+def regime_inventory_reaction_route():
+    """
+    PREDICTED vs ACTUAL spread reaction to today's EIA crude print. Returns the
+    model's pre-release call (direction + per-spread point estimates) alongside
+    the realised move at +5/+15/+30/+60 min, read from the desk 1-min feed
+    (CO/CL bars). Pass ?actual=&consensus= (MBBL) to anchor the prediction on the
+    real consensus + API (else the seasonal proxy).
+    """
+    def _rx():
+        from research.inventory_impact import framework, release_reaction
+        actual = request.args.get("actual", type=float)
+        consensus = request.args.get("consensus", type=float)
+        call = framework.assess_release(actual_change=actual, consensus=consensus)
+        rx = release_reaction.compute_reaction()
+        return {
+            "available": bool(rx.get("available")),
+            "reason": rx.get("reason"),
+            "predicted": {
+                "call": call.get("call"),
+                "confidence": call.get("confidence"),
+                "surprise_mbbl": call.get("surprise_mbbl"),
+                "surprise_z": call.get("surprise_z"),
+                "surprise_source": call.get("surprise_source"),
+                "price_reaction": call.get("price_reaction"),
+                "spread_impacts": call.get("spread_impacts"),
+                "regime": call.get("regime", {}).get("regime_label"),
+                "regime_sensitive": call.get("regime_sensitive"),
+            },
+            "actual": rx,
+        }
+    return jsonify({"data": safe_fetch(_rx, {"available": False}), "timestamp": _now()})
+
+
 @app.route("/api/regime/ab")
 def regime_ab_route():
     """
