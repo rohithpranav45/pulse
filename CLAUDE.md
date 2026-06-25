@@ -627,6 +627,16 @@ regime_conditioning,release_reaction}.py`, `/api/regime/inventory[?series=][/rea
   panel anchors today's prediction on the **API −0.765M as a proxy** for the EIA actual — re-anchor on the real
   printed EIA number for an exact grade.
 
+### 📥 Real EIA consensus history staged (pending wiring) (2026-06-25)
+User scraped investing.com's EIA Crude Oil Inventories event history (event 75) into
+`backend/data/research/inventory_impact/eia_consensus_history.csv` — **548 weekly releases, 2015-12 → 2026-06**,
+with `actual / forecast(=consensus) / previous` in **millions of bbl** (loader must ×1000 → MBBL thousands). Validated:
+2 empty-forecast artifact rows to drop, `previous[t]≈actual[t-1]` to ~32 MBBL (clean), real surprise std ≈4.8M bbl.
+**Not yet wired** — this is the input for item 3 (sharpen the nowcast): replace the seasonal-proxy "expected" with the
+real consensus so `surprise = actual − consensus` across all history; add a `method="consensus"` path to
+`eia_report.surprise_series`, re-fit the regime study on the real surprise, and re-anchor the live reaction grade on
+the real printed EIA actual (e.g. 24-Jun −6.088M). Next-session work.
+
 ### ✅ Inventory: "when it mattered" re-run vs WTI (2026-06-25)
 Priority item 1 of the inventory-improvement backlog. The regime "when-it-mattered" study (`surprise_z → release-day
 return`, sliced by inventory/curve regime) was Brent-based; US crude inventories are a US signal, so WTI *should*
