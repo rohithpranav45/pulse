@@ -1461,6 +1461,9 @@ def regime_inventory_route():
                     if series == "crude_ex_spr" else None)
         wti_compare = (regime_conditioning.wti_sharpness_compare(panel)
                        if series == "crude_ex_spr" else None)
+        # graded: did the REAL consensus surprise sharpen the regime betas vs the
+        # seasonal proxy? (the framework now defaults to real consensus)
+        consensus_sharpening = regime_conditioning.consensus_sharpening_compare(series)
 
         def _f(v):
             try:
@@ -1470,7 +1473,7 @@ def regime_inventory_route():
                 return None
 
         # recent releases — surprise history (+ quality for crude), newest first
-        sp = eia_report.surprise_series(series)
+        sp = eia_report.surprise_series(series, "consensus")  # surprise vs REAL consensus
         dec = eia_report.decomposition() if series == "crude_ex_spr" else None
         recent = []
         for we in sp.dropna(subset=["surprise"]).index[-12:][::-1]:
@@ -1481,6 +1484,7 @@ def regime_inventory_route():
                 "release_date":  str(rel.date()),
                 "actual_change": _f(sp.loc[we, "actual_change"]),
                 "expected":      _f(sp.loc[we, "expected_change"]),
+                "expected_source": str(sp.loc[we].get("expected_source", "seasonal")),
                 "surprise":      _f(sp.loc[we, "surprise"]),
                 "surprise_z":    _f(sp.loc[we, "surprise_z"]),
                 "bullish":       bool(sp.loc[we, "bullish"]),
@@ -1529,6 +1533,8 @@ def regime_inventory_route():
             "when_it_mattered": cond.to_dict("records"),
             "when_it_mattered_wti": cond_wti,
             "wti_compare": wti_compare,
+            "consensus_sharpening": consensus_sharpening,
+            "surprise_method": "consensus",
             "recent_releases": recent,
             "latest_report": latest_report,
             "n_releases": int(len(panel)),
@@ -1566,15 +1572,28 @@ def regime_inventory_reaction_route():
     real consensus + API (else the seasonal proxy).
     """
     def _rx():
-        from research.inventory_impact import framework, release_reaction
+        from research.inventory_impact import eia_report, framework, release_reaction
         actual = request.args.get("actual", type=float)
         consensus = request.args.get("consensus", type=float)
         series = (request.args.get("series") or "crude_ex_spr").lower()
         if series not in ("crude_ex_spr", "gasoline", "distillate"):
             series = "crude_ex_spr"
+        # Re-anchor the live grade on the real PRINTED EIA actual + consensus from
+        # the consensus history (one week ahead of the report parquet) when the
+        # caller doesn't supply them — instead of an API proxy. e.g. 24-Jun crude
+        # actual -6.088M vs consensus -3.900M (a bullish surprise the API proxy
+        # -0.765M got the WRONG sign on).
+        anchored_on = "supplied" if (actual is not None or consensus is not None) else None
+        if actual is None and consensus is None:
+            lr = eia_report.latest_release(series)
+            if lr:
+                actual, consensus = lr["actual_mbbl"], lr["consensus_mbbl"]
+                anchored_on = "real_eia_print"
         call = framework.assess_series(series, actual_change=actual, consensus=consensus)
         rx = release_reaction.compute_reaction()
         return {
+            "anchored_on": anchored_on,
+            "latest_release": eia_report.latest_release(series),
             "available": bool(rx.get("available")),
             "reason": rx.get("reason"),
             "series": series,

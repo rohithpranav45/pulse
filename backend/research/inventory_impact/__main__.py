@@ -31,12 +31,13 @@ def main():
 
     # ── L0/L2 — report + surprise + quality ───────────────────────────────────
     wf = eia_report.weekly_frame(force_refresh=refresh)
-    sp = eia_report.surprise_series("crude_ex_spr", "seasonal")
+    sp = eia_report.surprise_series("crude_ex_spr", eia_report.DEFAULT_SURPRISE_METHOD)
     dec = eia_report.decomposition()
 
-    # ── centerpiece — regime conditioning (daily 2015-2026) ───────────────────
-    daily = regime_conditioning.build_daily_panel("seasonal", force_refresh=refresh)
+    # ── centerpiece — regime conditioning (daily 2015-2026, REAL consensus) ───
+    daily = regime_conditioning.build_daily_panel(force_refresh=refresh)
     cond = regime_conditioning.conditional_table(daily, "ret")
+    sharp = regime_conditioning.consensus_sharpening_compare()
 
     # ── intraday confirmation (2021-2026) ─────────────────────────────────────
     panel = event_study.build_panel(force_refresh=refresh)
@@ -56,7 +57,13 @@ def main():
     print("    and only in the REGIME where inventories actually move price.")
 
     print("\n[2] WHEN INVENTORIES MATTERED (surprise_z -> Brent release-day return, 2015-2026)")
+    print("    surprise = actual - REAL analyst consensus (seasonal proxy only where no consensus row)")
     print(cond.to_string(index=False))
+    if sharp:
+        print(f"\n    vs the seasonal-proxy surprise: SHARPER in {sharp['n_sharper']}/{sharp['n_cuts']} cuts "
+              f"(key cells {sharp['key_sharper']}/{sharp['n_key']}); significant "
+              f"{sharp['n_sig_seasonal']} -> {sharp['n_sig_consensus']}. Real consensus removes the "
+              "proxy measurement error → the glut/contango betas tighten while tight/backwardation stays null.")
 
     print("\n[3] INTRADAY CONFIRMATION (2021-2026, 1-min)")
     print(f"    releases: {len(panel)}   confirmed vol spike: {int(panel['confirmed'].sum())}/{len(panel)}")
@@ -86,6 +93,7 @@ def main():
         "report_span": [str(wf.index.min().date()), str(wf.index.max().date())],
         "n_weeks": int(len(wf)),
         "when_it_mattered": cond.to_dict("records"),
+        "consensus_sharpening": sharp,
         "intraday": {
             "n_releases": int(len(panel)),
             "confirmed_spikes": int(panel["confirmed"].sum()),

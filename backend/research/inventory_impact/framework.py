@@ -43,8 +43,10 @@ log = logging.getLogger("pulse.inventory_impact.framework")
 def next_release_context() -> dict:
     """
     The UPCOMING release the desk will trade — the week after the latest data,
-    out the following Wednesday. Gives the seasonal/nowcast expectation for that
-    print so a pre-release expectation can be formed before consensus is known.
+    out the following Wednesday. Gives the seasonal expectation AND the API crude
+    leading-indicator nowcast (the Tuesday print that front-runs the EIA by ~1 day)
+    for that print, so a pre-release expectation can be formed before consensus is
+    known. The API actual is corr 0.77 with the EIA actual (2019+ coverage).
     """
     sp_seasonal = eia_report.surprise_series("crude_ex_spr", "seasonal")
     latest_we = sp_seasonal.dropna(subset=["actual_change"]).index.max()
@@ -66,12 +68,28 @@ def next_release_context() -> dict:
     sample = chg.values[mask]
     seasonal_exp = float(np.nanmean(sample)) if np.isfinite(sample).any() else None
 
+    # API leading-indicator nowcast for the upcoming week + a labelled blend with
+    # the seasonal expectation (pre-release input, NOT the EIA number).
+    nowcast = eia_report.api_nowcast(next_we)
+    api_actual = nowcast["api_actual_mbbl"] if nowcast else None
+    blended = None
+    if api_actual is not None and seasonal_exp is not None:
+        blended = round(0.5 * api_actual + 0.5 * seasonal_exp, 0)
+    elif api_actual is not None:
+        blended = round(api_actual, 0)
+
     return {
         "week_ending": str(next_we.date()),
         "release_date": rel_date,
         "release_day_name": rel_day,
         "iso_week": int(wk),
         "seasonal_expected_change_mbbl": round(seasonal_exp, 0) if seasonal_exp is not None else None,
+        "api_nowcast": nowcast,
+        "api_nowcast_mbbl": api_actual,
+        "blended_nowcast_mbbl": blended,
+        "nowcast_note": ("Pre-release nowcast: API crude (Tue leading indicator, corr 0.77 "
+                         "w/ EIA actual, 2019+) blended 50/50 with the seasonal expectation. "
+                         "Not the EIA print — the real consensus arrives Wednesday."),
         "latest_data_week_ending": str(latest_we.date()),
     }
 
@@ -116,7 +134,7 @@ def spread_attribution_betas() -> dict:
     """
     out = {"flat_by_regime": [], "intraday_spreads": [], "note": ""}
     try:
-        panel = regime_conditioning.build_daily_panel("seasonal")
+        panel = regime_conditioning.build_daily_panel()
         tbl = regime_conditioning.conditional_table(panel, "ret")
         for r in tbl.to_dict("records"):
             if r["regime"] in ("HIGH stocks", "above 5yr (glut)", "below 5yr (tight)", "LOW stocks"):
@@ -193,7 +211,7 @@ def assess_release(actual_change: float | None = None,
                     back to its seasonal/nowcast proxy surprise and says so.
     as_of         : optional label for the release date.
     """
-    sp = eia_report.surprise_series("crude_ex_spr", "seasonal")
+    sp = eia_report.surprise_series("crude_ex_spr", eia_report.DEFAULT_SURPRISE_METHOD)
     dec = eia_report.decomposition()
     latest_we = sp.dropna(subset=["surprise"]).index.max()
 
@@ -218,11 +236,15 @@ def assess_release(actual_change: float | None = None,
         # standardise by the historical surprise std
         std = sp["surprise"].std()
         surprise_z = surprise / std if std else 0.0
-        surprise_src = "consensus (real)"
+        surprise_src = "consensus (real, supplied)"
     else:
         surprise = float(sp.loc[latest_we, "surprise"])
         surprise_z = float(sp.loc[latest_we, "surprise_z"])
-        surprise_src = "seasonal proxy (no consensus supplied)"
+        # the default surprise now uses the REAL consensus history where the week
+        # has a consensus row, falling back to the seasonal proxy otherwise.
+        _src = sp.loc[latest_we].get("expected_source", "seasonal")
+        surprise_src = ("consensus (real)" if _src == "consensus"
+                        else "seasonal proxy (no consensus row this week)")
 
     bullish = surprise < 0  # tighter than expected
 
@@ -293,7 +315,7 @@ def assess_release(actual_change: float | None = None,
     glut_beta = -1.0
     try:
         _tbl = regime_conditioning.conditional_table(
-            regime_conditioning.build_daily_panel("seasonal"), "ret")
+            regime_conditioning.build_daily_panel(), "ret")
         _g = _tbl[_tbl["regime"] == "HIGH stocks"]
         if len(_g):
             glut_beta = float(_g.iloc[0]["beta"])
@@ -321,7 +343,7 @@ def assess_release(actual_change: float | None = None,
     # typical release-DAY range (1σ of the day's move) — price DOES move on the
     # print; the surprise just isn't a reliable *direction* in this regime.
     try:
-        _p = regime_conditioning.build_daily_panel("seasonal")
+        _p = regime_conditioning.build_daily_panel()
         price_reaction["brent"]["day_range_pct"] = round(float(_p["ret"].std()), 2)
         if "ret_wti" in _p.columns and _p["ret_wti"].notna().sum() >= 8:
             price_reaction["wti"]["day_range_pct"] = round(float(_p["ret_wti"].std()), 2)
@@ -406,7 +428,7 @@ def assess_series(series: str = "crude_ex_spr", actual_change: float | None = No
         out["series_label"] = _SERIES_LABEL["crude_ex_spr"]
         return out
 
-    sp = eia_report.surprise_series(series, "seasonal")
+    sp = eia_report.surprise_series(series, eia_report.DEFAULT_SURPRISE_METHOD)
     latest_we = sp.dropna(subset=["surprise"]).index.max()
     if actual_change is None:
         actual_change = float(sp.loc[latest_we, "actual_change"])
@@ -422,11 +444,13 @@ def assess_series(series: str = "crude_ex_spr", actual_change: float | None = No
     if consensus is not None:
         surprise = actual_change - consensus
         surprise_z = surprise / std
-        surprise_src = "consensus (real)"
+        surprise_src = "consensus (real, supplied)"
     else:
         surprise = float(sp.loc[latest_we, "surprise"])
         surprise_z = float(sp.loc[latest_we, "surprise_z"])
-        surprise_src = "seasonal proxy (no consensus supplied)"
+        _src = sp.loc[latest_we].get("expected_source", "seasonal")
+        surprise_src = ("consensus (real)" if _src == "consensus"
+                        else "seasonal proxy (no consensus row this week)")
     bullish = surprise < 0
 
     cr = regime_conditioning.current_regime(series=series)
@@ -450,7 +474,7 @@ def assess_series(series: str = "crude_ex_spr", actual_change: float | None = No
     glut_beta = -1.0
     try:
         _tbl = regime_conditioning.conditional_table(
-            regime_conditioning.build_daily_panel("seasonal", series=series), "ret")
+            regime_conditioning.build_daily_panel(series=series), "ret")
         _g = _tbl[_tbl["regime"] == "HIGH stocks"]
         if len(_g):
             glut_beta = float(_g.iloc[0]["beta"])

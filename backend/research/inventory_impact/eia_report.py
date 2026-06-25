@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import logging
 import os
+from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
@@ -53,6 +54,151 @@ log = logging.getLogger("pulse.inventory_impact.eia_report")
 _CACHE = Path(__file__).parent.parent.parent / "data" / "research" / "inventory_impact"
 _CACHE.mkdir(parents=True, exist_ok=True)
 _REPORT_PARQUET = _CACHE / "eia_report_history.parquet"
+
+# The default expectation for surprise = actual − expected. "consensus" reads the
+# real analyst consensus (investing.com history, ×1000 → MBBL) and falls back to
+# the seasonal proxy per-week where no consensus row exists. This is what the desk
+# sees by default — "surprise vs real consensus", not the seasonal proxy.
+DEFAULT_SURPRISE_METHOD = "consensus"
+
+# Real analyst consensus + the API leading indicator, staged 2026-06-25 (validated
+# in CLAUDE.md §1). All four are actual/forecast(=consensus)/previous in *millions*
+# of bbl → ×1000 to MBBL (thousands). release_date is %d-%m-%Y. Empty-forecast
+# split rows (the mis-dated :29/:25 rows) are dropped by the loader.
+_CONSENSUS_FILES = {
+    "crude_ex_spr": "eia_consensus_history.csv",
+    "gasoline":     "eia_consensus_gasoline.csv",
+    "distillate":   "eia_consensus_distillate.csv",
+}
+_API_CRUDE_FILE = "api_crude_history.csv"
+
+
+def _parse_mbbl(s) -> float:
+    """'-3.900M' (millions) → -3900.0 MBBL (thousands). Blank → NaN."""
+    s = str(s).strip().strip('"').replace("M", "").replace(",", "")
+    if s in ("", "nan", "None", "-"):
+        return np.nan
+    try:
+        return float(s) * 1000.0
+    except ValueError:
+        return np.nan
+
+
+def _prev_friday(d: pd.Timestamp) -> pd.Timestamp:
+    """The week-ending Friday for a release dated `d`. The EIA prints Wed (Thu on
+    holidays) for the week ending the *preceding* Friday; the Tue API likewise.
+    Maps any release weekday back to the most recent Friday strictly before it."""
+    off = (d.weekday() - 4) % 7      # Friday = weekday 4
+    return d - pd.Timedelta(days=7 if off == 0 else off)
+
+
+@lru_cache(maxsize=8)
+def _load_consensus_csv(series: str) -> pd.DataFrame:
+    """
+    Real analyst consensus for `series`, indexed by week-ending Friday with columns
+    {consensus, actual, release_date} in MBBL. Empty-forecast split rows dropped;
+    de-duped to the latest release per week (a holiday-shifted stray collapses onto
+    the same Friday — keep the genuine Wed/Thu print). Empty DataFrame if no file.
+
+    Verified against the report parquet: csv actual matches the parquet actual_change
+    to ~0 MBBL median error for 99%+ of weeks, so the prev-Friday alignment is sound.
+    """
+    fname = _CONSENSUS_FILES.get(series)
+    if not fname:
+        return pd.DataFrame(columns=["consensus", "actual", "release_date"])
+    path = _CACHE / fname
+    if not path.exists():
+        log.warning("consensus file missing for %s: %s", series, path)
+        return pd.DataFrame(columns=["consensus", "actual", "release_date"])
+    df = pd.read_csv(path)
+    df.columns = [c.strip().strip('"').lower() for c in df.columns]
+    df["release_date"] = pd.to_datetime(
+        df["release_date"].astype(str).str.strip().str.strip('"'),
+        format="%d-%m-%Y", errors="coerce")
+    df["consensus"] = df["forecast"].map(_parse_mbbl)
+    df["actual"] = df["actual"].map(_parse_mbbl)
+    df = df[df["consensus"].notna() & df["release_date"].notna()].copy()
+    df["week_ending"] = df["release_date"].map(_prev_friday)
+    df = (df.sort_values("release_date")
+            .drop_duplicates("week_ending", keep="last")
+            .set_index("week_ending").sort_index())
+    return df[["consensus", "actual", "release_date"]]
+
+
+def consensus_series(series: str = "crude_ex_spr") -> pd.Series:
+    """The real analyst consensus (forecast) for `series`, MBBL, by week-ending."""
+    return _load_consensus_csv(series)["consensus"] if not _load_consensus_csv(series).empty \
+        else pd.Series(dtype=float)
+
+
+def latest_release(series: str = "crude_ex_spr") -> dict | None:
+    """
+    The freshest *printed* release from the consensus history (one week ahead of the
+    report parquet, which lags the live print). Returns the real actual + consensus +
+    surprise so the live reaction grade can anchor on the printed EIA number instead
+    of an API proxy. None when no consensus file / no row with a real actual.
+    """
+    c = _load_consensus_csv(series)
+    c = c[c["actual"].notna()]
+    if c.empty:
+        return None
+    we = c.index.max()
+    row = c.loc[we]
+    actual, cons = float(row["actual"]), float(row["consensus"])
+    return {
+        "series": series,
+        "week_ending": str(we.date()),
+        "release_date": str(pd.Timestamp(row["release_date"]).date()),
+        "actual_mbbl": round(actual, 0),
+        "consensus_mbbl": round(cons, 0),
+        "surprise_mbbl": round(actual - cons, 0),
+    }
+
+
+@lru_cache(maxsize=1)
+def _load_api_crude() -> pd.DataFrame:
+    """API weekly crude (the Tuesday leading indicator), indexed by week-ending
+    Friday with the API *actual* in MBBL. The API forecast column is sparse, so we
+    use the API actual (validated: corr 0.77 with the EIA actual, predicts the EIA
+    consensus surprise at corr 0.64 / slope 0.63). Coverage 2019+ only."""
+    path = _CACHE / _API_CRUDE_FILE
+    if not path.exists():
+        return pd.DataFrame(columns=["api_actual", "release_date"])
+    df = pd.read_csv(path)
+    df.columns = [c.strip().strip('"').lower() for c in df.columns]
+    df["release_date"] = pd.to_datetime(
+        df["release_date"].astype(str).str.strip().str.strip('"'),
+        format="%d-%m-%Y", errors="coerce")
+    df["api_actual"] = df["actual"].map(_parse_mbbl)
+    df = df[df["api_actual"].notna() & df["release_date"].notna()].copy()
+    df["week_ending"] = df["release_date"].map(_prev_friday)
+    df = (df.sort_values("release_date")
+            .drop_duplicates("week_ending", keep="last")
+            .set_index("week_ending").sort_index())
+    return df[["api_actual", "release_date"]]
+
+
+def api_nowcast(week_ending) -> dict | None:
+    """
+    The API crude leading indicator for the EIA week ending `week_ending` — the
+    Tuesday print that front-runs Wednesday's EIA number by ~1 day. Returns the API
+    actual (MBBL) + its release date, or None if the API didn't cover that week
+    (coverage 2019+; the most recent week may not have printed yet). This is a
+    pre-release nowcast input, NOT the EIA number.
+    """
+    api = _load_api_crude()
+    if api.empty:
+        return None
+    we = pd.Timestamp(week_ending).normalize()
+    if we not in api.index:
+        return None
+    row = api.loc[we]
+    return {
+        "week_ending": str(we.date()),
+        "api_actual_mbbl": round(float(row["api_actual"]), 0),
+        "api_release_date": str(pd.Timestamp(row["release_date"]).date()),
+        "coverage_note": "API weekly crude (Tue) - corr 0.77 w/ EIA actual; 2019+ only",
+    }
 
 _EIA_KEY = os.getenv("EIA_API_KEY")
 _SNDW = "https://api.eia.gov/v2/petroleum/sum/sndw/data/"
@@ -270,23 +416,42 @@ def surprise_series(
       > 0  => looser  than expected  => BEARISH surprise
 
     expected:
+      method="consensus"  real analyst consensus (investing.com history), with the
+                          seasonal baseline as a per-week fallback where no consensus
+                          row exists. THIS IS THE DEFAULT — actual - real consensus.
       method="seasonal"   5yr same-ISO-week seasonal baseline (proxy consensus).
       method="ma4"        trailing 4-week mean of changes (naive floor).
       consensus=<Series>  if given, used as expected directly (real consensus
-                          drop-in — actual - consensus).
+                          drop-in — actual - consensus), overriding `method`.
 
     surprise_z = surprise / trailing std(surprise) — standardised so a "1σ
     surprise" is comparable across calm and volatile periods.
+
+    `expected_source` column flags each week as "consensus" (a real consensus row
+    was used) vs "seasonal_fallback" (no consensus that week → seasonal proxy), so
+    the desk is never misled about whether a surprise is vs a real number.
     """
     wf = weekly_frame()
     if series not in wf:
         raise KeyError(f"unknown series '{series}'")
     actual_change = wf[series].diff()
+    seasonal = _seasonal_expected_change(actual_change)
+    expected_source = pd.Series("seasonal", index=actual_change.index)
 
     if consensus is not None:
         expected = consensus.reindex(actual_change.index)
+        expected_source = pd.Series(
+            np.where(expected.notna(), "consensus", "seasonal_fallback"),
+            index=actual_change.index)
+        expected = expected.fillna(seasonal)
+    elif method == "consensus":
+        cons = consensus_series(series).reindex(actual_change.index)
+        expected_source = pd.Series(
+            np.where(cons.notna(), "consensus", "seasonal_fallback"),
+            index=actual_change.index)
+        expected = cons.fillna(seasonal)
     elif method == "seasonal":
-        expected = _seasonal_expected_change(actual_change)
+        expected = seasonal
     elif method == "nowcast":
         expected = nowcast_expected_change()
     elif method == "ma4":
@@ -301,6 +466,7 @@ def surprise_series(
         "level": wf[series],
         "actual_change": actual_change,
         "expected_change": expected,
+        "expected_source": expected_source,
         "surprise": surprise,
         "surprise_z": z,
         "bullish": surprise < 0,

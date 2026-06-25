@@ -333,32 +333,156 @@
     "verdict": "WTI is correctly signed in 3/4 matched-window cuts (Brent 0/4) and tighter (|t|) in 2/4; but BOTH flat-return reactions are statistically null in this tight regime (no |t|\u22652). Regime conditioning is NOT sharper on WTI flat returns here \u2014 not because WTI under-reacts, but because the synth WTI history misses the glut regime entirely. The one near-significant matched cut is the US-specific WTI-Brent spread (AVG stocks), consistent with US inventories being a US signal.",
     "note": "WTI synth settlements start 2021 \u2192 the WTI panel has no glut/HIGH-stocks rows; the daily-flat-return 'when it mattered' headline (glut bites, Brent \u03b2 -1.03 t -3.4) cannot be reproduced on WTI for lack of history. A real pre-2021 WTI daily settlement file (gotcha 11) is the unlock."
   },
+  "consensus_sharpening": {
+    "series": "crude_ex_spr",
+    "n_consensus": 535,
+    "n_seasonal": 535,
+    "rows": [
+      {
+        "conditioner": "ALL",
+        "regime": "all releases",
+        "beta_seasonal": -0.1849,
+        "t_seasonal": -1.71,
+        "beta_consensus": -0.2668,
+        "t_consensus": -2.48,
+        "n": 535,
+        "d_abs_t": 0.77,
+        "sharper": true
+      },
+      {
+        "conditioner": "curve",
+        "regime": "contango front",
+        "beta_seasonal": -0.428,
+        "t_seasonal": -2.06,
+        "beta_consensus": -0.4948,
+        "t_consensus": -2.36,
+        "n": 154,
+        "d_abs_t": 0.3,
+        "sharper": true
+      },
+      {
+        "conditioner": "curve",
+        "regime": "backwardated front",
+        "beta_seasonal": -0.0566,
+        "t_seasonal": -0.45,
+        "beta_consensus": -0.142,
+        "t_consensus": -1.14,
+        "n": 381,
+        "d_abs_t": 0.69,
+        "sharper": true
+      },
+      {
+        "conditioner": "inventory",
+        "regime": "HIGH stocks",
+        "beta_seasonal": -1.0331,
+        "t_seasonal": -3.36,
+        "beta_consensus": -1.1422,
+        "t_consensus": -3.89,
+        "n": 59,
+        "d_abs_t": 0.53,
+        "sharper": true
+      },
+      {
+        "conditioner": "inventory",
+        "regime": "AVG stocks",
+        "beta_seasonal": -0.1768,
+        "t_seasonal": -0.86,
+        "beta_consensus": -0.2694,
+        "t_consensus": -1.24,
+        "n": 126,
+        "d_abs_t": 0.38,
+        "sharper": true
+      },
+      {
+        "conditioner": "inventory",
+        "regime": "LOW stocks",
+        "beta_seasonal": -0.024,
+        "t_seasonal": -0.17,
+        "beta_consensus": -0.0875,
+        "t_consensus": -0.65,
+        "n": 350,
+        "d_abs_t": 0.48,
+        "sharper": true
+      },
+      {
+        "conditioner": "inventory",
+        "regime": "above 5yr (glut)",
+        "beta_seasonal": -0.734,
+        "t_seasonal": -3.05,
+        "beta_consensus": -0.8242,
+        "t_consensus": -3.54,
+        "n": 115,
+        "d_abs_t": 0.49,
+        "sharper": true
+      },
+      {
+        "conditioner": "inventory",
+        "regime": "below 5yr (tight)",
+        "beta_seasonal": -0.0365,
+        "t_seasonal": -0.3,
+        "beta_consensus": -0.1,
+        "t_consensus": -0.83,
+        "n": 420,
+        "d_abs_t": 0.53,
+        "sharper": true
+      },
+      {
+        "conditioner": "era",
+        "regime": "2015-2020",
+        "beta_seasonal": -0.434,
+        "t_seasonal": -2.94,
+        "beta_consensus": -0.5659,
+        "t_consensus": -3.79,
+        "n": 254,
+        "d_abs_t": 0.85,
+        "sharper": true
+      },
+      {
+        "conditioner": "era",
+        "regime": "2021-2026",
+        "beta_seasonal": 0.0796,
+        "t_seasonal": 0.51,
+        "beta_consensus": 0.0333,
+        "t_consensus": 0.22,
+        "n": 281,
+        "d_abs_t": -0.29,
+        "sharper": false
+      }
+    ],
+    "n_sharper": 9,
+    "n_cuts": 10,
+    "key_sharper": 5,
+    "n_key": 5,
+    "n_sig_seasonal": 4,
+    "n_sig_consensus": 5,
+    "verdict": "Real consensus SHARPENS the signal: 9/10 regime cuts get a bigger |t| than the seasonal proxy, including 5/5 of the cells where inventories should bite (glut / contango / HIGH-stocks / the 2015-20 glut era / all-releases). Significant cuts: 4 (seasonal) \u2192 5 (consensus). The glut/contango betas strengthen while the tight/backwardation cells stay null \u2014 exactly the pattern a real (vs proxy) surprise should produce, confirming the framework's headline is not a seasonal artefact."
+  },
   "current_regime": {
     "as_of": "2026-06-12",
     "inv_bucket": "LOW",
     "inv_vs_5yr_pct": -15.2,
     "front_contango": false,
     "applicable_beta_wti": {
-      "beta": -0.059,
-      "t": -0.38,
-      "r2": 0.001,
+      "beta": -0.1063,
+      "t": -0.7,
+      "r2": 0.002,
       "n": 277,
-      "corr": -0.023
+      "corr": -0.042
     },
     "regime_label": "LOW stocks / backwardation",
     "applicable_beta": {
-      "beta": -0.0365,
-      "t": -0.3,
-      "r2": 0.0,
+      "beta": -0.1,
+      "t": -0.83,
+      "r2": 0.002,
       "n": 420,
-      "corr": -0.015
+      "corr": -0.041
     },
     "bucket_beta": {
-      "beta": -0.024,
-      "t": -0.17,
-      "r2": 0.0,
+      "beta": -0.0875,
+      "t": -0.65,
+      "r2": 0.001,
       "n": 350,
-      "corr": -0.009
+      "corr": -0.035
     },
     "sensitivity": "LOW"
   }
