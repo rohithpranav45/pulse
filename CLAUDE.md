@@ -7,15 +7,22 @@ spread engine), and serves a React dashboard with a paper-trading book.
 - **Stack:** Flask 3 · React 18 + Vite + Tailwind · SQLite (cache + paper book) ·
   DuckDB/Parquet over a 3.5 GB `/Data` desk feed · sklearn + XGBoost/LightGBM/CatBoost
 - **Run (local):** `python start.py` from the repo root → http://127.0.0.1:5000
-- **Last updated:** 2026-06-24 (**News Impact Sprint 3 — GEOPOLITICAL earns a measured beta.** Re-classified
-  ~1/3 of the NOISE corpus with Groq 8b (70b's daily token cap was exhausted), cutting NOISE 80%→72% and
-  growing GEOPOLITICAL 317→520 headlines → at the 1d horizon it goes **t=1.54 (prior) → t=3.05, β=+0.87 %/unit
-  (MEASURED)**; t rose with n, so 8b recovered real geo-oil headlines (not noise). `impact.score_headline` now
-  serves a measured % move for geopolitical headlines instead of a prior. Also fixed a recurring
-  `pulse_cache.db` corruption at root (`.gitattributes` marks binaries `binary`) + tightened backfill themes to
-  oil-only (`OIL_CORPUS_THEMES`). Still open: corpus span 2021-only (GDELT coverage backfill 429s from the
-  office IP), remaining NOISE best re-done with 70b once its cap resets. Prior: **Sprint 2: event study + the %
-  move.** Turns the Sprint-1
+- **Last updated:** 2026-06-25 (**Inventory prediction framework — productionised + live-graded** [branch
+  `phase4-live-feature-overlay`, see §1 entry]. The EIA-release impact model now (1) covers **all 3 series**
+  (Crude/Gasoline/Distillate) via a series toggle, each with its OWN regime betas — gasoline reacts in
+  backwardation where crude is noise; (2) headlines the **WTI** move (US crude inventories move WTI ~17× more than
+  Brent — proven by the spread attribution) + per-spread impacts; (3) shows a directional **point estimate +
+  typical day-range** instead of a bare ≈0; (4) **grades predicted-vs-actual** from the desk 1-min feed
+  (`release_reaction.py`). Today's crude print: our **bearish** call was CORRECT (flats fell, WTI-Brent +0.12 as
+  flagged), magnitude muted (−0.3% « ±2.5% day range) = the low-sensitivity regime call held. Honest limits: the
+  desk feed is **crude-only** (no RBOB/ULSD tape → gas/distillate reaction shown via the crude complex); the
+  when-it-mattered betas are still **Brent-based** (WTI columns now in the panel → next step). Also **fixed the
+  "stuck" live signal feed** (curve softened BACK→NEUTRAL → model fell to the global baseline whose OOS-unvalidated
+  cells the health gate hard-rejected → forced NEUTRAL; now soft-fails *degrade* instead of *silence*) and the
+  **News tab went live** (wire→corpus→impact ingest, live headlines scored + refresh button). Prior:
+  **News Impact Sprint 3 — GEOPOLITICAL earns a measured beta** (re-classified ~1/3 NOISE with Groq 8b →
+  GEOPOLITICAL 1d t=1.54→3.05, β=+0.87 %/unit MEASURED; `.gitattributes` DB-corruption fix; `OIL_CORPUS_THEMES`).
+  Prior: **Sprint 2: event study + the % move.** Turns the Sprint-1
   GDELT headline corpus into an empirical headline → expected Brent % move: `event_study.py` fits a per-factor,
   curve-regime-gated beta from the +1h/+4h/+1d forward return regressed on a signed crude-sentiment lexicon;
   `impact.py` serves it through a **prior-then-learn gate** (measured beta only when |t|≥2 on ≥12 headlines,
@@ -571,6 +578,68 @@ metrics → empty cards. **Not a bug; a cadence mismatch.** Fix = surface the an
   the A/B book + framework on baked daily settles; the live-feed `as_of` advancing is a desk-only behaviour.
 - **Updating going forward:** merge to `main` → **Factory rebuild** the Space (no token on this desk; the
   keep-alive Action only pings `/api/health`, it does not rebuild).
+
+### ✅ Inventory prediction framework — productionised + live-graded (2026-06-25)
+Branch `phase4-live-feature-overlay` (not merged to main). Extends the crude-only EIA-release impact model into
+a desk-ready, three-series, predicted-vs-actual framework. Files: `backend/research/inventory_impact/{framework,
+regime_conditioning,release_reaction}.py`, `/api/regime/inventory[?series=][/reaction]`, frontend
+`Inventory{Impact,Reaction}Panel.tsx` + the series toggle in `InventoryView.tsx`.
+- **3 series (Crude/Gasoline/Distillate), each with its OWN regime betas.** `build_daily_panel(series=)` +
+  `current_regime(series=)` + `framework.assess_series(series, actual, consensus)` (crude delegates to the full
+  `assess_release`; gas/distillate get the regime-conditioned core). `/api/regime/inventory?series=` + a toggle on
+  the tab. **Key cross-series finding:** in today's tight/backwardated/summer regime, **crude surprises are noise**
+  (t≈0 across LOW-stock/tight/backwardated cuts) but **gasoline** is borderline-significant (t −1.5 to −2.3 in the
+  low-stock/backwardated cuts; the consistent vs-5yr split gives t≈−1.48) — the conventional "watch crude" is
+  wrong here, gasoline is the live series. Distillate is weak (summer is its off-season).
+- **WTI is the affected benchmark, proven empirically.** Spread attribution: a crude surprise moves **WTI flat
+  β=+0.026 (t=1.03)** vs **Brent flat β=+0.0015 (t=0.05)** — WTI reacts ~17× more; Brent ≈ no reaction (US crude
+  inventories are a US signal). The call card now headlines the **WTI** move + a per-spread impact table
+  (WTI-Brent, WTI M1-M2). `regime_conditioning` gained `_wti_daily()` + `ret_wti`/`d_wti_*` panel columns +
+  `current_regime.applicable_beta_wti`; `assess_release` adds a `price_reaction` (WTI vs Brent, regime-gated) +
+  `spread_impacts` block. **Caveat: the "when-it-mattered" regime betas are still measured vs Brent — which
+  UNDERSTATES the crude signal (Brent under-reacts). The WTI columns are now in the panel; re-running the study
+  vs WTI is the top next step.**
+- **"≈0" → directional point estimate + day range.** The hard-gated "≈0" read as "no price change" (misleading).
+  Now shows the **point estimate** (β×surprise, e.g. WTI −0.03%) + a confidence tag (significant vs `low conf ·
+  not a catalyst`) + the **typical release-DAY range** (1σ ≈ ±2.5%) — so it's clear price still moves, just not
+  predictably from the print. `point_move_pct` + `day_range_pct` on `price_reaction`.
+- **Predicted-vs-actual release grading from the desk 1-min feed.** `release_reaction.py` snapshots the WAL 1-min
+  db (`I:\…\DB\extra\bars_1min_*.db`, gotcha 14), anchors at the release minute (10:30 ET = 14:30 UTC), and
+  computes the move in WTI/Brent flat + WTI-Brent + WTI M1-M2 at **+5/15/30/60 min**. `/api/regime/inventory/
+  reaction?series=` returns predicted (model) + actual side by side; `InventoryReactionPanel` grades each
+  (✓/✗/~) with a verdict. **Today's crude verdict (consensus −3.9M, API −0.765M → bearish surprise z+0.57):
+  CORRECT direction** — flats fell (WTI −0.31%, Brent −0.41% @30min), **WTI-Brent +0.12** (our flagged spread,
+  right direction), magnitude **muted** (peak −0.4% « ±2.5% typical) = the low-sensitivity regime call held.
+- **Honest data limit: the desk feed is CRUDE-ONLY** (every `bars_*min_*.db` has only CL/CO — no RBOB/HO/gasoil).
+  So gasoline/distillate *product* price reactions (RBOB/ULSD cracks) can't be measured; the reaction panel shows
+  their predicted→Brent cross-effect vs the crude-complex move (they release jointly at 10:30 ET) with an explicit
+  caveat banner naming the unavailable product crack. **A products feed (RB/HO/QS) is the unlock.**
+- **Tests:** +4 (`test_assess_series_all_three` ×3, `test_release_reaction_computes_horizon_moves`). The reaction
+  panel anchors today's prediction on the **API −0.765M as a proxy** for the EIA actual — re-anchor on the real
+  printed EIA number for an exact grade.
+
+### 🩹 Live signal feed "stuck at 18 Jun" — health gate over-rejected OOS-unvalidated cells (2026-06-25)
+**Not a feed problem** — `live_feed` reads live to today. The **signal log** froze because: the curve softened
+from strong BACK (m1_m12 ~+7) to mild backwardation (~+2/+3) → regime **NEUTRAL** → the per-spread gate turns off
+→ every spread falls to the **global baseline** model, whose OOS stats (`r2_oos`, `band_hit_rate`) are `None` for
+cells the held-out test window didn't cover. `model_health.check_cell` treated *unmeasured* the same as *failed*
+→ hard NEUTRAL on everything → nothing actionable logged once the regime left BACK. **Fix:** split health checks
+into **HARD** fails (incoherent quantiles, out-of-distribution, thin training, measured-but-bad stats → NEUTRAL)
+vs **SOFT** fails (stats merely *unmeasured* → `degraded`). A coherent, well-trained cell now trades at a capped
+z-based confidence with a `model_health_degraded` flag instead of being silenced; `live_ranker` honours it.
+Verified: live rec now emits `wti_fly_123 SELL` (z=0.87, conf 0.21) at the current timestamp; the signal log
+advances to today. Genuinely incoherent cells (e.g. `brent_m1_m2` with p10>p50) still abstain. **Caveat:** these
+NEUTRAL-regime signals are degraded/low-confidence by design.
+
+### ✅ News tab went live (wire → corpus → impact) + live-headlines strip (2026-06-25)
+The Impact feed was scoring only the 2021 backfill. New scheduler job `_news_corpus_ingest` (app.py, every
+`TTL_NEWS`, opt-out `PULSE_NEWS_IMPACT_DISABLED=1`) pipes the cached `/api/news` wire → `corpus.upsert_articles`
+→ `classify.classify_corpus`, so the corpus grows with today's headlines and the feed scores them (corpus span
+now reaches 2026-06). `impact_feed` gained `order="recent"` (live API leads with newest, NOISE excluded). New
+**`LiveHeadlinesPanel`** (raw wire, each headline scored via `/api/news/live` + `impact.live_scored` — factor
+from corpus-by-url else keyword, GDELT compact-ts normalised) at the top of the News tab + a **Time·UTC column**
+on the Impact feed + a **Refresh-news button** (async `/api/news/refresh`, lock-coalesced). Alert toasts bumped
+to 30/18/10s. Groq key wired in `.env` (gitignored). `trade_idea` cot-crash fixed earlier (isinstance guard).
 
 ### ✅ News Impact Model — Sprint 3: GEOPOLITICAL earns a measured beta + infra fixes (2026-06-24)
 Sprint 3's goal — **broaden/clean the corpus so a factor earns out of its prior** — was **achieved**:
