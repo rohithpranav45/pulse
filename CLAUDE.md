@@ -7,8 +7,16 @@ spread engine), and serves a React dashboard with a paper-trading book.
 - **Stack:** Flask 3 · React 18 + Vite + Tailwind · SQLite (cache + paper book) ·
   DuckDB/Parquet over a 3.5 GB `/Data` desk feed · sklearn + XGBoost/LightGBM/CatBoost
 - **Run (local):** `python start.py` from the repo root → http://127.0.0.1:5000
-- **Last updated:** 2026-06-25 (**Inventory prediction framework — productionised + live-graded** [branch
-  `phase4-live-feature-overlay`, see §1 entry]. The EIA-release impact model now (1) covers **all 3 series**
+- **Last updated:** 2026-06-25 (**Inventory: "when it mattered" re-run vs WTI** [branch
+  `phase4-live-feature-overlay`, see §1 entry]. **Graded verdict: regime conditioning is NOT sharper on WTI flat
+  returns — but not because WTI under-reacts.** Synth WTI settlements start 2021, so the WTI panel has **zero
+  glut/HIGH-stocks rows** — the exact regime where inventories bit on Brent (β −1.03, t −3.4) has no WTI history. In
+  the matched 2021-26 tight window both flat reactions are statistically null, but **WTI is correctly signed in 3/4
+  cuts where Brent perversely flips**, and the only near-significant matched cut is the US-specific **WTI-Brent
+  spread** (AVG stocks β −0.37, t −1.80) — consistent with US crude inventories being a US signal. The 17× ratio
+  quoted earlier is a within-tight-regime intraday-*spread* result; on daily flat returns the "glut bites" headline
+  stays Brent-only for lack of WTI history. A real pre-2021 WTI daily settlement file (gotcha 11) is the unlock.
+  Prior: **Inventory prediction framework — productionised + live-graded**. The EIA-release impact model now (1) covers **all 3 series**
   (Crude/Gasoline/Distillate) via a series toggle, each with its OWN regime betas — gasoline reacts in
   backwardation where crude is noise; (2) headlines the **WTI** move (US crude inventories move WTI ~17× more than
   Brent — proven by the spread attribution) + per-spread impacts; (3) shows a directional **point estimate +
@@ -16,7 +24,8 @@ spread engine), and serves a React dashboard with a paper-trading book.
   (`release_reaction.py`). Today's crude print: our **bearish** call was CORRECT (flats fell, WTI-Brent +0.12 as
   flagged), magnitude muted (−0.3% « ±2.5% day range) = the low-sensitivity regime call held. Honest limits: the
   desk feed is **crude-only** (no RBOB/ULSD tape → gas/distillate reaction shown via the crude complex); the
-  when-it-mattered betas are still **Brent-based** (WTI columns now in the panel → next step). Also **fixed the
+  when-it-mattered betas were Brent-based (now **re-run vs WTI** — see the latest entry; the WTI flat-return study
+  is data-limited to 2021+, so the glut signal stays Brent-only). Also **fixed the
   "stuck" live signal feed** (curve softened BACK→NEUTRAL → model fell to the global baseline whose OOS-unvalidated
   cells the health gate hard-rejected → forced NEUTRAL; now soft-fails *degrade* instead of *silence*) and the
   **News tab went live** (wire→corpus→impact ingest, live headlines scored + refresh button). Prior:
@@ -596,9 +605,9 @@ regime_conditioning,release_reaction}.py`, `/api/regime/inventory[?series=][/rea
   inventories are a US signal). The call card now headlines the **WTI** move + a per-spread impact table
   (WTI-Brent, WTI M1-M2). `regime_conditioning` gained `_wti_daily()` + `ret_wti`/`d_wti_*` panel columns +
   `current_regime.applicable_beta_wti`; `assess_release` adds a `price_reaction` (WTI vs Brent, regime-gated) +
-  `spread_impacts` block. **Caveat: the "when-it-mattered" regime betas are still measured vs Brent — which
-  UNDERSTATES the crude signal (Brent under-reacts). The WTI columns are now in the panel; re-running the study
-  vs WTI is the top next step.**
+  `spread_impacts` block. **Caveat (now addressed — see the WTI re-run entry below): the "when-it-mattered"
+  regime betas were measured vs Brent; the study has been re-run vs WTI and the daily flat-return result is
+  data-limited to 2021+ (no glut rows), so the glut signal stays Brent-only.**
 - **"≈0" → directional point estimate + day range.** The hard-gated "≈0" read as "no price change" (misleading).
   Now shows the **point estimate** (β×surprise, e.g. WTI −0.03%) + a confidence tag (significant vs `low conf ·
   not a catalyst`) + the **typical release-DAY range** (1σ ≈ ±2.5%) — so it's clear price still moves, just not
@@ -617,6 +626,32 @@ regime_conditioning,release_reaction}.py`, `/api/regime/inventory[?series=][/rea
 - **Tests:** +4 (`test_assess_series_all_three` ×3, `test_release_reaction_computes_horizon_moves`). The reaction
   panel anchors today's prediction on the **API −0.765M as a proxy** for the EIA actual — re-anchor on the real
   printed EIA number for an exact grade.
+
+### ✅ Inventory: "when it mattered" re-run vs WTI (2026-06-25)
+Priority item 1 of the inventory-improvement backlog. The regime "when-it-mattered" study (`surprise_z → release-day
+return`, sliced by inventory/curve regime) was Brent-based; US crude inventories are a US signal, so WTI *should*
+be the sharper benchmark. Re-ran the study with `ret_wti` as the target alongside Brent + a matched-window
+comparison. Files: `regime_conditioning.wti_sharpness_compare()` + WTI table in `to_results`/`__main__`;
+`/api/regime/inventory` gains `when_it_mattered_wti` + `wti_compare` (crude-only); `InventoryFrameworkPanel` renders
+the WTI table (gold) + a matched-window verdict table.
+- **Graded verdict: regime conditioning is NOT sharper on WTI flat returns — but not because WTI under-reacts.**
+  The synth WTI settlements start 2021 (`data_lake.get_wti_settlements()`), so the WTI panel is **281 rows, 2021-26
+  only** vs Brent's 535 (2016-26) — and has **zero glut/HIGH-stocks rows** (matched window = 260 LOW + 21 AVG, no
+  HIGH). The headline Brent signal (HIGH stocks β −1.03, t −3.36, R² 0.17) lives in a regime that **predates the WTI
+  series**, so it simply can't be reproduced on WTI flat returns.
+- **What the matched 2021-26 window DOES show (both benchmarks in the same tight regime):** both flat reactions are
+  statistically null (no |t|≥2), but **WTI is correctly signed in 3/4 cuts (build → price down) where Brent
+  perversely flips positive in 0/4** — WTI behaves like the textbook US-inventory benchmark. The sharpest matched
+  cut is **AVG stocks: WTI β −0.51, t −1.54, R² 0.111** vs Brent β +0.11, t 0.30; and the **US-specific WTI-Brent
+  spread** at AVG stocks (β −0.37, t −1.80, R² 0.145) is the closest thing to significance anywhere in the matched
+  window — exactly where a US-crude surprise should show up. The 17× WTI/Brent flat-beta ratio quoted in the prior
+  entry is a *within-tight-regime intraday-spread* result (event study), not a daily-flat-return regime result.
+- **Honest limit + unlock:** the daily flat-return "glut bites" headline stays **Brent-only** until a real pre-2021
+  WTI daily settlement file exists (gotcha 11 — current WTI is synth from 1-min mids, 2021+). That swap-in would let
+  the WTI study cover the glut regime and properly test the "WTI is sharper" thesis on flat returns.
+- **Tests:** +2 (`test_wti_sharpness_compare_hermetic` — synthetic panel, sign/sharper/spread-beta logic + verdict;
+  `test_wti_sharpness_compare_returns_none_without_wti`). **178 pytest green**, frontend `tsc`+`vite build` clean
+  (only pre-existing TS5101 `baseUrl` deprecation). Branch stays `phase4-live-feature-overlay` (not merged to main).
 
 ### 🩹 Live signal feed "stuck at 18 Jun" — health gate over-rejected OOS-unvalidated cells (2026-06-25)
 **Not a feed problem** — `live_feed` reads live to today. The **signal log** froze because: the curve softened

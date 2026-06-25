@@ -135,6 +135,48 @@ def test_assess_series_all_three(series):
         assert r["expected_brent_move_pct"] == 0.0
 
 
+# ── WTI re-run of the "when it mattered" study ────────────────────────────────
+def test_wti_sharpness_compare_hermetic():
+    """The Brent-vs-WTI matched-window comparison computes the right per-cut betas
+    and a coherent verdict from a synthetic panel — no /Data needed."""
+    from backend.research.inventory_impact import regime_conditioning as rc
+
+    rng = np.random.default_rng(1)
+    n = 120
+    z = rng.normal(0, 1, n)
+    # WTI reacts with the textbook sign (build z>0 → price down); Brent perversely flips
+    panel = pd.DataFrame({
+        "surprise_z": z,
+        "ret": 0.40 * z + rng.normal(0, 0.5, n),        # perverse (positive) sign
+        "ret_wti": -0.60 * z + rng.normal(0, 0.5, n),   # right sign, stronger
+        "d_wti_brent": -0.30 * z + rng.normal(0, 0.3, n),
+        "front_contango": rng.random(n) < 0.1,
+        "inv_bucket": rng.choice(["LOW", "AVG"], n, p=[0.85, 0.15]),
+    }, index=pd.date_range("2021-01-06", periods=n, freq="W-WED"))
+
+    out = rc.wti_sharpness_compare(panel)
+    assert out is not None
+    assert out["n"] == n and len(out["rows"]) >= 1
+    overall = out["rows"][0]
+    assert overall["regime"] == "all (matched window)"
+    assert overall["wti_right_signed"] is True          # WTI β < 0 by construction
+    assert overall["brent_right_signed"] is False        # Brent β > 0 by construction
+    assert out["wti_right_signed_count"] >= 1
+    assert isinstance(out["verdict"], str) and "WTI" in out["verdict"]
+    # the spread reaction column is populated when d_wti_brent is present
+    assert overall["wti_brent_spread_beta"] is not None
+
+
+def test_wti_sharpness_compare_returns_none_without_wti():
+    """No WTI history → None (graceful, gates the route field off)."""
+    from backend.research.inventory_impact import regime_conditioning as rc
+    panel = pd.DataFrame({
+        "surprise_z": np.zeros(30), "ret": np.zeros(30),
+        "front_contango": [False] * 30, "inv_bucket": ["LOW"] * 30,
+    }, index=pd.date_range("2016-01-06", periods=30, freq="W-WED"))
+    assert rc.wti_sharpness_compare(panel) is None
+
+
 def test_release_reaction_computes_horizon_moves(tmp_path, monkeypatch):
     """Hermetic: a synthetic 1-min CO/CL feed with a known post-release ramp →
     compute_reaction returns the right %/$ moves at each horizon."""

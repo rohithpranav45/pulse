@@ -1455,6 +1455,12 @@ def regime_inventory_route():
         call = framework.assess_series(series, actual_change=actual, consensus=consensus)
         panel = regime_conditioning.build_daily_panel("seasonal", series=series)
         cond = regime_conditioning.conditional_table(panel, "ret")
+        # WTI "when it mattered" — US crude inventories are a US signal, so WTI is the
+        # more directly affected benchmark. Crude-only (the WTI study is crude-specific).
+        cond_wti = (regime_conditioning.conditional_table(panel, "ret_wti").to_dict("records")
+                    if series == "crude_ex_spr" else None)
+        wti_compare = (regime_conditioning.wti_sharpness_compare(panel)
+                       if series == "crude_ex_spr" else None)
 
         def _f(v):
             try:
@@ -1521,6 +1527,8 @@ def regime_inventory_route():
             # spread attribution is the crude→WTI event study; only meaningful for crude
             "spread_betas": framework.spread_attribution_betas() if series == "crude_ex_spr" else None,
             "when_it_mattered": cond.to_dict("records"),
+            "when_it_mattered_wti": cond_wti,
+            "wti_compare": wti_compare,
             "recent_releases": recent,
             "latest_report": latest_report,
             "n_releases": int(len(panel)),
