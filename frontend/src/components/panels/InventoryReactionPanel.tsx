@@ -18,11 +18,13 @@ type Horizon = {
 };
 type Reaction = {
   available: boolean; reason?: string;
+  series?: string; series_label?: string; crude_only_feed?: boolean;
   predicted?: {
     call?: string; confidence?: string; surprise_mbbl?: number; surprise_z?: number;
     surprise_source?: string; regime?: string; regime_sensitive?: boolean;
     price_reaction?: { wti?: any; brent?: any };
     spread_impacts?: { instrument: string; expected_move: number }[];
+    product_spread?: string;
   };
   actual?: {
     available: boolean; release_utc?: string; release_et?: string; anchor?: any;
@@ -35,11 +37,13 @@ const fmt = (v: number | null | undefined, unit: string, dp = unit === '%' ? 2 :
 const tone = (v: number | null | undefined) =>
   v == null ? 'text-text-muted' : v > 0.001 ? 'text-bull' : v < -0.001 ? 'text-bear' : 'text-text-muted';
 
-export function InventoryReactionPanel({ actual, consensus }: { actual?: number; consensus?: number }) {
+export function InventoryReactionPanel({ actual, consensus, series = 'crude_ex_spr' }:
+  { actual?: number; consensus?: number; series?: string }) {
   const { data, lastUpdated, error } = usePolling<Reaction>(
-    () => api.regimeInventoryReaction(actual, consensus) as Promise<Reaction>,
-    60_000, [actual, consensus],
+    () => api.regimeInventoryReaction(actual, consensus, series) as Promise<Reaction>,
+    60_000, [actual, consensus, series],
   );
+  const isCrude = series === 'crude_ex_spr';
 
   const rows = useMemo(() => {
     const pred = data?.predicted;
@@ -99,8 +103,8 @@ export function InventoryReactionPanel({ actual, consensus }: { actual?: number;
 
   return (
     <Panel
-      title="Release reaction · predicted vs actual"
-      subtitle={`EIA crude · released ${ax.release_et ?? '10:30 ET'} (${ax.release_utc ?? ''}) · desk 1-min feed`}
+      title={`${data.series_label ?? 'Crude'} release reaction · predicted vs actual`}
+      subtitle={`EIA · released ${ax.release_et ?? '10:30 ET'} (${ax.release_utc ?? ''}) · desk 1-min feed`}
       accent="gold" source="release_reaction" staticMount
       lastSuccess={lastUpdated} fetchError={error}
       right={
@@ -127,6 +131,17 @@ export function InventoryReactionPanel({ actual, consensus }: { actual?: number;
           <span className="text-[10px] font-mono text-text-muted">{p.regime}</span>
         </div>
       </div>
+
+      {/* crude-only feed caveat for product series */}
+      {!isCrude && (
+        <div className="rounded border border-neut/30 bg-neut/5 px-3 py-2 mb-3 text-[10px] font-mono text-text-tertiary leading-snug">
+          ⚠ The desk 1-min feed is <span className="text-text-secondary">crude-only</span> (WTI + Brent) — RBOB / ULSD
+          product cracks aren't recorded. {data.series_label} releases <span className="text-text-secondary">simultaneously</span> with
+          crude at 10:30 ET, so below is the model's predicted {data.series_label?.toLowerCase()}→Brent cross-effect vs how
+          the <span className="text-text-secondary">crude complex</span> actually reacted to the joint print. The product crack
+          (<span className="text-gold">{(p as any).product_spread ?? 'RBOB/ULSD'}</span>) would need a products feed.
+        </div>
+      )}
 
       {/* PREDICTED → ACTUAL across horizons */}
       <div className="grid grid-cols-[96px_70px_repeat(4,1fr)_30px] gap-1.5 text-[9px] font-mono uppercase tracking-wide text-text-muted px-1 mb-1">
@@ -161,7 +176,21 @@ export function InventoryReactionPanel({ actual, consensus }: { actual?: number;
       {/* VERDICT */}
       <div className="mt-3 rounded-lg border border-border/50 bg-bg-card/30 p-3 text-[10.5px] font-mono text-text-secondary leading-relaxed">
         <span className="text-gold font-bold uppercase tracking-wider text-[9.5px]">Verdict · </span>
-        {(() => {
+        {!isCrude ? (() => {
+          const bF = lastFor('brent_flat_pct');
+          const predB = p.price_reaction?.brent?.point_move_pct;
+          const dirOk = bF != null && predB != null && Math.abs(bF) > 0.015 && Math.sign(bF) === Math.sign(predB);
+          return (
+            <>
+              No {data.series_label?.toLowerCase()} product tape on the desk feed, so this grades the
+              {' '}<span className="text-text-primary">crude-complex</span> reaction to the joint print. Our predicted
+              {' '}{data.series_label?.toLowerCase()}→Brent cross-effect was <span className={tone(predB)}>{fmt(predB, '%')}</span>;
+              {' '}Brent actually moved <span className={tone(bF)}>{fmt(bF, '%')}</span> — direction
+              {' '}<span className={dirOk ? 'text-bull font-bold' : 'text-text-muted'}>{dirOk ? 'matched' : 'inconclusive (other drivers in the crude tape)'}</span>.
+              The product crack (<span className="text-gold">{p.product_spread}</span>) is the real expression — needs a products feed.
+            </>
+          );
+        })() : (() => {
           const wtiF = lastFor('wti_flat_pct'), wbrent = lastFor('d_wti_brent');
           const dirOk = wtiF != null && p.price_reaction?.wti?.point_move_pct != null
             && Math.abs(wtiF) > 0.015 && Math.sign(wtiF) === Math.sign(p.price_reaction.wti.point_move_pct);

@@ -480,6 +480,7 @@ def assess_series(series: str = "crude_ex_spr", actual_change: float | None = No
         "expected_wti_move_pct": None,     # WTI event study is crude-specific
         "price_reaction": {
             "brent": {"beta_pct_per_sigma": regime_beta, "t": regime_t,
+                      "point_move_pct": round(regime_beta * surprise_z, 3),
                       "expected_move_pct": expected_move_pct, "sensitive": sensitive},
         },
         "spread_impacts": [],              # the product crack is the expression (see spreads)

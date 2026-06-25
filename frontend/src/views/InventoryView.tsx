@@ -50,9 +50,15 @@ export function InventoryView({ all }: { all: any }) {
       </div>
 
       <InventoryImpactPanel series={series} />
-      {/* Predicted-vs-actual reaction — crude only; anchored on today's real
-          consensus (-3.9 MMbbl) + API (-0.765 MMbbl). */}
-      {series === 'crude_ex_spr' && <InventoryReactionPanel actual={-765} consensus={-3900} />}
+      {/* Predicted-vs-actual reaction. Crude is anchored on today's real
+          consensus (-3.9 MMbbl) + API (-0.765 MMbbl); gasoline/distillate use
+          the seasonal proxy (no consensus on the wire) + show the crude-only
+          feed caveat. */}
+      <InventoryReactionPanel
+        series={series}
+        actual={series === 'crude_ex_spr' ? -765 : undefined}
+        consensus={series === 'crude_ex_spr' ? -3900 : undefined}
+      />
       <InventoryFrameworkPanel series={series} />
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <InventoryReportPanel />
