@@ -7,8 +7,18 @@ spread engine), and serves a React dashboard with a paper-trading book.
 - **Stack:** Flask 3 · React 18 + Vite + Tailwind · SQLite (cache + paper book) ·
   DuckDB/Parquet over a 3.5 GB `/Data` desk feed · sklearn + XGBoost/LightGBM/CatBoost
 - **Run (local):** `python start.py` from the repo root → http://127.0.0.1:5000
-- **Last updated:** 2026-06-25 (**Inventory: real consensus + API nowcast wired (item 3)** [branch
-  `phase4-live-feature-overlay`, see §1 entry]. The framework now surprises against the **REAL analyst consensus**
+- **Last updated:** 2026-06-25 (**Inventory: directional accuracy backtest + selective-confidence ("best
+  results")** [branch `phase4-live-feature-overlay`, see §1 entry]. The honest "is the call any good?" fix —
+  measure the **directional hit-rate across all 2015-26 releases** (on real consensus), sliced by series ×
+  regime × surprise-size, then make the framework **commit a directional call ONLY where history proves an
+  edge** and abstain elsewhere. **The edge map:** crude flat is **75-81% in a glut/HIGH-stocks** regime
+  (p<0.01) but a **coin-flip (~52%) in today's tight/backwardated** regime → abstain on crude flat; **gasoline
+  flat is a real 57% in backwardation (68% on big surprises, p<0.001)** — exactly where crude is noise → the
+  framework now **redirects conviction to gasoline today**. New `accuracy.py` (`applicable_hit_rate` /
+  `best_series_now`); confidence leads with the measured hit-rate (`tradeable` flag); surfaced live + on the
+  dashboard (track-record badge, redirect banner, per-regime hit-rate table). Intraday event study re-fit on
+  real consensus too (still null in the 2021+ tight era — correctly no edge to manufacture). Prior: **Inventory:
+  real consensus + API nowcast wired (item 3)** [branch `phase4-live-feature-overlay`, see §1 entry]. The framework now surprises against the **REAL analyst consensus**
   (548-wk investing.com history, all 3 series) instead of the seasonal proxy, with the **API crude leading
   indicator** as a pre-release nowcast. **Graded verdict: real consensus SHARPENS the "when it mattered" signal** —
   9/10 regime cuts get a bigger |t| (5/5 of the cells where inventories should bite), significant cuts 4→5, ALL-
@@ -628,6 +638,53 @@ regime_conditioning,release_reaction}.py`, `/api/regime/inventory[?series=][/rea
 - **Tests:** +4 (`test_assess_series_all_three` ×3, `test_release_reaction_computes_horizon_moves`). The reaction
   panel anchors today's prediction on the **API −0.765M as a proxy** for the EIA actual — re-anchor on the real
   printed EIA number for an exact grade.
+
+### ✅ Inventory — directional accuracy backtest + selective confidence ("best results") (2026-06-25)
+Branch `phase4-live-feature-overlay` (not merged to main). User asked to "do everything to fix accuracy — I want
+THE BEST results" after the real-consensus re-anchor made a single print's directional call grade as *wrong*. The
+honest fix is **precision over recall**: stop judging on one print, measure the directional hit-rate across the
+whole 2015-2026 history (on the real-consensus surprise), and make the framework **commit a directional call only
+in the (series × regime × surprise-size) cells where it beat a coin flip with a real binomial p-value** — abstain
+everywhere else, and redirect conviction to the series/regime that carries the edge. New
+**`backend/research/inventory_impact/accuracy.py`** + wiring through `framework.py` / `app.py` / the dashboard.
+- **The measured edge map (real-consensus surprise → release-day direction, binomial vs 50%):**
+  - **CRUDE flat:** HIGH-stocks/glut **74.6%** (n=59, p≈0.000), **81%** on big |z|≥1 surprises (p≈0.007); contango
+    **60.4%** (p≈0.012, 67.9% big); 2015-20 glut era **61%** (p≈0.001). **BUT tight/LOW/backwardation ≈ 52-54%,
+    not significant — a coin flip.** Today's regime is LOW-stocks/backwardation → **abstain on crude flat.**
+  - **GASOLINE flat:** **57% in backwardation** (n=381, p≈0.008), **63-68% on big surprises** (p<0.001) — a real
+    edge in *exactly* today's regime, where crude is noise. So the live call **redirects to gasoline.**
+  - **DISTILLATE** weak (~54%, summer off-season); **WTI flat / WTI-Brent** ≈ 50% (2021+ data only = tight regime
+    only, no edge). Consistent with the whole framework thesis: inventories bite in a glut, not when tight.
+- **`accuracy.py` API.** `hit_rate_table(series, target)` (per-regime hit% at all + big sizes, lru-cached);
+  `applicable_hit_rate(series, bucket, contango, inv_pct, z)` — among the cuts the live regime belongs to, picks
+  the **strongest significant** cell (the calibrated confidence) or, if none clears the bar, the broadest honest
+  cell flagged `tradeable=False`; `best_series_now(...)` ranks crude/gas/distillate by their proven edge today and
+  recommends one (or None → "trade the spread/quality, not the flat"). `accuracy_summary(series)` bundles it for
+  the API. Honest scope: **full-sample DESCRIPTIVE hit-rates** (regime characterisation + binomial test), not a
+  walk-forward P&L; the conditioning regime is read live.
+- **Confidence now leads with the hit-rate.** `framework._confidence_from`: HIGH only when this series/regime has
+  a *proven* edge (`significant`) AND the surprise is big; MEDIUM on a proven edge OR a sensitive regime/big-
+  confirmed surprise; LOW (abstain on the flat direction) otherwise. `assess_release`/`assess_series` add
+  `tradeable`, `historical_accuracy`, `best_series_now` to the call.
+- **Intraday event study re-fit on real consensus** (`event_study.build_panel` now uses the consensus surprise;
+  `event_panel.parquet` rebuilt, 281 releases). Betas @30m stay near-zero/insignificant (t<1) — correct: the
+  1-min era is 2021+ = all tight regime, so there is **no intraday edge to manufacture**, on proxy or real
+  consensus. Corroborates the daily finding rather than overturning it.
+- **Dashboard (Inventory tab).** (1) `InventoryImpactPanel` — a **track-record card** above the hero: the
+  applicable hit-rate (big % number), a `✓ TRADEABLE` / `⊘ COIN FLIP — ABSTAIN ON FLAT` chip, and a **redirect
+  banner** ("↪ Trade Gasoline today — proven 57% edge; crude flat is a coin flip here"). (2) `InventoryFrameworkPanel`
+  — a **per-regime directional track-record table** (hit% · n · p · big-|z| · ✓edge/coin-flip) so the desk sees
+  *where* the call can be trusted. New `accuracy` block on `/api/regime/inventory`.
+- **Why this is the real fix (for the user's question):** accuracy didn't actually fall when the data improved —
+  the old API-proxy "win" was luck from a wrong-signed number. You can't measure accuracy from n=1; over history
+  the call is genuinely **75-81% in a glut and a coin-flip when tight**, so the BEST result is to be *selective* —
+  right far more often *when we choose to commit* — and to point the desk at the series (gasoline) that actually
+  has an edge in today's regime instead of forcing a crude-flat call that history says is noise.
+- **Tests:** +5 hermetic in `tests/test_inventory_impact.py` (hit-direction logic, applicable picks the
+  significant cut, best-series redirect, all-coin-flips→None, dual-import-safe monkeypatch on
+  `acc.regime_conditioning`). **192 pytest green** (was 188). Frontend `tsc` + `vite build` clean (only the
+  pre-existing TS5101 `baseUrl` deprecation). Server restarted; dashboard verified serving the new bundle +
+  accuracy surfaces live.
 
 ### ✅ Inventory item 3 — real consensus surprise + API nowcast wired (2026-06-25)
 Branch `phase4-live-feature-overlay` (not merged to main). Turned the staged datasets below into the live surprise:

@@ -308,6 +308,87 @@ def test_consensus_sharpening_returns_none_without_consensus(monkeypatch):
     assert rc.consensus_sharpening_compare("crude_ex_spr") is None
 
 
+# ── directional accuracy / selective confidence (the "best results" fix) ──────
+def _acc_panel(n, sign, noise, rng):
+    """Synthetic release panel: ret = sign*surprise_z + noise. sign<0 → the call
+    (predict -surprise) is RIGHT (hit>0.5); sign>0 → wrong; sign≈0 → coin flip."""
+    import numpy as _np
+    z = rng.normal(0, 1, n)
+    return pd.DataFrame({
+        "surprise_z": z,
+        "ret": sign * z + rng.normal(0, noise, n),
+        "ret_wti": sign * z + rng.normal(0, noise, n),
+        "d_wti_brent": rng.normal(0, 0.2, n),
+        "front_contango": _np.r_[[True] * (n // 2), [False] * (n - n // 2)],
+        "inv_bucket": _np.r_[["HIGH"] * (n // 2), ["LOW"] * (n - n // 2)],
+        "inv_pct": _np.r_[[5.0] * (n // 2), [-10.0] * (n - n // 2)],
+        "era": _np.where(_np.arange(n) < n // 2, "2015-2020", "2021-2026"),
+    }, index=pd.date_range("2016-01-06", periods=n, freq="W-WED"))
+
+
+def test_accuracy_hit_direction_logic():
+    from backend.research.inventory_impact import accuracy as acc
+    # ret always opposite sign to surprise → the call is always right → hit=1.0
+    df = pd.DataFrame({"surprise_z": [1, -1, 2, -2, 1.5], "ret": [-1, 1, -2, 2, -1.5]})
+    h = acc._hit(df.loc[df.index.repeat(4)], "ret")  # repeat to clear n>=12
+    assert h["hit"] == 1.0
+    # ret same sign → always wrong → hit=0.0
+    df2 = pd.DataFrame({"surprise_z": [1, -1, 2, -2], "ret": [1, -1, 2, -2]})
+    assert acc._hit(df2.loc[df2.index.repeat(4)], "ret")["hit"] == 0.0
+
+
+def test_accuracy_applicable_picks_significant_cut(monkeypatch):
+    from backend.research.inventory_impact import accuracy as acc, regime_conditioning as rc
+    acc.hit_rate_table.cache_clear()
+    rng = np.random.default_rng(7)
+    # backwardation half (LOW bucket) has a strong RIGHT-signed edge; HIGH half is a coin flip
+    panel = _acc_panel(240, sign=-0.9, noise=0.4, rng=rng)
+    # overwrite the HIGH/contango half to be a coin flip (ret independent of z)
+    half = len(panel) // 2
+    panel.iloc[:half, panel.columns.get_loc("ret")] = rng.normal(0, 1, half)
+    monkeypatch.setattr(acc, "hit_rate_table", acc.hit_rate_table.__wrapped__)  # bypass lru cache
+    monkeypatch.setattr(acc.regime_conditioning, "build_daily_panel", lambda method="consensus", **k: panel)
+    # a LOW-stocks / backwardation regime with a big surprise → should be tradeable
+    a = acc.applicable_hit_rate("gasoline", "LOW", False, -10.0, surprise_z=-1.5)
+    assert a["tradeable"] is True and a["significant"] is True
+    assert a["hit"] > 0.5 and "backwardat" in a["regime"].lower() or "low" in a["regime"].lower()
+    # a HIGH-stocks / contango regime (the coin-flip half) → abstain
+    a2 = acc.applicable_hit_rate("gasoline", "HIGH", True, 5.0, surprise_z=0.2)
+    assert a2["tradeable"] is False
+
+
+def test_accuracy_best_series_now_redirects(monkeypatch):
+    from backend.research.inventory_impact import accuracy as acc, regime_conditioning as rc
+    rng = np.random.default_rng(11)
+    # gasoline panel has the edge; crude/distillate are coin flips
+    edge = _acc_panel(240, sign=-0.9, noise=0.4, rng=rng)
+    flip = _acc_panel(240, sign=0.0, noise=1.0, rng=rng)
+
+    def fake_panel(method="consensus", series="crude_ex_spr", **k):
+        return edge if series == "gasoline" else flip
+    monkeypatch.setattr(acc.regime_conditioning, "build_daily_panel", fake_panel)
+    out = acc.best_series_now("LOW", False, -10.0,
+                              {"crude_ex_spr": -1.5, "gasoline": -1.5, "distillate": -1.5})
+    assert out["recommended_series"] == "gasoline"
+    assert out["recommended_hit"] and out["recommended_hit"] > 0.5
+    assert "gasoline" in out["note"].lower()
+
+
+def test_accuracy_best_series_none_when_all_coin_flips(monkeypatch):
+    from backend.research.inventory_impact import accuracy as acc, regime_conditioning as rc
+    rng = np.random.default_rng(13)
+    flip = _acc_panel(200, sign=-0.9, noise=0.4, rng=rng)
+    # force EXACTLY 50% hits everywhere: ret alternates same/opposite sign to z
+    z = flip["surprise_z"].to_numpy()
+    pattern = np.where(np.arange(len(flip)) % 2 == 0, 1.0, -1.0)  # +1 miss, -1 hit → 50/50
+    flip["ret"] = z * pattern * np.abs(z)
+    monkeypatch.setattr(acc.regime_conditioning, "build_daily_panel", lambda method="consensus", **k: flip)
+    out = acc.best_series_now("LOW", False, -10.0,
+                              {"crude_ex_spr": 0.2, "gasoline": 0.2, "distillate": 0.2})
+    assert out["recommended_series"] is None
+    assert "spread" in out["note"].lower() or "quality" in out["note"].lower()
+
+
 def test_release_reaction_computes_horizon_moves(tmp_path, monkeypatch):
     """Hermetic: a synthetic 1-min CO/CL feed with a known post-release ramp →
     compute_reaction returns the right %/$ moves at each horizon."""

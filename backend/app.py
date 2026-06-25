@@ -1464,6 +1464,9 @@ def regime_inventory_route():
         # graded: did the REAL consensus surprise sharpen the regime betas vs the
         # seasonal proxy? (the framework now defaults to real consensus)
         consensus_sharpening = regime_conditioning.consensus_sharpening_compare(series)
+        # measured directional track record + the selective-confidence policy
+        from research.inventory_impact import accuracy as _accuracy
+        accuracy_summary = _accuracy.accuracy_summary(series)
 
         def _f(v):
             try:
@@ -1534,6 +1537,7 @@ def regime_inventory_route():
             "when_it_mattered_wti": cond_wti,
             "wti_compare": wti_compare,
             "consensus_sharpening": consensus_sharpening,
+            "accuracy": accuracy_summary,
             "surprise_method": "consensus",
             "recent_releases": recent,
             "latest_report": latest_report,
