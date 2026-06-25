@@ -54,7 +54,9 @@ const SPREAD_LABEL: Record<string, string> = {
 // event-study betas × today's surprise.
 function PriceReaction({ live }: { live: any }) {
   const pr = live?.price_reaction;
-  const impacts: any[] = live?.spread_impacts ?? [];
+  // flats are shown (regime-gated, correct sign) in the WTI/Brent cards below; the
+  // spread-impact table is for the actual spreads only.
+  const impacts: any[] = (live?.spread_impacts ?? []).filter((s: any) => !String(s.instrument).endsWith('_flat'));
   if (!pr?.wti && !impacts.length) return null;
   // the DIRECTIONAL point estimate (always shown); confidence comes from the t-stat
   const pointTxt = (p: any) =>

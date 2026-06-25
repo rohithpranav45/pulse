@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import clsx from 'clsx';
 import { InventoryImpactPanel } from '@/components/panels/InventoryImpactPanel';
+import { InventoryReactionPanel } from '@/components/panels/InventoryReactionPanel';
 import { InventoryFrameworkPanel } from '@/components/panels/InventoryFrameworkPanel';
 import { InventoryReleasesPanel } from '@/components/panels/InventoryReleasesPanel';
 import { InventoryReportPanel } from '@/components/panels/InventoryReportPanel';
@@ -49,6 +50,9 @@ export function InventoryView({ all }: { all: any }) {
       </div>
 
       <InventoryImpactPanel series={series} />
+      {/* Predicted-vs-actual reaction — crude only; anchored on today's real
+          consensus (-3.9 MMbbl) + API (-0.765 MMbbl). */}
+      {series === 'crude_ex_spr' && <InventoryReactionPanel actual={-765} consensus={-3900} />}
       <InventoryFrameworkPanel series={series} />
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <InventoryReportPanel />

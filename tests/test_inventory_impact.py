@@ -133,3 +133,38 @@ def test_assess_series_all_three(series):
         assert r["spreads"]["primary"] and r["spreads"]["primary"] != "—"
     if not r["regime_sensitive"]:
         assert r["expected_brent_move_pct"] == 0.0
+
+
+def test_release_reaction_computes_horizon_moves(tmp_path, monkeypatch):
+    """Hermetic: a synthetic 1-min CO/CL feed with a known post-release ramp →
+    compute_reaction returns the right %/$ moves at each horizon."""
+    import sqlite3
+    from datetime import datetime
+    from backend.research.inventory_impact import release_reaction as rr
+
+    db = tmp_path / "bars_1min_20260624.db"
+    conn = sqlite3.connect(db)
+    # release at 14:30; build 90 min of bars from 14:00. Brent flat from 100,
+    # WTI flat from 80, WTI c2 = WTI - 0.5. After release WTI drifts -0.1/min.
+    def make(table, base, drift):
+        conn.execute(f'CREATE TABLE "{table}" (timestamp TEXT, open REAL, high REAL, low REAL, close REAL, volume REAL)')
+        rows = []
+        for m in range(91):
+            ts = datetime(2026, 6, 24, 14, 0) + pd.Timedelta(minutes=m)
+            px = base + (drift * max(0, m - 30))   # flat until release (+30min from 14:00 = 14:30)
+            rows.append((str(ts), px, px, px, px, 10.0))
+        conn.executemany(f'INSERT INTO "{table}" VALUES (?,?,?,?,?,?)', rows)
+    make("CO_Q26", 100.0, -0.05)   # Brent
+    make("CL_Q26", 80.0, -0.10)    # WTI front
+    make("CL_U26", 79.5, -0.10)    # WTI 2nd (parallel → M1-M2 unchanged)
+    conn.commit(); conn.close()
+
+    monkeypatch.setenv("PULSE_INVENTORY_1MIN_DIR", str(tmp_path))
+    out = rr.compute_reaction(release_utc=datetime(2026, 6, 24, 14, 30))
+    assert out["available"] is True
+    a = {h["mins"]: h for h in out["actual"]}
+    # +30min: WTI down 30*0.10 = $3 from 80 → -3.75%; spread M1-M2 unchanged (parallel)
+    assert a[30]["wti_flat_pct"] == pytest.approx(-3.75, abs=0.05)
+    assert a[30]["d_wti_m1_m2"] == pytest.approx(0.0, abs=0.01)
+    # WTI fell more than Brent → WTI-Brent spread narrowed (negative change)
+    assert a[30]["d_wti_brent"] < 0

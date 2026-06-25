@@ -177,6 +177,13 @@ export const api = {
   // Inventory Surprise Impact Model — EIA crude release framework
   regimeInventory:        (series?: string) =>
                             getJSON(`/api/regime/inventory${series ? '?series=' + series : ''}`),
+  regimeInventoryReaction:(actual?: number, consensus?: number) => {
+                            const p = new URLSearchParams();
+                            if (actual != null) p.set('actual', String(actual));
+                            if (consensus != null) p.set('consensus', String(consensus));
+                            const qs = p.toString();
+                            return getJSON(`/api/regime/inventory/reaction${qs ? '?' + qs : ''}`);
+                          },
   regimeInventoryLive:    (actual?: number, consensus?: number, series?: string) => {
                             const p = new URLSearchParams();
                             if (actual != null) p.set('actual', String(actual));
