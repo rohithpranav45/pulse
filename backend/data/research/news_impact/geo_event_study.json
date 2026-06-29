@@ -1,0 +1,455 @@
+{
+  "available": true,
+  "n_events": 30,
+  "n_claims": 216,
+  "horizons": [
+    1,
+    5
+  ],
+  "p_sig": 0.1,
+  "min_n": 20,
+  "hit_tables": {
+    "1": [
+      {
+        "slice": "node",
+        "node": "wti_brent",
+        "asset_type": "*",
+        "regime": "*",
+        "hit": 0.39,
+        "n": 41,
+        "p": 0.211,
+        "edge": -0.11,
+        "significant": false
+      },
+      {
+        "slice": "node\u00d7regime",
+        "node": "wti_brent",
+        "asset_type": "*",
+        "regime": "BACK",
+        "hit": 0.39,
+        "n": 41,
+        "p": 0.211,
+        "edge": -0.11,
+        "significant": false
+      },
+      {
+        "slice": "node\u00d7type",
+        "node": "brent_structure",
+        "asset_type": "chokepoint",
+        "regime": "*",
+        "hit": 0.389,
+        "n": 36,
+        "p": 0.243,
+        "edge": -0.111,
+        "significant": false
+      },
+      {
+        "slice": "node\u00d7type",
+        "node": "gasoil_crack",
+        "asset_type": "chokepoint",
+        "regime": "*",
+        "hit": 0.6,
+        "n": 40,
+        "p": 0.268,
+        "edge": 0.1,
+        "significant": false
+      },
+      {
+        "slice": "node",
+        "node": "gasoil_crack",
+        "asset_type": "*",
+        "regime": "*",
+        "hit": 0.578,
+        "n": 45,
+        "p": 0.371,
+        "edge": 0.078,
+        "significant": false
+      },
+      {
+        "slice": "node\u00d7regime",
+        "node": "gasoil_crack",
+        "asset_type": "*",
+        "regime": "BACK",
+        "hit": 0.578,
+        "n": 45,
+        "p": 0.371,
+        "edge": 0.078,
+        "significant": false
+      },
+      {
+        "slice": "node\u00d7type",
+        "node": "brent_flat",
+        "asset_type": "chokepoint",
+        "regime": "*",
+        "hit": 0.575,
+        "n": 40,
+        "p": 0.43,
+        "edge": 0.075,
+        "significant": false
+      },
+      {
+        "slice": "node",
+        "node": "brent_structure",
+        "asset_type": "*",
+        "regime": "*",
+        "hit": 0.425,
+        "n": 40,
+        "p": 0.43,
+        "edge": -0.075,
+        "significant": false
+      },
+      {
+        "slice": "node\u00d7regime",
+        "node": "brent_structure",
+        "asset_type": "*",
+        "regime": "BACK",
+        "hit": 0.425,
+        "n": 40,
+        "p": 0.43,
+        "edge": -0.075,
+        "significant": false
+      },
+      {
+        "slice": "node\u00d7type",
+        "node": "wti_brent",
+        "asset_type": "chokepoint",
+        "regime": "*",
+        "hit": 0.429,
+        "n": 35,
+        "p": 0.5,
+        "edge": -0.071,
+        "significant": false
+      },
+      {
+        "slice": "ALL",
+        "node": "*",
+        "asset_type": "*",
+        "regime": "*",
+        "hit": 0.486,
+        "n": 216,
+        "p": 0.734,
+        "edge": -0.014,
+        "significant": false
+      },
+      {
+        "slice": "node",
+        "node": "ho_crack",
+        "asset_type": "*",
+        "regime": "*",
+        "hit": 0.538,
+        "n": 39,
+        "p": 0.749,
+        "edge": 0.038,
+        "significant": false
+      },
+      {
+        "slice": "node\u00d7regime",
+        "node": "ho_crack",
+        "asset_type": "*",
+        "regime": "BACK",
+        "hit": 0.538,
+        "n": 39,
+        "p": 0.749,
+        "edge": 0.038,
+        "significant": false
+      },
+      {
+        "slice": "node",
+        "node": "brent_flat",
+        "asset_type": "*",
+        "regime": "*",
+        "hit": 0.51,
+        "n": 49,
+        "p": 1.0,
+        "edge": 0.01,
+        "significant": false
+      },
+      {
+        "slice": "node\u00d7regime",
+        "node": "brent_flat",
+        "asset_type": "*",
+        "regime": "BACK",
+        "hit": 0.51,
+        "n": 49,
+        "p": 1.0,
+        "edge": 0.01,
+        "significant": false
+      },
+      {
+        "slice": "node\u00d7type",
+        "node": "ho_crack",
+        "asset_type": "chokepoint",
+        "regime": "*",
+        "hit": 0.514,
+        "n": 35,
+        "p": 1.0,
+        "edge": 0.014,
+        "significant": false
+      }
+    ],
+    "5": [
+      {
+        "slice": "node\u00d7type",
+        "node": "ho_crack",
+        "asset_type": "chokepoint",
+        "regime": "*",
+        "hit": 0.714,
+        "n": 35,
+        "p": 0.017,
+        "edge": 0.214,
+        "significant": true
+      },
+      {
+        "slice": "node",
+        "node": "ho_crack",
+        "asset_type": "*",
+        "regime": "*",
+        "hit": 0.692,
+        "n": 39,
+        "p": 0.024,
+        "edge": 0.192,
+        "significant": true
+      },
+      {
+        "slice": "node\u00d7regime",
+        "node": "ho_crack",
+        "asset_type": "*",
+        "regime": "BACK",
+        "hit": 0.692,
+        "n": 39,
+        "p": 0.024,
+        "edge": 0.192,
+        "significant": true
+      },
+      {
+        "slice": "node",
+        "node": "brent_flat",
+        "asset_type": "*",
+        "regime": "*",
+        "hit": 0.383,
+        "n": 47,
+        "p": 0.144,
+        "edge": -0.117,
+        "significant": false
+      },
+      {
+        "slice": "node\u00d7regime",
+        "node": "brent_flat",
+        "asset_type": "*",
+        "regime": "BACK",
+        "hit": 0.383,
+        "n": 47,
+        "p": 0.144,
+        "edge": -0.117,
+        "significant": false
+      },
+      {
+        "slice": "node\u00d7type",
+        "node": "wti_brent",
+        "asset_type": "chokepoint",
+        "regime": "*",
+        "hit": 0.6,
+        "n": 35,
+        "p": 0.311,
+        "edge": 0.1,
+        "significant": false
+      },
+      {
+        "slice": "node\u00d7type",
+        "node": "brent_flat",
+        "asset_type": "chokepoint",
+        "regime": "*",
+        "hit": 0.41,
+        "n": 39,
+        "p": 0.337,
+        "edge": -0.09,
+        "significant": false
+      },
+      {
+        "slice": "ALL",
+        "node": "*",
+        "asset_type": "*",
+        "regime": "*",
+        "hit": 0.534,
+        "n": 208,
+        "p": 0.367,
+        "edge": 0.034,
+        "significant": false
+      },
+      {
+        "slice": "node",
+        "node": "gasoil_crack",
+        "asset_type": "*",
+        "regime": "*",
+        "hit": 0.561,
+        "n": 41,
+        "p": 0.533,
+        "edge": 0.061,
+        "significant": false
+      },
+      {
+        "slice": "node\u00d7regime",
+        "node": "gasoil_crack",
+        "asset_type": "*",
+        "regime": "BACK",
+        "hit": 0.561,
+        "n": 41,
+        "p": 0.533,
+        "edge": 0.061,
+        "significant": false
+      },
+      {
+        "slice": "node",
+        "node": "wti_brent",
+        "asset_type": "*",
+        "regime": "*",
+        "hit": 0.55,
+        "n": 40,
+        "p": 0.636,
+        "edge": 0.05,
+        "significant": false
+      },
+      {
+        "slice": "node\u00d7regime",
+        "node": "wti_brent",
+        "asset_type": "*",
+        "regime": "BACK",
+        "hit": 0.55,
+        "n": 40,
+        "p": 0.636,
+        "edge": 0.05,
+        "significant": false
+      },
+      {
+        "slice": "node",
+        "node": "brent_structure",
+        "asset_type": "*",
+        "regime": "*",
+        "hit": 0.538,
+        "n": 39,
+        "p": 0.749,
+        "edge": 0.038,
+        "significant": false
+      },
+      {
+        "slice": "node\u00d7regime",
+        "node": "brent_structure",
+        "asset_type": "*",
+        "regime": "BACK",
+        "hit": 0.538,
+        "n": 39,
+        "p": 0.749,
+        "edge": 0.038,
+        "significant": false
+      },
+      {
+        "slice": "node\u00d7type",
+        "node": "gasoil_crack",
+        "asset_type": "chokepoint",
+        "regime": "*",
+        "hit": 0.528,
+        "n": 36,
+        "p": 0.868,
+        "edge": 0.028,
+        "significant": false
+      },
+      {
+        "slice": "node\u00d7type",
+        "node": "brent_structure",
+        "asset_type": "chokepoint",
+        "regime": "*",
+        "hit": 0.514,
+        "n": 35,
+        "p": 1.0,
+        "edge": 0.014,
+        "significant": false
+      }
+    ]
+  },
+  "betas": {
+    "1": [
+      {
+        "node": "wti_brent",
+        "beta": -0.2003,
+        "t": -1.43,
+        "n": 41,
+        "measured": false
+      },
+      {
+        "node": "brent_flat",
+        "beta": -0.0803,
+        "t": -1.04,
+        "n": 49,
+        "measured": false
+      },
+      {
+        "node": "gasoil_crack",
+        "beta": -0.196,
+        "t": -0.66,
+        "n": 45,
+        "measured": false
+      },
+      {
+        "node": "brent_structure",
+        "beta": -0.0339,
+        "t": -0.48,
+        "n": 40,
+        "measured": false
+      },
+      {
+        "node": "ho_crack",
+        "beta": -0.039,
+        "t": -0.13,
+        "n": 39,
+        "measured": false
+      }
+    ],
+    "5": [
+      {
+        "node": "brent_structure",
+        "beta": 0.3352,
+        "t": 1.69,
+        "n": 39,
+        "measured": false
+      },
+      {
+        "node": "wti_brent",
+        "beta": -0.3406,
+        "t": -1.05,
+        "n": 40,
+        "measured": false
+      },
+      {
+        "node": "gasoil_crack",
+        "beta": -0.1638,
+        "t": -0.37,
+        "n": 41,
+        "measured": false
+      },
+      {
+        "node": "brent_flat",
+        "beta": 0.0285,
+        "t": 0.16,
+        "n": 47,
+        "measured": false
+      },
+      {
+        "node": "ho_crack",
+        "beta": -0.0336,
+        "t": -0.07,
+        "n": 39,
+        "measured": false
+      }
+    ]
+  },
+  "source": "backend/research/news_impact/geo/event_study_geo",
+  "span": [
+    "2026-03-30",
+    "2026-05-23"
+  ],
+  "by_asset_type": {
+    "chokepoint": 26,
+    "producer": 5,
+    "refinery": 3
+  }
+}

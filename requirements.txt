@@ -87,3 +87,9 @@ pytest==9.1.0
 # (also pulled in transitively by transformers; pinned with a floor for the
 #  hf_hub_download / HfApi.upload_file / upload_folder APIs used here.)
 huggingface-hub>=0.24
+
+# ── Geo news-impact engine (LLM geo-extraction) ──────────────────────────────
+# Claude structured-output extraction: Haiku 4.5 live, Opus 4.8 batch backfill
+# (research.news_impact.geo.extract). Lazy-imported + gated on ANTHROPIC_API_KEY,
+# with a deterministic registry/keyword fallback, so the app runs without it.
+anthropic>=0.40

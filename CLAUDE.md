@@ -7,7 +7,21 @@ spread engine), and serves a React dashboard with a paper-trading book.
 - **Stack:** Flask 3 · React 18 + Vite + Tailwind · SQLite (cache + paper book) ·
   DuckDB/Parquet over a 3.5 GB `/Data` desk feed · sklearn + XGBoost/LightGBM/CatBoost
 - **Run (local):** `python start.py` from the repo root → http://127.0.0.1:5000
-- **Last updated:** 2026-06-25 (**Inventory: actual EIA number pulled LIVE from the EIA v2 API** [branch
+- **Last updated:** 2026-06-29 (**Geo news-impact engine — Sprint 4: GDELT corpus + ACLED feed → a MEASURED edge**
+  [branch `phase4-live-feature-overlay`, see §1 entry]. A desk-supplied **GDELT oil-news corpus** (3,564 headlines,
+  2026-03→06, the Iran/Hormuz war) finally gives the per-node event study a price-covered, geo-dense sample:
+  `geo/datasets.py` ingests it → **30 gradeable events / 216 node-claims** (was 5/22) over 2026-03-30→05-23.
+  **Graded verdict — a real, significant edge:** chokepoint disruption → **ULSD/distillate crack (`ho_crack`) UP
+  over +5d, hit-rate 71% (n=35, binomial p=0.017)**, 69% all-events (p=0.024) — economically sound (Hormuz/Red-Sea
+  closure tightens diesel). `brent_flat` is anti-signed @5d (0.38) because the **keyword** fallback can't tell
+  "Hormuz closes" from "Hormuz reopens" — the exact direction error LLM extraction fixes (next lift). Also new
+  `geo/conflict.py` — **ACLED** daily/monthly political-violence feed (2021-25) → a conflict-intensity regime
+  (Iran now z≈58 HIGH) + a graded oil study: monthly oil-bloc conflict ≈ **uncorrelated with Brent** (corr
+  −0.17 level / 0.03 change, n=53) — a useful risk *descriptor*, not a tradeable monthly signal. +11 tests →
+  **242 collected**. Prior same day: **Sprint 3 — per-node event study** (machinery; was un-gradeable on the thin
+  2021 corpus, now unblocked), **Sprint 2 — LLM geo-extraction + impact map**, **Sprint 1 — asset registry (41) +
+  price-node builder**. Prior: **Inventory: actual EIA number
+  pulled LIVE from the EIA v2 API** [branch
   `phase4-live-feature-overlay`, see §1 entry]. The reaction grade + the default call now anchor the ACTUAL on
   the **authoritative live EIA Weekly Petroleum Status Report API** (force-refreshed after each release via a new
   scheduler job + `?refresh=1`), not the static investing.com scrape or the API/industry proxy. Verified live:
@@ -643,6 +657,149 @@ regime_conditioning,release_reaction}.py`, `/api/regime/inventory[?series=][/rea
 - **Tests:** +4 (`test_assess_series_all_three` ×3, `test_release_reaction_computes_horizon_moves`). The reaction
   panel anchors today's prediction on the **API −0.765M as a proxy** for the EIA actual — re-anchor on the real
   printed EIA number for an exact grade.
+
+### ✅ Geo news-impact engine — Sprint 4: GDELT corpus + ACLED feed → a MEASURED edge (2026-06-29)
+Branch `phase4-live-feature-overlay` (not merged to main). A friend/desk supplied four datasets; two are
+load-bearing and unblock Sprint 3's "not gradeable" verdict. Copied into `backend/data/research/news_impact/geo/`
+(committed): `gdelt_oil_news_corpus.csv` (3,564 headlines, **2026-03-30→06-23**, the Iran/Hormuz war),
+`acled_conflict_{daily,monthly}.csv` (political-violence counts for the oil bloc, 2021→2025-06).
+- **`geo/datasets.py` — GDELT ingest.** `load_gdelt_corpus()` parses the CSV; `gdelt_events(until=)` runs the
+  geo-candidate prefilter → extraction (fallback by default; cached) → impact_map → event dicts. The window
+  **before the price tape's last settle (2026-05-26)** is both geo-dense and price-covered — exactly the sample
+  the event study lacked. `event_study_geo._gather_events` now **prefers GDELT** (`source="auto"`) and falls back
+  to the live corpus. Result: **30 gradeable events / 216 node-claims** (was 5/22), 2026-03-30→05-23, asset-mix
+  chokepoint 26 / producer 5 / refinery 3 (Hormuz-dominated, as expected for the war).
+- **Graded verdict — the engine's first MEASURED edge.** Directional hit-rate (binomial vs 50%):
+  **`ho_crack` (ULSD/distillate crack) +5d = 71% for chokepoint events (n=35, p=0.017 → *EDGE*)**, 69% all-events
+  (n=39, p=0.024); economically sound — a Hormuz/Red-Sea closure tightens diesel/distillate (longer voyages +
+  feedstock fear), and it shows up over **days, not intraday** (the +1d slice is flat). Magnitude beta corroborates
+  weakly (brent_structure +5d β=+0.34 t=1.69). **Honest caveat:** `brent_flat` is *anti-signed* @5d (hit 0.38)
+  and overall directional accuracy is ~coin-flip (0.53, p=0.37) because the **keyword fallback can't distinguish
+  "Hormuz closes" from "Hormuz reopens"** — both contain the asset + a disruption word, so crude-flat *direction*
+  is inverted across the war's escalation→de-escalation arc. This is precisely the event-polarity error **LLM
+  extraction fixes** (the impact_map already flips restart/opec_hike; the *keyword* event-typing is the weak link).
+  So the selective read: trust the **distillate-crack** call (proven edge), abstain on crude flat under keyword
+  extraction. Cached to `geo_event_study.json`.
+- **`geo/conflict.py` — ACLED geopolitical-risk channel.** `load_conflict(freq)` + `bloc_intensity()` +
+  `conflict_regime(country, asof=)` (causal trailing-window z-score → HIGH/NORMAL/LOW; Iran now **z≈58 HIGH** off
+  the war spike 8→443) + `oil_conflict_study()`. **Graded:** monthly oil-bloc conflict count vs same-month Brent
+  move over 2021-2025 (n=53) is **essentially uncorrelated** — corr −0.17 (level) / 0.03 (Δ) / 0.11 (Iran Δ). So
+  ACLED is a useful **regime descriptor** (it correctly flags the Iran war as HIGH) but **not a tradeable monthly
+  oil signal** — the market prices specific supply-threatening events (Hormuz), not generalized violence counts.
+  Available as a conditioner for the geo nodes (next sprint can slice the event study by conflict regime).
+- **Tests:** +11 hermetic (`tests/test_geo_datasets.py` — GDELT parse + event resolution + until-cap; event-study
+  source preference [GDELT-first / corpus-fallback] via monkeypatch; ACLED bloc-intensity sum, conflict-regime
+  spike→HIGH + empty→UNKNOWN, oil-study graceful-without-data; real-data integration skipif). **242 collected**
+  (was 231). Standalones: `python backend/research/news_impact/geo/{datasets,conflict,event_study_geo}.py`.
+- **Next:** wire **Groq/Claude extraction** over the GDELT corpus (fixes the closure-vs-reopen direction error and
+  should lift the crude-flat + structure slices the keyword pass inverts; Groq 70b daily cap was exhausted today —
+  retry when it resets, or use 8b) → re-grade; then RAG geo-analogs + the dashboard geo-map/node-impact table;
+  optionally condition the event study on the ACLED conflict regime.
+
+### ✅ Geo news-impact engine — Sprint 3: per-node empirical event study (graded) (2026-06-29)
+Branch `phase4-live-feature-overlay` (not merged to main). The empirical layer, in the inventory-framework
+tradition: does location-news actually move each price node? New **`backend/research/news_impact/geo/
+event_study_geo.py`**:
+- **Measurement (pure, testable).** `fwd_change(series, ts, h)` anchors on the node settle strictly BEFORE a
+  headline's date and measures the close-to-close move H trading days later (H∈{1,5}), vol-normalised by the
+  node's trailing-20d Δ-vol; staleness-guarded. `build_event_panel()` resolves corpus headlines → geo events
+  (extract → impact_map node vector), and emits one row per (event × claimed node): conviction, pred_sign,
+  per-horizon Δ / aligned vn / hit.
+- **Grading (mirrors `inventory_impact/accuracy.py`).** `node_hit_table()` = directional hit-rate per node, and
+  per node×asset_type / node×regime, binomial vs 50% (`P_SIG=0.10`, `MIN_N=20`, report floor 8); `node_betas()`
+  = per-node OLS of the vol-normalised move on signed conviction (measured at |t|≥2). `compute_and_cache()` →
+  `geo_event_study.json`. **`annotate_impact(impact, asset_type, regime)`** is the prior-then-learn consumer:
+  tags each live node claim with the most-specific *significant* historical slice (`tradeable`) or leaves it
+  `prior` — the same selective-confidence design as the inventory accuracy layer.
+- **Graded verdict — NOT measurable yet (honest, n far too thin).** Only **5 events / 22 node-claims** land in
+  the price-covered window: the 2021 GDELT backfill is geo-sparse under keyword extraction, and the geo-rich
+  live corpus is all **2026-06**, which **postdates the /Data tape (ends 2026-05-26)** so there's no forward
+  price to grade it against. Result: hit **0.46@1d (p=0.83)** / **0.59@5d (p=0.52)** — no edge, every node stays
+  on the impact-map prior. This is the truthful "pipeline is the deliverable, data is the constraint" outcome
+  (cf. the news-impact Sprint-2 verdict). **Recall lift this sprint:** added 4 GLOBAL **generic assets**
+  (refinery/crude-pipeline/product-pipeline/tanker — last-resort `registry.resolve_generic`, attached only when
+  no *named* asset matched, so "Port Arthur refinery" is never double-tagged) + an Ever-Given→Suez alias; this
+  raised gradeable events 1→5. **The clear unlocks:** (1) **Claude extraction** (the keyword fallback resolved
+  only 5 of the price-covered geo headlines — Claude recovers far more across 2021-2025); (2) a **price-covered
+  corpus backfill** (resume GDELT for 2021-2025 geo themes); (3) a **refreshed price tape** past 2026-05-26 so
+  the rich live geo events become gradeable.
+- **Tests:** +6 hermetic (`tests/test_geo_event_study.py` — fwd-change direction/staleness, panel hit+regime
+  assembly, **hit-table flags a real synthetic edge** + coin-flip stays insignificant, beta measured when move
+  tracks conviction, `annotate_impact` prior-then-learn + most-specific-slice preference, empty-input safety).
+  The machinery is proven to detect an edge on synthetic data even though the real corpus can't supply one yet.
+  **231 tests collected** (was 225). Standalone grader: `python backend/research/news_impact/geo/event_study_geo.py`.
+- **Next:** RAG geo-analogs (reuse `backend/rag/` — "this event ≈ these k past events that moved node X by Y%");
+  dashboard geo-map + node-impact table; live scheduler wiring of the extractor; then re-grade once Claude
+  extraction + a price-covered backfill land enough events.
+
+### ✅ Geo news-impact engine — Sprint 2: LLM geo-extraction + impact map (2026-06-29)
+Branch `phase4-live-feature-overlay` (not merged to main). Second sprint: turn a headline into a structured geo
+event and score it into a signed price-node vector — the extraction + interpretable-prior layers on top of
+Sprint 1's registry/nodes. Two new modules in `backend/research/news_impact/geo/`:
+- **`impact_map.py` — (asset × event × severity) → node vector.** Composes the registry `disruption_bias`
+  (sign for a supply-REDUCING event) with **event polarity** (`event_polarity`: disruptive→+1 keeps sign,
+  restart/expansion/opec_hike→−1 FLIPs, unknown→0 = no claim) × **severity** (minor .5 / moderate 1 / major 1.5
+  / severe 2) → a bounded directional **conviction** per node (±3, NOT a % move — the event study supplies
+  magnitude later). `impact_vector(asset, event, sev)` + `headline_impact(assets, event, sev)` (sums across the
+  assets a headline names, clamps, emits contributors + a human rationale) + `explain()`. Verified desk-correct:
+  Hormuz closure → brent_flat ↑↑ / brent_structure ↑↑ / wti_brent ↓↓ / cracks ↑; Port Arthur fire → ho_crack ↑↑
+  / wti_flat ↓; **restart and opec_hike produce exact sign flips**; Druzhba+Russia sanction sums then clamps.
+- **`extract.py` — headline → {assets, event_type, severity}.** **Claude structured-output primary**
+  (`messages.parse` with a Pydantic `GeoExtraction`; `LIVE_MODEL=claude-haiku-4-5` for live, `BACKFILL_MODEL=
+  claude-opus-4-8` for the one-time corpus relabel — Batches-API 50%-off backfill noted as the next refinement),
+  the model returns registry ids + raw locations + event/severity; ids are **validated against the registry and
+  unioned with a keyword `registry.resolve`** (the LLM proposes, the registry disposes). **Deterministic
+  fallback** (registry alias resolve + inflection-tolerant event/severity keyword passes + OPEC member-plus-verb
+  inference) means it never hard-fails and runs with **no API key** (mirrors `classify.py`). `score_headline_geo()`
+  is the headline→{extraction, impact} entrypoint the event study / dashboard will consume. Lazy `anthropic`
+  import; `anthropic>=0.40` added to `requirements.txt` (optional, gated on `ANTHROPIC_API_KEY`). Verified on
+  fallback: "Houthi drone strike…Red Sea"→bab_el_mandeb/attack→gasoil_crack ↑↑; "Jamnagar…resumes"→restart
+  (flips cracks down); non-oil → no assets / no claim.
+- **Tests:** +17 hermetic (`tests/test_geo_impact_map.py` ×8 — polarity, severity ordering, chokepoint/refinery
+  signs, outage↔restart + opec cut↔hike flips, unknown-event no-claim, multi-asset sum+clamp, empty cases;
+  `tests/test_geo_extract.py` ×9 — fallback resolve, inflection [resumes/halted], severity detection, non-oil
+  empties, OPEC member+verb, score integration, asset validate+union, Claude orchestration via monkeypatch [no
+  network], no-key short-circuit). **225 tests collected** (was 208). Standalones:
+  `python backend/research/news_impact/geo/{impact_map,extract}.py`.
+- **Next:** per-node empirical event study (reuse the inventory-framework "when it mattered" methodology over the
+  HO/Gasoil intraday tapes — measure each node's forward move on resolved geo-events, prior-then-learn gate +
+  directional hit-rate, so the conviction vector earns measured magnitudes where history proves an edge) →
+  RAG geo-analogs → dashboard geo-map + node-impact table → live scheduler wiring of the extractor.
+
+### ✅ Geo news-impact engine — Sprint 1: asset registry + price-node builder (2026-06-29)
+Branch `phase4-live-feature-overlay` (not merged to main). First sprint of the **geospatial oil-news impact
+engine** (full plan: location-aware news → physical asset → price nodes/spreads → directional impact, gated by
+regime, prior-then-learn, with RAG analogs — agreed scope across chokepoints/refineries/pipelines and
+all priceable products/spreads). This sprint builds the two foundations everything else regresses against.
+New package **`backend/research/news_impact/geo/`**:
+- **`registry.py` — the asset reference layer.** 37 curated assets (**7 chokepoints** Hormuz/Bab-el-Mandeb/
+  Suez/Malacca/Turkish+Danish Straits/Panama; **16 refineries** Jamnagar/Port Arthur/Pernis/Jurong/…; **6
+  pipelines** Druzhba/CPC/Keystone/Colonial/TMX/Forcados; **8 fields+producers** Ghawar/OPEC/Russia/Iran/…),
+  each with static facts (type/region/lat-lon/capacity/carries) + a signed **`disruption_bias`** over 7
+  canonical NODES (the desk prior for how a supply-REDUCING event moves each node; restart/expansion flips it).
+  **Sign convention is asset-type-specific** (the core thesis): a crude chokepoint is bullish crude flat +
+  backwardation; a refinery outage is *bearish crude, bullish cracks*; a reroute chokepoint (Red Sea) is
+  strongly bullish the gasoil crack. Deterministic `resolve(text)` keyword pass (longest-alias-wins) + alias
+  index — the baseline matcher the LLM geo-extractor will later supersede but resolve *against*. 157 aliases.
+- **`nodes.py` — the price-node builder.** Daily node panel from the /Data tape: `brent_flat`, `wti_flat`,
+  `wti_brent`, `brent_structure` (M1-M12), `brent_m1_m2`, `brent_fly_123`, and the **product nodes** —
+  `ho_crack` (HO×42 − WTI = US ULSD/heating distillate crack), `gasoil_crack` (Gasoil÷7.45 − Brent = ARA
+  distillate crack), `regrade` (Gasoil − ULSD $/bbl). **Unit conversions verified against the lake** (HO
+  ≈$2.47/gal, Gasoil ≈$733/tonne, crude $/bbl → cracks land ≈$30) + a cents/gal autoscale guard. HO/Gasoil/WTI
+  daily settles are SYNTHESISED (last 1-min mid/session, like `get_wti_settlements`) and flagged ESTIMATE; pure
+  `compute_nodes()` is I/O-free + unit-tested. **Honest GAP register** (declared, not faked): `rbob_crack` (no
+  gasoline curve), `brent_dubai` (no Dubai/sour curve), Cushing/grade diffs — the products/sour-feed unlocks.
+  Verified on /Data: 3,167 days 2016→2026, medians ho_crack +$31.96 / gasoil_crack +$21.97 / regrade −$6.88 /
+  wti_brent −$3.83 / brent_structure +$3.02 — all desk-plausible.
+- **Tests:** +13 hermetic (`tests/test_geo_registry.py` ×8 — integrity, every type populated, chokepoint/refinery
+  bias-sign correctness, longest-alias specificity, empty/no-match, alias→asset integrity, event-type partition;
+  `tests/test_geo_nodes.py` ×5 — crack/regrade math, cents autoscale, partial-input omission, gap register
+  disjoint+documented, real-/Data plausibility band [skips without the lake]). **208 tests collected** (was 195).
+  Standalones: `python backend/research/news_impact/geo/{registry,nodes}.py`.
+- **Next sprints** (sequence): geo-extraction (LLM: Opus-4.8-batch backfill / Haiku-4.5 live, resolve against the
+  registry) → impact_map (asset_type × event_type → node signs) → per-node event study (reuse inventory-framework
+  "when it mattered" methodology over the HO/Gasoil intraday tapes, prior-then-learn gate + directional hit-rate)
+  → RAG geo-analogs (reuse `backend/rag/`) → dashboard geo-map + node-impact table.
 
 ### ✅ Inventory — actual EIA number pulled LIVE from the EIA v2 API (2026-06-25)
 Branch `phase4-live-feature-overlay` (not merged to main). User: "take actual and correct EIA data after the
