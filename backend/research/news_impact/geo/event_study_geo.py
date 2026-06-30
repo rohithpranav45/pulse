@@ -164,12 +164,35 @@ def _gather_events(until, use_llm: bool, provider: str, source: str = "auto") ->
     return _events_from_corpus(use_llm=use_llm, provider=provider, until=until)
 
 
+def _event_conflict_level(ts, cache: dict) -> str | None:
+    """Causal ACLED **bloc** conflict regime (HIGH/NORMAL/LOW) as-of an event's
+    month — the extra conditioning axis: 'a Hormuz headline in a HIGH-conflict
+    month is not the same event as in a calm one'. Memoised per year-month so the
+    CSV is read once per distinct month, not once per event. None when the ACLED
+    feed is absent or the month resolves to UNKNOWN (too little history)."""
+    key = (ts.year, ts.month)
+    if key in cache:
+        return cache[key]
+    level = None
+    try:
+        from research.news_impact.geo import conflict
+        if conflict.available("monthly"):
+            r = conflict.conflict_regime("BLOC", asof=pd.Timestamp(ts.date()))
+            lv = r.get("level")
+            level = lv if lv and lv != "UNKNOWN" else None
+    except Exception:
+        level = None
+    cache[key] = level
+    return level
+
+
 def build_event_panel(events: list[dict] | None = None,
                       node_panel: pd.DataFrame | None = None,
                       use_llm: bool = True, provider: str = "auto",
                       source: str = "auto") -> pd.DataFrame:
-    """One row per (event × claimed node): published_at, asset_type, regime, node,
-    conviction, pred_sign, and per-horizon Δ / vol-normalised Δ / hit."""
+    """One row per (event × claimed node): published_at, asset_type, regime,
+    conflict, node, conviction, pred_sign, and per-horizon Δ / vol-normalised Δ /
+    hit. `conflict` is the causal ACLED bloc conflict regime as-of the event."""
     if node_panel is None:
         from research.news_impact.geo import nodes
         node_panel = nodes.build_node_panel()
@@ -183,6 +206,7 @@ def build_event_panel(events: list[dict] | None = None,
         return pd.DataFrame()
 
     struct = node_panel["brent_structure"].dropna() if "brent_structure" in node_panel else None
+    conf_cache: dict = {}
     rows = []
     for ev in events:
         ts = pd.to_datetime(ev["published_at"], utc=True, errors="coerce")
@@ -194,11 +218,14 @@ def build_event_panel(events: list[dict] | None = None,
             pos = struct.index.searchsorted(d) - 1
             if pos >= 0:
                 regime = "BACK" if float(struct.iloc[pos]) > 0 else "CONTANGO"
+        conflict_level = _event_conflict_level(ts, conf_cache)
         for node, score in ev["conviction"].items():
             if not score or node not in node_panel.columns:
                 continue
-            rec = {"published_at": ts, "asset_type": ev.get("asset_type"),
+            rec = {"published_at": ts, "title": ev.get("title"),
+                   "asset_type": ev.get("asset_type"),
                    "event_type": ev.get("event_type"), "regime": regime,
+                   "conflict": conflict_level,
                    "node": node, "conviction": float(score),
                    "pred_sign": int(np.sign(score))}
             any_h = False
@@ -229,28 +256,39 @@ def _hit_cell(sub: pd.DataFrame, horizon: int) -> dict | None:
 
 
 def node_hit_table(panel: pd.DataFrame, horizon: int = 1) -> list[dict]:
-    """Directional hit-rate per node, and per node×asset_type / node×regime where n
-    permits, plus the pooled 'ALL' row."""
+    """Directional hit-rate per node, and per node×asset_type / node×regime /
+    node×conflict where n permits, plus the pooled 'ALL' row. Every row carries a
+    `conflict` field ('*' = not conflict-conditioned); the node×conflict slices
+    answer 'does the geo edge strengthen in HIGH-conflict months?'."""
     if panel is None or panel.empty:
         return []
+    has_conflict = "conflict" in panel.columns
     out = []
     allc = _hit_cell(panel, horizon)
     if allc:
-        out.append({"slice": "ALL", "node": "*", "asset_type": "*", "regime": "*", **allc})
+        out.append({"slice": "ALL", "node": "*", "asset_type": "*", "regime": "*",
+                    "conflict": "*", **allc})
     for node, g in panel.groupby("node"):
         c = _hit_cell(g, horizon)
         if c:
-            out.append({"slice": "node", "node": node, "asset_type": "*", "regime": "*", **c})
+            out.append({"slice": "node", "node": node, "asset_type": "*", "regime": "*",
+                        "conflict": "*", **c})
         for at, gg in g.groupby("asset_type"):
             c2 = _hit_cell(gg, horizon)
             if c2:
                 out.append({"slice": "node×type", "node": node, "asset_type": at,
-                            "regime": "*", **c2})
+                            "regime": "*", "conflict": "*", **c2})
         for rg, gg in g.groupby("regime"):
             c3 = _hit_cell(gg, horizon)
             if c3:
                 out.append({"slice": "node×regime", "node": node, "asset_type": "*",
-                            "regime": rg, **c3})
+                            "regime": rg, "conflict": "*", **c3})
+        if has_conflict:
+            for cf, gg in g.groupby("conflict"):
+                c4 = _hit_cell(gg, horizon)
+                if c4:
+                    out.append({"slice": "node×conflict", "node": node, "asset_type": "*",
+                                "regime": "*", "conflict": cf, **c4})
     out.sort(key=lambda r: (r["significant"], -r["p"]), reverse=True)
     return out
 
@@ -282,6 +320,14 @@ def compute_and_cache(events: list[dict] | None = None) -> dict:
         out["span"] = [str(panel["published_at"].min().date()),
                        str(panel["published_at"].max().date())]
         out["by_asset_type"] = panel.groupby("asset_type")["published_at"].nunique().to_dict()
+        # ACLED conflict-regime coverage of the graded events — so the degeneracy
+        # (e.g. all 2026-war events mapping to one stale-ACLED level) is visible.
+        if "conflict" in panel.columns:
+            dist = (panel.dropna(subset=["conflict"])
+                         .groupby("conflict")["published_at"].nunique().to_dict())
+            out["conflict_levels"] = {str(k): int(v) for k, v in dist.items()}
+            out["n_events_no_conflict"] = int(
+                panel[panel["conflict"].isna()]["published_at"].nunique())
         for h in HORIZONS:
             out["hit_tables"][str(h)] = node_hit_table(panel, h)
             out["betas"][str(h)] = node_betas(panel, h)
@@ -307,12 +353,16 @@ def annotate_impact(impact: dict, asset_type: str | None, regime: str | None,
     """Tag each node in a live impact vector with its historical directional
     hit-rate where one was earned (most specific applicable significant slice),
     else mark it prior-only. Returns impact augmented with an `edges` block."""
-    cached = cached or load_cached() or {}
+    cached = (load_cached() or {}) if cached is None else cached
     table = (cached.get("hit_tables") or {}).get(str(horizon), [])
     edges = {}
     for node in (impact.get("nodes") or {}):
         best = None
         for r in table:
+            # conflict-conditioned slices are descriptive only — never drive the
+            # live tag (we don't condition the live impact on ACLED yet).
+            if r.get("conflict", "*") != "*":
+                continue
             if r["node"] not in (node, "*"):
                 continue
             if r["asset_type"] not in (asset_type, "*"):
@@ -356,6 +406,15 @@ if __name__ == "__main__":
           f"({panel['published_at'].min().date()} .. {panel['published_at'].max().date()})")
     print("events by asset_type:",
           panel.groupby('asset_type')['published_at'].nunique().to_dict())
+    if "conflict" in panel.columns:
+        cd = (panel.dropna(subset=["conflict"]).groupby("conflict")["published_at"]
+                   .nunique().to_dict())
+        n_no = int(panel[panel["conflict"].isna()]["published_at"].nunique())
+        print(f"events by ACLED conflict regime: {cd}  (no-ACLED: {n_no})")
+        if len(cd) <= 1:
+            print("  ⚠ conflict axis DEGENERATE on this corpus — ACLED ends 2025-06 so "
+                  "every 2026-war event maps to one stale level; can't strengthen-test "
+                  "(needs ACLED coverage through the episode — more data, not code).")
 
     for h in HORIZONS:
         print(f"\n=== Directional hit-rate @ {h}d (binomial vs 50%) ===")
@@ -364,8 +423,9 @@ if __name__ == "__main__":
             print("  (no slice reached the reporting floor)")
         for r in tbl:
             sig = "  *EDGE*" if r["significant"] else ""
-            lbl = f"{r['node']}/{r['asset_type']}/{r['regime']}"
-            print(f"  {lbl:34s} hit={r['hit']:.2f} n={r['n']:3d} p={r['p']:.3f}{sig}")
+            cf = "" if r.get("conflict", "*") == "*" else f"/{r['conflict']}"
+            lbl = f"{r['node']}/{r['asset_type']}/{r['regime']}{cf}"
+            print(f"  {lbl:40s} hit={r['hit']:.2f} n={r['n']:3d} p={r['p']:.3f}{sig}")
         print(f"--- magnitude betas @ {h}d (vn move per conviction unit) ---")
         for b in node_betas(panel, h):
             m = "  *MEASURED*" if b["measured"] else ""

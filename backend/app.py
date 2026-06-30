@@ -1202,6 +1202,38 @@ _scheduler.add_job(
 )
 
 
+# Geo news-impact — the geospatial twin of _news_corpus_ingest. Pull the same
+# cached /api/news wire, keep only geo-candidate headlines (the is_geo_candidate
+# prefilter, so the free Groq budget is spent only on geo news), score each into
+# a {asset, event, severity} → node-vector geo event with EDGE/prior tags, and
+# persist them to the accumulating live store. Surfaced at /api/news/geo/live.
+# Opt out with PULSE_GEO_DISABLED=1.
+def _geo_news_ingest():
+    if os.getenv("PULSE_GEO_DISABLED", "").strip().lower() in ("1", "true", "yes"):
+        return
+    try:
+        from research.news_impact.geo import live as geo_live
+    except Exception as exc:
+        log.warning("geo live import failed: %s", exc)
+        return
+    try:
+        news = get_cached("news", TTL_NEWS) or {}
+        articles = news.get("articles") or []
+        if not articles:
+            return
+        res = geo_live.ingest_wire(articles)
+        if res.get("added"):
+            log.info("geo ingest: scanned %d, %d candidates, +%d geo events (total %d)",
+                     res["scanned"], res["candidates"], res["added"], res["total"])
+    except Exception as exc:
+        log.warning("geo news ingest failed: %s", exc)
+
+_scheduler.add_job(
+    _geo_news_ingest, "interval", seconds=TTL_NEWS,
+    next_run_time=_dt.now() + timedelta(minutes=3), id="_geo_news_ingest",
+)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Flask routes
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2139,6 +2171,7 @@ def news_refresh_route():
         try:
             _refresh_news()          # re-fetch + cache the wire
             _news_corpus_ingest()    # upsert + classify the newly-arrived headlines
+            _geo_news_ingest()       # score the geo-relevant headlines into geo events
         except Exception as exc:
             log.warning("manual news refresh failed: %s", exc)
         finally:
@@ -2161,6 +2194,125 @@ def news_factors_route():
     return respond(NewsFactorsResponse,
                    safe_fetch(_factors, {"available": False, "feed": [], "factors": []}),
                    _now())
+
+
+@app.route("/api/news/geo")
+def news_geo_route():
+    """
+    Geo node-impact edge map — the graded "does location-news move each price node?"
+    table behind the geospatial engine. Serves the cached per-node event study
+    (directional hit-rate + magnitude beta, sliced by node × asset-type × regime,
+    prior-then-learn EDGE flags) joined with the node catalog (which nodes are
+    real/estimate/gap) and the analog index size. Read-only; regenerate with
+    `python backend/research/news_impact/geo/event_study_geo.py`.
+    """
+    def _geo():
+        from research.news_impact.geo import event_study_geo as es
+        from research.news_impact.geo import nodes as geo_nodes
+        cached = es.load_cached()
+        if not cached or not cached.get("available"):
+            return {"available": False, "reason": "no graded geo edge map cached yet"}
+        try:
+            from research.news_impact.geo import analogs as an
+            idx_size = len(an.get_index())
+        except Exception:
+            idx_size = None
+        return {**cached, "node_catalog": geo_nodes.describe(), "index_size": idx_size}
+
+    return jsonify({"data": safe_fetch(_geo, {"available": False}), "timestamp": _now()})
+
+
+@app.route("/api/news/geo/analogs")
+def news_geo_analogs_route():
+    """
+    Geo RAG analogs — paste/click a location-news headline and get the k closest
+    historical geo-events plus what each actually did to the price nodes, and a
+    similarity-weighted per-node nowcast ("this ≈ these k past events; they moved
+    ho_crack +X over 5d, agreeing Y% of the time").
+
+    Retrieval over the GRADED event panel (each past event carries its realised
+    forward node moves); the fingerprint is interpretable (asset_type + event_type
+    + signed conviction), so an opposite-direction event (a restart vs a closure)
+    ranks low. Read-only; reuses the cached LLM extractions + the memoised index.
+    Query: ?title=<headline>&k=5&horizon=5  (horizon ∈ {1,5}).
+    """
+    title = (request.args.get("title") or "").strip()
+    try:
+        k = max(1, min(int(request.args.get("k", 5)), 20))
+    except (TypeError, ValueError):
+        k = 5
+    try:
+        horizon = int(request.args.get("horizon", 5))
+        horizon = horizon if horizon in (1, 5) else 5
+    except (TypeError, ValueError):
+        horizon = 5
+    want_narrate = (request.args.get("narrate") or "").strip().lower() in ("1", "true", "yes")
+
+    def _analogs():
+        from research.news_impact.geo import analogs as an
+        idx = an.get_index()
+        if not title:
+            return {"available": False, "reason": "supply ?title=<headline>",
+                    "index_size": len(idx)}
+        res = an.score_headline_analogs(title, k=k, horizon=horizon, index=idx)
+        res["index_size"] = len(idx)
+        if want_narrate:                      # LLM-narrated desk note (Sprint 10)
+            res["narration"] = an.narrate(res, horizon=horizon)
+        return res
+
+    return jsonify({"data": safe_fetch(_analogs, {"available": False, "index_size": 0}),
+                    "timestamp": _now()})
+
+
+@app.route("/api/news/geo/live")
+def news_geo_live_route():
+    """
+    Live geo alerts — the geo engine's real-time feed. Recent live-scored geo
+    events (the wire's geo-candidate headlines, each resolved to a physical asset
+    + throughput event + a signed price-node vector with EDGE/prior tags),
+    ranked by |conviction| × tradeable. Populated by the `_geo_news_ingest`
+    scheduler job; read-only here. Query: ?limit=30.
+    """
+    try:
+        limit = max(1, min(int(request.args.get("limit", 30)), 100))
+    except (TypeError, ValueError):
+        limit = 30
+
+    def _live():
+        from research.news_impact.geo import live as geo_live
+        events = geo_live.recent_events(limit=limit)
+        return {"available": True, "count": len(events), "events": events,
+                "caveat": ("single episode (2026 Hormuz war); EDGE tags from the "
+                           "graded edge map — read direction, not exact p-values")}
+
+    return jsonify({"data": safe_fetch(_live, {"available": False, "events": []}),
+                    "timestamp": _now()})
+
+
+@app.route("/api/news/geo/map")
+def news_geo_map_route():
+    """
+    Geo map — every placeable registry asset (chokepoint / refinery / pipeline /
+    field / producer) with its lat/lon, disruption_bias prior, and recent
+    live-event activity from the Sprint-8 store (event count, peak conviction,
+    EDGE flag, newest timestamp, a few headlines). The registry is the single
+    source of truth for the coordinates + the desk priors; the activity overlay
+    is the live size/colour. Drops the GLOBAL generics (no real coords).
+    Read-only; the dashboard plots it on an SVG world map. No query args.
+    """
+    def _map():
+        from research.news_impact.geo import live as geo_live
+        from research.news_impact.geo import registry as reg
+        assets = geo_live.map_assets()
+        active = sum(1 for a in assets if (a["activity"]["events"] or 0) > 0)
+        return {"available": True, "count": len(assets), "active": active,
+                "assets": assets, "nodes": dict(reg.NODES),
+                "caveat": ("disruption_bias is the desk prior (the event study "
+                           "grades it); activity is the live geo-alert store — "
+                           "single episode, read direction")}
+
+    return jsonify({"data": safe_fetch(_map, {"available": False, "assets": []}),
+                    "timestamp": _now()})
 
 
 @app.route("/api/weather")

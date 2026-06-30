@@ -77,10 +77,11 @@ NODES: dict[str, dict] = {
                         "estimate": True, "available": True},
     "regrade":         {"label": "Gasoil − ULSD", "unit": "$/bbl", "provenance": "synth",
                         "estimate": True, "available": True},
-    # ── declared gaps (need a products/sour feed) ──
-    "rbob_crack":      {"label": "RBOB gasoline crack", "unit": "$/bbl", "provenance": "gap",
-                        "estimate": False, "available": False,
-                        "gap_reason": "no gasoline curve in the lake (daily proxy only)"},
+    # RBOB gasoline crack — now REAL via the OHLCV products feed (was a gap). The
+    # daily settle is the last hourly bar (session-end proxy), so it's an ESTIMATE.
+    "rbob_crack":      {"label": "RBOB gasoline crack vs WTI", "unit": "$/bbl",
+                        "provenance": "feed", "estimate": True, "available": True},
+    # ── declared gaps (need a sour/grade feed) ──
     "brent_dubai":     {"label": "Brent − Dubai (EFS)", "unit": "$/bbl", "provenance": "gap",
                         "estimate": False, "available": False,
                         "gap_reason": "no Dubai/sour curve → no East-of-Suez differential"},
@@ -114,11 +115,13 @@ def _autoscale_ho(ho_c1: pd.Series) -> pd.Series:
 def compute_nodes(brent: pd.DataFrame | None,
                   wti: pd.DataFrame | None,
                   ho: pd.DataFrame | None,
-                  gasoil: pd.DataFrame | None) -> pd.DataFrame:
+                  gasoil: pd.DataFrame | None,
+                  rbob: pd.DataFrame | None = None) -> pd.DataFrame:
     """
     Build the daily node panel from per-product daily frames (date-indexed, with
-    c1.. columns; HO/Gasoil need only c1). Any missing input simply omits the
+    c1.. columns; HO/Gasoil/RBOB need only c1). Any missing input simply omits the
     nodes that depend on it. Returns a date-indexed DataFrame of node columns.
+    `rbob` (gasoline $/gal, from the OHLCV products feed) adds rbob_crack.
     """
     cols: dict[str, pd.Series] = {}
 
@@ -155,6 +158,11 @@ def compute_nodes(brent: pd.DataFrame | None,
 
     if ho_bbl is not None and go_bbl is not None:
         cols["regrade"] = go_bbl - ho_bbl          # ARA gasoil vs US ULSD ($/bbl)
+
+    if rbob is not None and not rbob.empty and "c1" in rbob.columns:
+        rb_bbl = _autoscale_ho(rbob["c1"].astype(float)) * HO_GAL_PER_BBL   # $/gal → $/bbl
+        if wc1 is not None:
+            cols["rbob_crack"] = rb_bbl - wc1      # US gasoline (RBOB) crack vs WTI
 
     if not cols:
         return pd.DataFrame()
@@ -208,9 +216,26 @@ def _synth_daily_from_1min(key: str, contracts: tuple[str, ...] = ("c1", "c2", "
     return df
 
 
-def build_node_panel() -> pd.DataFrame:
-    """Load the /Data tape and assemble the full daily node panel. Empty frame if
-    /Data is unavailable (caller treats as 'no coverage', like the rest of PULSE)."""
+def _combine_tail(lake: pd.DataFrame | None,
+                  feed: pd.DataFrame | None) -> pd.DataFrame | None:
+    """Lake history EXTENDED with feed rows dated strictly after the lake's last
+    date — so real exchange-settle history is preferred and the hourly-OHLCV feed
+    only fills the recent gap (the lake stops 2026-05-26; the feed runs to 06-26)."""
+    if lake is None or lake.empty:
+        return feed
+    if feed is None or feed.empty:
+        return lake
+    tail = feed[feed.index > lake.index.max()]
+    if tail.empty:
+        return lake
+    return pd.concat([lake, tail], axis=0).sort_index()
+
+
+def build_node_panel(use_products_feed: bool = True) -> pd.DataFrame:
+    """Load the /Data tape and assemble the full daily node panel. When the OHLCV
+    products feed is present (`use_products_feed`), it (1) EXTENDS brent/wti/ho/
+    gasoil past the lake's last settle and (2) adds RBOB → rbob_crack. Empty frame
+    if neither source is available."""
     try:
         import data_lake as dl
         brent = dl.get_brent_settlements()
@@ -220,7 +245,22 @@ def build_node_panel() -> pd.DataFrame:
         brent = wti = None
     ho = _synth_daily_from_1min("ho_1min")
     gasoil = _synth_daily_from_1min("gasoil_1min")
-    return compute_nodes(brent, wti, ho, gasoil)
+    rbob = None
+
+    if use_products_feed:
+        try:
+            from research.news_impact.geo import products_feed as pf
+            if pf.available():
+                feeds = pf.daily_settles()
+                brent = _combine_tail(brent, feeds.get("LCO"))
+                wti = _combine_tail(wti, feeds.get("CL"))
+                ho = _combine_tail(ho, feeds.get("HO"))
+                gasoil = _combine_tail(gasoil, feeds.get("LGO"))
+                rbob = feeds.get("RBOB")
+        except Exception as exc:
+            log.info("nodes: products feed merge skipped (%s)", type(exc).__name__)
+
+    return compute_nodes(brent, wti, ho, gasoil, rbob)
 
 
 # ── standalone ────────────────────────────────────────────────────────────────

@@ -76,6 +76,7 @@ NODES: dict[str, str] = {
     "ho_crack":        "ULSD/Heating-oil crack vs WTI",
     "gasoil_crack":    "ICE Gasoil crack vs Brent",
     "regrade":         "Gasoil − ULSD ($/bbl)",
+    "rbob_crack":      "RBOB gasoline crack vs WTI",   # priceable via OHLCV feed (Sprint 6)
 }
 
 ASSET_TYPES: set[str] = {"chokepoint", "refinery", "pipeline", "field", "producer"}
@@ -145,9 +146,12 @@ _CHOKEPOINTS = [
 # ── Refineries (disruption = OUTAGE → crude demand DOWN, product cracks UP) ────
 def _ref(id, name, region, country, lat, lon, cap, aliases, extra=None, note=""):
     # region-templated outage bias; `extra` overrides/augments per asset
-    base = {"ho_crack": 1, "gasoil_crack": 1}
+    # a refinery OUTAGE tightens product cracks (incl. GASOLINE) and cuts crude demand.
+    # rbob_crack is US gasoline (NYMEX RBOB): strongest for a US outage, a weaker
+    # global spillover elsewhere.
+    base = {"ho_crack": 1, "gasoil_crack": 1, "rbob_crack": 1}
     if region in ("USGC", "USEC", "USMC", "USWC"):
-        base.update({"wti_flat": -1, "wti_brent": -1, "ho_crack": 2})
+        base.update({"wti_flat": -1, "wti_brent": -1, "ho_crack": 2, "rbob_crack": 2})
     elif region in ("ARA", "MED", "EUROPE"):
         base.update({"brent_flat": -1, "gasoil_crack": 2})
     elif region in ("ASIA", "ME"):
@@ -214,10 +218,9 @@ _PIPELINES = [
           "Canadian heavy to Cushing/USGC; outage can tighten WTI at Cushing."),
     Asset("colonial", "Colonial pipeline", "pipeline", "USEC", "USA",
           31.0, -92.0, ("products",), 2.5,
-          {"ho_crack": 2, "wti_flat": -1},
+          {"ho_crack": 2, "rbob_crack": 2, "wti_flat": -1},
           ("colonial", "colonial pipeline"),
-          "Gulf→US East Coast products; outage spikes USEC gasoline/diesel "
-          "(gasoline crack not priceable here — see nodes gaps)."),
+          "Gulf→US East Coast products; outage spikes USEC gasoline (RBOB) + diesel."),
     Asset("trans_mountain", "Trans Mountain (TMX)", "pipeline", "USWC", "Canada",
           49.6, -123.2, ("crude",), 0.89,
           {"wti_brent": -1},
@@ -279,7 +282,7 @@ _FIELDS = [
 _GENERIC = [
     Asset("generic_refinery", "Refinery (unspecified)", "refinery", "GLOBAL", "—",
           0.0, 0.0, ("products",), None,
-          {"ho_crack": 1, "gasoil_crack": 1, "brent_flat": -1},
+          {"ho_crack": 1, "gasoil_crack": 1, "rbob_crack": 1, "brent_flat": -1},
           ("refinery", "refineries", "refining unit", "crude unit", "fcc", "coker"),
           "Generic refinery outage → product cracks up, crude demand down."),
     Asset("generic_crude_pipeline", "Crude pipeline (unspecified)", "pipeline", "GLOBAL", "—",
@@ -289,9 +292,9 @@ _GENERIC = [
           "Generic crude pipeline outage → mild crude support."),
     Asset("generic_product_pipeline", "Product pipeline (unspecified)", "pipeline", "GLOBAL", "—",
           0.0, 0.0, ("products",), None,
-          {"ho_crack": 1},
+          {"ho_crack": 1, "rbob_crack": 1},
           ("product pipeline", "fuel pipeline", "gasoline pipeline", "diesel pipeline"),
-          "Generic product pipeline outage → distillate crack support."),
+          "Generic product pipeline outage → distillate + gasoline crack support."),
     Asset("generic_tanker", "Tanker / shipping lane (unspecified)", "chokepoint", "GLOBAL", "—",
           0.0, 0.0, ("crude", "products"), None,
           {"brent_flat": 1, "gasoil_crack": 1},

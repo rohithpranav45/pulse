@@ -142,6 +142,12 @@ export const api = {
   newsFactors:   () => getJSON<NewsImpactData>('/api/news/factors'),
   newsLive:      () => getJSON('/api/news/live'),   // live wire, each headline scored
   newsRefresh:   () => postJSON('/api/news/refresh', {}, 60000),  // force re-fetch + ingest
+  // Geospatial news-impact engine (Sprint 3-6) — node edge map + RAG analogs
+  newsGeo:       () => getJSON('/api/news/geo'),
+  newsGeoAnalogs: (title: string, k = 5, horizon = 5, narrate = false) =>
+    getJSON(`/api/news/geo/analogs?title=${encodeURIComponent(title)}&k=${k}&horizon=${horizon}${narrate ? '&narrate=1' : ''}`),
+  newsGeoLive:   (limit = 30) => getJSON(`/api/news/geo/live?limit=${limit}`),  // live geo alerts
+  newsGeoMap:    () => getJSON('/api/news/geo/map'),  // registry assets + lat/lon + live activity
   weather:       () => getJSON('/api/weather'),
   technicals:    () => getJSON('/api/technicals'),
   termStructure: () => getJSON('/api/term-structure'),
