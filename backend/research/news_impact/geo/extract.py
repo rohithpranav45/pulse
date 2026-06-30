@@ -61,7 +61,10 @@ def load_env() -> None:
 
 # Provider models. Groq (free tier) is the DEFAULT extractor — already keyed in
 # this project and capable enough for the schema; Claude is optional/paid.
-GROQ_MODEL = "llama-3.3-70b-versatile"
+# gpt-oss-120b matches llama-3.3-70b on the closure-vs-reopen polarity (verified)
+# and has a SEPARATE free daily-token budget — 70B's 100k TPD is easily exhausted
+# by a corpus re-grade, so this is the more robust default for the geo extractor.
+GROQ_MODEL = "openai/gpt-oss-120b"
 LIVE_MODEL = "claude-haiku-4-5"      # Claude live (optional, paid)
 BACKFILL_MODEL = "claude-opus-4-8"   # Claude batch backfill (optional, paid)
 _SEVERITIES = ("minor", "moderate", "major", "severe")
@@ -401,18 +404,30 @@ def extract_headlines(titles: list[str], model: str | None = None,
 def extract_cached(titles: list[str], provider: str = "auto",
                    model: str | None = None, batch: int = 15) -> list[GeoExtraction]:
     """Cache-backed batch extraction: returns cached records, LLM-extracts only the
-    misses (in small batches, persisted), so re-grading never re-calls the LLM."""
+    misses (in small batches, persisted), so re-grading never re-calls the LLM.
+
+    Only **LLM-sourced** records are cached — a deterministic fallback (e.g. when
+    the LLM is rate-limited / daily-capped) is NOT persisted, so a later run retries
+    it via the LLM rather than locking in the weaker keyword result."""
     cache = _load_cache()
     miss = [t for t in titles if _key(t) not in cache]
     if miss:
         log.info("geo extract_cached: %d cached, %d to extract", len(titles) - len(miss), len(miss))
         for s in range(0, len(miss), batch):
             chunk = miss[s:s + batch]
-            for t, rec in zip(chunk, extract_headlines(chunk, model=model, provider=provider)):
-                cache[_key(t)] = rec.model_dump()
-            _save_cache(cache)
-    return [GeoExtraction(**cache[_key(t)]) if _key(t) in cache else _fallback_extract(t)
-            for t in titles]
+            recs = extract_headlines(chunk, model=model, provider=provider)
+            wrote = False
+            for t, rec in zip(chunk, recs):
+                if rec.source != "fallback":          # never cache a fallback miss
+                    cache[_key(t)] = rec.model_dump()
+                    wrote = True
+            if wrote:
+                _save_cache(cache)
+    out = []
+    for t in titles:
+        c = cache.get(_key(t))
+        out.append(GeoExtraction(**c) if c else _fallback_extract(t))
+    return out
 
 
 def extract_headline(title: str, snippet: str | None = None,

@@ -107,3 +107,68 @@ def test_empty_inputs_dont_crash():
     assert es.node_betas(pd.DataFrame(), 1) == []
     out = es.annotate_impact({"nodes": {"brent_flat": 1.0}}, None, None, cached={})
     assert out["edges"]["brent_flat"]["tradeable"] is False
+
+
+# ── conflict-regime slice axis (Sprint 11) ──────────────────────────────────────
+def _conflict_panel():
+    """ho_crack with a strong HIGH-conflict edge (0.8) and a NORMAL coin flip (0.52)."""
+    high = pd.DataFrame({
+        "node": ["ho_crack"] * 25, "asset_type": ["chokepoint"] * 25,
+        "regime": ["BACK"] * 25, "conflict": ["HIGH"] * 25,
+        "conviction": [2.0] * 25, "pred_sign": [1] * 25,
+        "hit1": [1.0] * 20 + [0.0] * 5, "vn1": [1.0] * 25})
+    normal = pd.DataFrame({
+        "node": ["ho_crack"] * 25, "asset_type": ["chokepoint"] * 25,
+        "regime": ["BACK"] * 25, "conflict": ["NORMAL"] * 25,
+        "conviction": [2.0] * 25, "pred_sign": [1] * 25,
+        "hit1": [1.0] * 13 + [0.0] * 12, "vn1": [1.0] * 25})
+    return pd.concat([high, normal], ignore_index=True)
+
+
+def test_node_hit_table_conflict_slice_flags_strengthening_edge():
+    tbl = es.node_hit_table(_conflict_panel(), 1)
+    by = {r["conflict"]: r for r in tbl if r["slice"] == "node×conflict"}
+    assert "HIGH" in by and "NORMAL" in by
+    assert by["HIGH"]["significant"] is True       # edge concentrated in HIGH-conflict
+    assert by["NORMAL"]["significant"] is False     # coin flip otherwise
+    assert by["HIGH"]["hit"] > by["NORMAL"]["hit"]
+
+
+def test_annotate_impact_ignores_conflict_conditioned_rows():
+    """A conflict-conditioned edge is descriptive only — it must NOT drive the live
+    prior-then-learn tag (we don't condition the live impact on ACLED)."""
+    cached = {"hit_tables": {"1": [
+        {"slice": "node×conflict", "node": "ho_crack", "asset_type": "*", "regime": "*",
+         "conflict": "HIGH", "hit": 0.8, "n": 30, "p": 0.001, "significant": True},
+    ]}}
+    ann = es.annotate_impact({"nodes": {"ho_crack": 2.0}}, "chokepoint", "BACK",
+                             horizon=1, cached=cached)
+    assert ann["edges"]["ho_crack"]["tradeable"] is False
+    assert ann["tradeable_nodes"] == []
+
+
+def test_build_event_panel_tags_conflict_regime(monkeypatch):
+    from research.news_impact.geo import conflict
+    monkeypatch.setattr(conflict, "available", lambda freq="monthly": True)
+    monkeypatch.setattr(conflict, "conflict_regime",
+                        lambda country="Iran", asof=None, **k: {"level": "HIGH", "z": 3.0})
+    idx = pd.bdate_range("2026-04-01", periods=15)
+    panel = _daily(idx, brent_flat=np.arange(15, dtype=float) + 80,
+                   brent_structure=np.full(15, 1.5))
+    events = [{"published_at": "2026-04-06T09:00:00Z", "asset_type": "chokepoint",
+               "event_type": "closure", "conviction": {"brent_flat": 2.0}}]
+    ep = es.build_event_panel(events=events, node_panel=panel)
+    assert ep.iloc[0]["conflict"] == "HIGH"
+
+
+def test_build_event_panel_conflict_none_without_acled(monkeypatch):
+    from research.news_impact.geo import conflict
+    monkeypatch.setattr(conflict, "available", lambda freq="monthly": False)
+    idx = pd.bdate_range("2026-04-01", periods=15)
+    panel = _daily(idx, brent_flat=np.arange(15, dtype=float) + 80,
+                   brent_structure=np.full(15, 1.5))
+    events = [{"published_at": "2026-04-06T09:00:00Z", "asset_type": "chokepoint",
+               "event_type": "closure", "conviction": {"brent_flat": 2.0}}]
+    ep = es.build_event_panel(events=events, node_panel=panel)
+    assert ep.iloc[0]["conflict"] is None          # no ACLED → no conflict axis
+    assert all(r["slice"] != "node×conflict" for r in es.node_hit_table(ep, 1))

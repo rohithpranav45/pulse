@@ -7,8 +7,60 @@ spread engine), and serves a React dashboard with a paper-trading book.
 - **Stack:** Flask 3 · React 18 + Vite + Tailwind · SQLite (cache + paper book) ·
   DuckDB/Parquet over a 3.5 GB `/Data` desk feed · sklearn + XGBoost/LightGBM/CatBoost
 - **Run (local):** `python start.py` from the repo root → http://127.0.0.1:5000
-- **Last updated:** 2026-06-29 (**Geo news-impact engine — Sprint 4: GDELT corpus + ACLED feed → a MEASURED edge**
-  [branch `phase4-live-feature-overlay`, see §1 entry]. A desk-supplied **GDELT oil-news corpus** (3,564 headlines,
+- **Last updated:** 2026-06-30 (**Geo news-impact engine — Sprint 10: LLM-narrated RAG desk note**
+  [branch `phase4-live-feature-overlay`, see §1 entry]. The generative "RAG" piece: new `analogs.narrate(result)`
+  builds an **exact-number evidence block** from the analog forecast (per-node mean-Δ / agreement / n + EDGE tags),
+  then either has **free Groq** (`gpt-oss-120b`) *phrase that block* under a strict no-invent prompt OR falls back to
+  a **deterministic template** from the same numbers — **no key ⇒ template**, so it never hard-fails and never
+  fabricates a figure. The note says which read to **trust** (EDGE/high agreement) and which to **fade** (agreement
+  <50% = reversal). Surfaced at `GET /api/news/geo/analogs?narrate=1` + a gold **"Desk note"** card in
+  `GeoAnalogPanel`. +6 hermetic tests (injected `llm_fn`) → **280 pass**; `tsc`/build clean. Prior: **Sprint 9:
+  geo-map visualization** — a hand-rolled SVG equirectangular world (`frontend/src/lib/worldOutline.ts`, **no map
+  dep**) plots all **37 placeable assets** at their registry lat/lon, sized by live event count + coloured by activity
+  (muted→amber→**gold when EDGE**); `live.map_assets` + `GET /api/news/geo/map`; **`GeoMapPanel`** at the top of the
+  News tab — clicking an asset shows its bias + recent alerts and **pre-fills the `GeoAnalogPanel` lookup**. Prior:
+  **Sprint 8: live scheduler wiring + geo alerts**. The geo engine became a **live** analysis engine: new
+  `geo/live.py` + `_geo_news_ingest` scheduler job (every `TTL_NEWS`, opt-out `PULSE_GEO_DISABLED=1`) pipes the
+  cached `/api/news` wire → `is_geo_candidate` prefilter (free-Groq budget spent only on geo news) → `extract_cached`
+  (fallback-not-cached guard intact) → `impact_map` node vector → `annotate_impact` EDGE/prior tags (merged across
+  +1d/+5d, preferring the 5d geo edge) → an accumulating JSON store deduped by title hash. New `GET /api/news/geo/live`
+  (ranked by |conviction| × tradeable) + **`GeoLiveAlertsPanel`** at the top of the News tab (newest geo headlines +
+  node arrows + edge/prior tag). +7 hermetic tests → **270 pass**; `tsc`/build clean. Prior same day: **Sprint 7 —
+  rbob_crack graded + dashboard geo panels**. Added `rbob_crack` to the registry + gasoline-crack
+  `disruption_bias` on US/global refineries + Colonial + generics → it's now GRADED: refinery outage → gasoline
+  crack UP **86–92% @1d** (n=14, right sign) but **below n≥20 → stays a labelled prior** (single episode too thin
+  to certify). Put the engine on the dashboard: new `GET /api/news/geo` + **`GeoImpactPanel`** (per-node +1d/+5d
+  hit-rate edge table) + **`GeoAnalogPanel`** (paste a headline → nearest past geo-events + per-node +5d nowcast)
+  on the News tab; `tsc`/build clean. +1 test → **263 pass**. Prior same day: **Sprint 6 — products OHLCV feed →
+  rbob_crack + June war gradeable**. A desk **hourly OHLCV feed**
+  (`I:\Public\Summer Interns Energy\OHLCV`, override `PULSE_OHLCV_DIR`) for RBOB/HO/LGO/LCO/CL → new
+  `geo/products_feed.py`. **`rbob_crack` is now a REAL node** (RBOB gasoline curve 2019→2026, was a declared GAP),
+  and `build_node_panel` **extends the daily tape to 2026-06-26** (appends the feed tail past the lake's 05-26
+  settle) — finally price-covering the **June Iran/Hormuz war**. Re-graded: events **68→112**, claims **1,400**.
+  Durable @5d edges on the full war: **`wti_brent` tightens on chokepoint disruption (0.59, p=0.008)**, **`ho_crack`
+  distillate firms (0.57, p=0.047)**, **`brent_flat` strongly REVERSES (0.40, p=0.000)** — risk premium round-trips
+  while structural spreads persist; the Sprint-4b @1d crude-flat pop washed out (0.51) once June is included.
+  Caveats: single episode, clustered events → optimistic p (trust direction). +9 tests → **262 pass**. Prior same
+  day: **Sprint 5 — RAG analogs**: new `geo/analogs.py` — "this headline ≈ these k past
+  geo-events, and here's what each did to the price nodes." Retrieval over the **graded event panel** (each past
+  event carries its realised forward node moves) via an **interpretable** fingerprint (asset_type + event_type +
+  signed conviction → cosine), so an opposite event (`restart` vs `closure`) ranks low — no black-box embeddings.
+  `find_analogs` / `analog_forecast` (similarity-weighted per-node nowcast + analog-grounded direction-agreement) /
+  `score_headline_analogs`; endpoint `GET /api/news/geo/analogs`. On the real 206-event index it **independently
+  corroborates the Sprint-4b 5d crude-flat reversal** (nearest Hormuz-closure analogs agree ≈0–25% @5d). +11
+  hermetic tests → **253 pass**. Next: the dashboard geo-map/node-impact table consuming it. Prior same day:
+  **Sprint 4b — LLM geo-extraction re-grade**: ran a **free LLM** (`openai/gpt-oss-120b` on Groq —
+  routed around the token-capped 70b; 8b too weak) over the GDELT corpus to fix the keyword fallback's
+  closure-vs-reopen polarity error. It **2.3×'d the gradeable sample (events 30→68)** and **flipped crude-flat
+  from noise to a measured edge: `brent_flat` +1d hit 0.60 (n=203, p=0.007) + beta t=3.59, `brent_structure`
+  beta t=4.27** — chokepoint disruption lifts crude flat + backwardation next-day, correctly signed now that
+  reopens type as `restart`. The original **`ho_crack` distillate-crack edge survives + strengthens (+5d 0.66,
+  n=149, p≈0)**, while crude-flat **reverses by +5d (0.39, p=0.008)** — a real horizon structure (day-1 spike
+  mean-reverts; physical distillate tightness persists). Caveats: single episode (2026 Hormuz war), clustered/
+  overlapping events inflate p (read direction+pattern, not exact p), tape ends 2026-05-24. Fixed two latent
+  bugs (cache no longer persists rate-limited fallbacks; `annotate_impact` honours explicit `cached={}`). No
+  paid Claude. 242 tests pass. Prior same effort: **Sprint 4 — GDELT corpus + ACLED feed → a MEASURED edge**.
+  A desk-supplied **GDELT oil-news corpus** (3,564 headlines,
   2026-03→06, the Iran/Hormuz war) finally gives the per-node event study a price-covered, geo-dense sample:
   `geo/datasets.py` ingests it → **30 gradeable events / 216 node-claims** (was 5/22) over 2026-03-30→05-23.
   **Graded verdict — a real, significant edge:** chokepoint disruption → **ULSD/distillate crack (`ho_crack`) UP
@@ -658,6 +710,279 @@ regime_conditioning,release_reaction}.py`, `/api/regime/inventory[?series=][/rea
   panel anchors today's prediction on the **API −0.765M as a proxy** for the EIA actual — re-anchor on the real
   printed EIA number for an exact grade.
 
+### ✅ Geo news-impact engine — Sprint 11: ACLED conflict-regime slice axis + rbob_crack scope (2026-06-30)
+Branch `phase4-live-feature-overlay` (not merged to main). Adds the conflict-intensity conditioning axis to the
+event study (the last analytical-depth item) and honestly scopes the `rbob_crack` certification as **data-bound**.
+- **New conditioning axis.** `event_study_geo.build_event_panel` now tags every event with the **causal ACLED bloc
+  conflict regime** as-of its month (new `_event_conflict_level` — `conflict.conflict_regime("BLOC", asof=…)`,
+  memoised per year-month so the CSV is read once per distinct month; None when ACLED is absent / UNKNOWN).
+  `node_hit_table` emits a new **`node×conflict`** slice (every row also carries a `conflict` field, `*` = not
+  conditioned) → directly answers "does the geo edge strengthen in HIGH-conflict months?". `compute_and_cache` records
+  the conflict-level distribution (`conflict_levels`, `n_events_no_conflict`) so the coverage is visible in the map.
+- **`annotate_impact` is untouched in behaviour** — it now **skips** `conflict != "*"` rows, so the conflict axis is
+  **descriptive only** and never drives the live prior-then-learn tag (we don't condition the live impact on ACLED).
+  A pre-Sprint-11 cache (rows without a `conflict` key) still works (`.get("conflict","*")` defaults to `*`).
+- **Graded verdict (honest, data-bound): the axis is DEGENERATE on this corpus, so the strengthening question can't be
+  answered yet.** Re-grade: all **112 war events map to a single ACLED level (`LOW`)** — because **ACLED ends 2025-06**
+  and the gradeable events are all 2026-03→06, so every event's causal as-of read returns the one stale 2025-06 bloc
+  value. The `node×conflict` slices therefore just **mirror the pooled rows** (e.g. `wti_brent/*/*/LOW` 0.57 n=284 =
+  `wti_brent/*/*` 0.57 n=284; `ho_crack .../LOW` 0.56; `regrade .../LOW` 0.80 EDGE) — zero discrimination. **The
+  machinery is proven on synthetic data** (a HIGH-conflict edge of 0.8 vs a NORMAL coin flip is correctly split), but
+  the real test needs **ACLED coverage through the 2026 episode** — more data, not code.
+- **`rbob_crack` certification — scoped, deferred (more-data-not-code).** Still a labelled **prior** (refinery outage →
+  gasoline crack 86–92% @1d but **n=14 < MIN_N=20**, single episode). Certifying it (and adding an **RBOB M1-M2**
+  gasoline-curve node) is **not a code gap** — `rbob_crack` is already priceable (Sprint 6 OHLCV feed) and graded
+  (Sprint 7 registry bias); it needs a **thicker, cross-episode refinery sample** (broaden the GDELT corpus beyond the
+  single 2026 war, or a price-covered backfill of past refinery outages) so the n clears the bar across independent
+  episodes. Flagged as the standing data unlock, not a build task.
+- **Tests:** +4 hermetic (`tests/test_geo_event_study.py` — `node×conflict` slice flags a synthetic strengthening
+  edge [HIGH 0.8 sig vs NORMAL coin-flip], `annotate_impact` ignores conflict-conditioned rows, `build_event_panel`
+  tags the conflict regime via a monkeypatched `conflict` module, and yields `None` + no conflict axis without ACLED).
+  **284 pass** (was 280). Re-grade: `python backend/research/news_impact/geo/event_study_geo.py`.
+- **Next:** the geo roadmap's planned sprints are complete; remaining unlocks are **data, not code** — ACLED through
+  the episode (to make the conflict axis live) + a cross-episode refinery corpus (to certify `rbob_crack`).
+
+### ✅ Geo news-impact engine — Sprint 10: LLM-narrated RAG desk note (2026-06-30)
+Branch `phase4-live-feature-overlay` (not merged to main). The analogs were structured/numeric (retrieval, no
+generation step) — this adds the **generative** "RAG" piece: a 2-3 sentence desk note, grounded ONLY in the
+retrieved analogs + the graded edge map.
+- **New `analogs.narrate(result, *, horizon=, provider=, llm_fn=)`.** It first builds an **exact-number evidence
+  block** from the analog forecast (`_evidence` → per-node `mean Δ`, `analog_agree`, `n`, sorted EDGE-first; EDGE
+  flags via `event_study_geo.annotate_impact` across both horizons) — so **no path can invent a figure**. Then it
+  either (a) asks **free Groq** (`openai/gpt-oss-120b`, text completion) to *phrase that block* under a strict system
+  prompt ("use ONLY the facts and numbers given — never invent, never re-round"), or (b) falls back to a
+  **deterministic template** built from the same numbers. `provider="template"` forces the rule-based note; an
+  injectable `llm_fn(system,user)` makes it testable / provider-agnostic. **No key + no llm_fn → degrades to the
+  template** (the desk always gets a grounded note). The note names the read to **trust** (high agreement / EDGE)
+  and the one to **fade** (agreement <50% = the analogs reversed it) + the single-episode caveat.
+- **Surfaced:** `GET /api/news/geo/analogs?narrate=1` attaches a `narration` block (`{available, source, note,
+  horizon, evidence}`); `api.newsGeoAnalogs(title,k,horizon,narrate)`. **`GeoAnalogPanel`** now requests `narrate=1`
+  and renders a gold **"Desk note"** card above the per-node table with a `Groq`/`rule-based` source chip.
+- **Verified (Flask test client, real index):** "Iran closes the Strait of Hormuz" → *"5 past chokepoint/closure
+  analog(s), closest similarity 1.00. They moved WTI–Brent +1.01 over 5d, agreeing 60% (n=5) (certified EDGE) —
+  trust this read. ULSD crack reversed (0% agreement, n=5) — fade it. Single-episode evidence …"* (source `template`,
+  no key in that shell) — every number traces to the evidence block.
+- **Tests:** +6 hermetic (`tests/test_geo_analogs.py` — template is grounded [quotes real `n=`], injected-LLM is fed
+  the exact-number facts + the no-invent instruction, **degrades to template with no Groq**, graded EDGE flows into
+  the evidence, unavailable-result + no-analog-rows are graceful; monkeypatched `load_cached` + injected `llm_fn`, no
+  network/Groq/Data). **280 pass** (was 274). `tsc` clean (only the pre-existing TS5101); `npm run build` clean.
+- **Next:** Sprint 11 — condition the event study on the **ACLED conflict regime** + certify `rbob_crack` (needs a
+  thicker cross-episode refinery sample — more data, not code).
+
+### ✅ Geo news-impact engine — Sprint 9: geo-map visualization (2026-06-30)
+Branch `phase4-live-feature-overlay` (not merged to main). Puts the registry on a **map** — the assets the engine
+reasons about, where they physically are, lit by live geo-alert activity.
+- **No heavy new dep.** The bundle has no map lib (only `recharts`/`lightweight-charts`), so the map is a hand-rolled
+  **SVG equirectangular world** — new `frontend/src/lib/worldOutline.ts` (coarse continent silhouettes as lon/lat
+  rings + a `projectLonLat` / `continentPaths` projection into a 720×360 viewBox; precision isn't the point — assets
+  plot at their exact registry lat/lon, the land is a faint backdrop). Bundle 1,295 → **1,304 kB JS** (+9 kB, no dep).
+- **New backend `live.map_assets(store_path=)` + `GET /api/news/geo/map`.** Joins every **placeable** registry asset
+  (drops the 4 GLOBAL generics at 0,0 → **37 plotted**) with its static facts + `disruption_bias` prior + **live
+  activity** tallied from the Sprint-8 `geo_live_events.json` store (`_activity_index`: per-asset event count, peak
+  conviction, any-EDGE flag, newest ts, ≤4 headlines). Registry stays the single source of truth for coords + priors;
+  activity is the live overlay. `api.newsGeoMap`.
+- **Dashboard — `GeoMapPanel.tsx`** (top of the News tab, under the live-alerts strip). Plots the 37 assets; each dot
+  is **sized by live event count** and **coloured by activity** (muted by asset-type when quiet → amber when active →
+  **gold when EDGE-tagged**), inactive dots painted under active ones, native `<title>` hover. **Clicking an asset**
+  selects it → a detail card (capacity/carries/note + the `disruption_bias` node arrows + its recent live alerts) **and
+  pre-fills the `GeoAnalogPanel` lookup** (lifted `analogPrefill` state in `NewsView`; a clicked asset hands over its
+  newest live headline, or a synthetic alias-resolvable disruption headline when it has none, and `GeoAnalogPanel`'s
+  new `prefill` prop runs the analog query). Legend + click hint included.
+- **Verified (Flask test client):** `/api/news/geo/map` → 200, `count:37 active:0` on this machine (no live store),
+  Hormuz at **26.57/56.25** with `disruption_bias.brent_flat:2`. Activity overlay exercised by the hermetic store test.
+- **Tests:** +4 hermetic (`tests/test_geo_map.py` — generic/unplaceable exclusion, coords+bias for a known asset,
+  activity tally [count/peak-conviction/any-EDGE/newest-ts], headline cap; synthetic on-disk store, no network/Groq/
+  Data). **274 pass** (was 270). `tsc` clean (only the pre-existing TS5101 `baseUrl` deprecation); `npm run build` clean.
+- **Next:** Sprint 10 LLM-narrated RAG desk note (free-Groq `analogs.narrate`), Sprint 11 ACLED conditioning + certify
+  `rbob_crack` (needs a thicker cross-episode refinery sample — more data, not code).
+
+### ✅ Geo news-impact engine — Sprint 8: live scheduler wiring + geo alerts (2026-06-30)
+Branch `phase4-live-feature-overlay` (not merged to main). Turns the corpus-only study into a **live** analysis
+engine (the mentor's standing directive) — TODAY's wire is scored into geo events in real time.
+- **New `backend/research/news_impact/geo/live.py`.** `ingest_wire(articles, *, extract_fn=, regime=, max_new=,
+  store_path=)` is the geospatial twin of `app._news_corpus_ingest`: it takes the already-cached `/api/news` wire,
+  keeps only **geo candidates** (`extract.is_geo_candidate` prefilter, so the free-Groq token budget is spent only on
+  geo headlines), scores each via **`extract.extract_cached`** (the LLM-extraction cache is reused with the desk
+  re-grade, and its **"never cache a fallback" guard is left untouched** — we call it unchanged) → `impact_map.
+  headline_impact` (signed node vector) → `event_study_geo.annotate_impact` (EDGE/prior tags). Edges are **merged
+  across +1d and +5d** (preferring a tradeable 5d slice — the geo edges live at +5d: chokepoint → `wti_brent`/
+  `ho_crack`; with `regrade` at +1d), so a Hormuz closure surfaces its certified 5d EDGE nodes. Persisted to an
+  **accumulating JSON store** (`geo_live_events.json`, deduped by title hash, capped 200, newest-first). `recent_events
+  (limit)` ranks by **|conviction| × tradeable** then recency. Only headlines that resolve to a non-empty node vector
+  are stored (a headline naming no asset / no throughput event is not an alert). Standalone:
+  `python backend/research/news_impact/geo/live.py`.
+- **Scheduler + endpoint.** New `_geo_news_ingest` job in `app.py` (every `TTL_NEWS`, kicked +3 min after boot,
+  opt-out `PULSE_GEO_DISABLED=1`; also fired on the manual `POST /api/news/refresh`). New **`GET /api/news/geo/live?
+  limit=`** → recent live-scored geo events ranked by conviction × tradeable + a single-episode caveat. `api.newsGeoLive`.
+- **Dashboard — `GeoLiveAlertsPanel.tsx`** at the **top of the News tab** (above the Live Headlines strip): each
+  alert shows the publication time, an `asset_type/event_type` chip, the headline (links out when a url exists), the
+  strongest 4 **node arrows** (↑↑/↑/↓/↓↓, bull/bear-toned, gold-ringed when that node is a certified EDGE), and an
+  `edge`/`prior` tag — reusing the Panel freshness/error chips. Empty-state copy when the ingest job hasn't ticked yet.
+- **Verified end-to-end (Flask test client + standalone):** Hormuz closure → `chokepoint/closure`, nodes brent_flat↑↑
+  / wti_brent↓ / brent_structure↑↑, **EDGE @5d on `wti_brent` + `ho_crack`**; Aramco drone strike → `field/attack`;
+  re-running the same wire adds 0 (dedup); a non-geo headline ("Apple unveils iPhone") never reaches the extractor.
+- **Tests:** +7 hermetic (`tests/test_geo_live.py` — geo-candidate prefilter scores+skips, extractor-not-called with
+  no candidates, no-node-vector-not-persisted, dedup-scores-once, ranking by conviction×tradeable, prior-tag without
+  an edge map, store cap; monkeypatched wire + extractor, no network/Groq/`/Data`). **270 pass** (was 263).
+  `tsc --noEmit` clean (only the pre-existing TS5101 `baseUrl` deprecation); `npm run build` clean (1,295 kB JS).
+- **Next:** Sprint 9 geo-map (registry lat/lon on the News tab), Sprint 10 LLM-narrated RAG desk note, Sprint 11
+  ACLED conditioning + certify `rbob_crack` (needs a thicker, cross-episode refinery sample — more data, not code).
+
+### ✅ Geo news-impact engine — Sprint 7: rbob_crack graded + dashboard geo panels (2026-06-30)
+Branch `phase4-live-feature-overlay` (not merged to main). Closes the products-feed payoff and puts the geo
+engine on the dashboard.
+- **`rbob_crack` is now GRADED (not just priceable).** Added `rbob_crack` to the registry node vocabulary
+  (`registry.NODES`) and a positive gasoline-crack `disruption_bias` to the assets that actually drive it — US
+  refineries **+2** / non-US **+1** (the `_ref` template), **Colonial** (the literal US gasoline pipeline) **+2**,
+  and `generic_refinery` / `generic_product_pipeline` **+1**. `impact_map` iterates `disruption_bias`, so it now
+  emits `rbob_crack` automatically; the re-grade claims it. **Verdict (honest prior-then-learn):** refinery outage
+  → **gasoline crack UP, hit 86–92% @1d** (rbob_crack/refinery 0.92 n=12; rbob_crack/* 0.86 n=14) — economically
+  dead-on and the right sign — **but n=14 < MIN_N=20, so it stays a labelled PRIOR, not a certified EDGE.** The
+  products feed made gasoline-crack reactions *measurable*; the single 2026 episode is just too thin (few refinery
+  events) to certify yet. claims 1,400 → **1,414**.
+- **Dashboard — two geo panels on the News tab.** New endpoint **`GET /api/news/geo`** (serves the cached per-node
+  edge map + node catalog + analog-index size; loose-jsonify like `/api/news/live`) and `api.newsGeo` /
+  `api.newsGeoAnalogs`. **`GeoImpactPanel.tsx`** — the node-impact edge table: per price node, the +1d/+5d
+  directional hit-rate (tone-coded, `e` EDGE chip when binomial-significant) + the measured 5d beta (`*`), over the
+  graded study. **`GeoAnalogPanel.tsx`** — paste/click a headline → calls `/api/news/geo/analogs` → shows the
+  query's resolved asset/event, a similarity-weighted **per-node +5d nowcast** (mean Δ + analog-agreement %), and
+  the **nearest past analogs** (cosine + asset/event + date + title); 3 example headlines as quick-fill chips.
+  Wired into `NewsView` (responsive 2-col). `npm run build` clean (1,291 kB JS), `tsc` clean (only the pre-existing
+  TS5101 `baseUrl` deprecation).
+- **Tests:** +1 (`test_registry_grades_rbob_crack` — node in vocab, US-refinery bias > 0, impact_map emits it,
+  restart flips it negative); registry/impact-map suites still green (they assert sign-correctness, not exact
+  dicts). **263 pass** (was 262). Endpoints verified via the Flask test client (geo: 112 events / 1,414 claims /
+  index 312 / rbob_crack in the 5d slices; analogs: refinery/strike resolves + matches).
+- **Next:** a gasoline-curve node (RBOB M1-M2) + thicker refinery sample to certify the rbob_crack edge; an actual
+  geo-MAP (lat/lon from the registry) on the dashboard; condition the study on the ACLED conflict regime; push the
+  OHLCV tail-extension into the live regime engine (currently desk runs on the daily settle tape ending 05-26).
+
+### ✅ Geo news-impact engine — Sprint 6: products OHLCV feed → rbob_crack + June war now gradeable (2026-06-30)
+Branch `phase4-live-feature-overlay` (not merged to main). A desk-supplied **hourly OHLCV** feed landed on the
+share — `I:\Public\Summer Interns Energy\OHLCV` (override `PULSE_OHLCV_DIR`) — continuous contracts c1..c12 for
+**RBOB / HO / LGO / LCO / CL**. Two real unlocks, both wired in.
+- **New `backend/research/news_impact/geo/products_feed.py`.** Loads the hourly CSVs → daily settle frames
+  (`daily_curve` = last hourly `Last` per UTC date, the same session-end proxy as the synth crude settles);
+  `daily_settles()` returns every product's c1..c12 daily frame. **Coverage:** RBOB is full history **2019-01 →
+  2026-06-26** (the gasoline curve the lake never had); HO/LGO/LCO/CL are **2026-04-30 → 2026-06-26** (~50 days,
+  but critically *past* the lake's last settle 2026-05-26). **Bug fixed at birth:** passing `index=ts` while the
+  column Series still carried their 0..N integer index made pandas align on mismatched labels → every row NaN →
+  silent empty frame; fixed by building columns from `.to_numpy()`.
+- **`rbob_crack` is now a REAL node (was a declared GAP).** `compute_nodes` gained an optional `rbob` arg →
+  `rbob_crack = RBOB×42 − WTI` (catalog flipped `gap`→`feed`/available, ESTIMATE since the settle is a session-end
+  proxy). Merged-panel median **+$22.7/bbl** (plausible US gasoline crack). **`build_node_panel(use_products_feed=
+  True)`** now prefers real lake history and **appends only the feed's post-05-26 tail** (`_combine_tail`), so the
+  daily node panel **extends to 2026-06-26** — finally price-covering the **June Iran/Hormuz war**, the #1 blocker
+  the prior sprints kept flagging.
+- **Re-grade on the June-extended tape — the bigger sample sharpens the honest story.** Events **68 → 112**,
+  node-claims 879 → **1,400** (2026-03-30→06-23; asset mix chokepoint 95 / producer 35 / refinery 13). The
+  durable, economically-coherent **@5d** signals on the full war:
+  - **`wti_brent`/chokepoint 0.59 (n=229, p=0.008 EDGE)** — a Mideast chokepoint scare tightens **Brent relative
+    to WTI** (waterborne/Mideast-linked vs landlocked US), the predicted direction, over 5d. *New* this sprint.
+  - **`ho_crack`/chokepoint 0.57 (n=229, p=0.047 EDGE)** — the US distillate-crack edge **holds** on the bigger,
+    fuller sample (was 0.66 on n=149; hit-rate softer but still significant).
+  - **`brent_flat` REVERSES, now strongly: 0.40 (n=305, p=0.000)** — crude *flat* reliably mean-reverts 5d after a
+    chokepoint headline (the risk premium round-trips), `gasoil_crack` similarly 0.42 (p=0.008). Measured betas
+    @5d: `brent_structure` +0.190 t=3.24, `regrade` −0.99 t=−3.37 (n=20, thin).
+  - **The @1d crude-flat edge from Sprint 4b (0.60) washed out to a coin flip (0.51, n=307)** once June (the
+    de-escalation/price decline) is included — honest: the May-only intraday pop didn't survive the full episode;
+    only `gasoil_crack` keeps a measured @1d magnitude beta (+0.194 t=3.42). **Read: the robust geo reads are at
+    5d and in the STRUCTURAL nodes** (Brent-rel-WTI tightening + distillate firming + flat-price fade), not the
+    flat-price direction intraday.
+- **Honest caveats (now sharper):** still a **single episode** (2026 Hormuz war), and the 1,400 claims come from
+  112 clustered events with heavily overlapping forward windows → p-values are **very** optimistic; trust the
+  **direction + cross-node coherence**, not the exact p. `rbob_crack` is now priceable but **not yet graded** — the
+  registry `disruption_bias` covers the 7 canonical nodes only, so events don't claim it yet (add an `rbob_crack`
+  bias row to grade gasoline-crack reactions — clean next step). Daily settles are last-hourly-bar ESTIMATEs.
+- **Tests:** +9 hermetic (`tests/test_geo_products_feed.py` — hourly parse + the index-alignment regression guard,
+  last-bar-per-date settle, absent/unknown product, `_combine_tail` extends-only-after-lake-max + preserves overlap
+  + missing-side, `rbob_crack` conversion + needs-WTI, real-feed smoke skipif) + updated the node catalog test
+  (`rbob_crack` now available, `brent_dubai` stays the gap). **262 pass** (was 253). Standalone:
+  `python backend/research/news_impact/geo/products_feed.py`.
+- **Next:** add `rbob_crack` to the registry `disruption_bias` (grade gasoline cracks) + a gasoline-curve node
+  (RBOB M1-M2); the dashboard geo-map/node-impact table; the same OHLCV tail-extension could feed the live regime
+  engine past 2026-05-26 (currently the desk runs on the daily settle tape).
+
+### ✅ Geo news-impact engine — Sprint 5: RAG analogs ("this event ≈ these k past events") (2026-06-30)
+Branch `phase4-live-feature-overlay` (not merged to main). Where `event_study_geo` grades the AVERAGE reaction
+(per-node hit-rate + beta), this layer answers the desk's other question — *given THIS headline, what are the
+closest historical geo-events and what did each actually do to the price nodes?* New
+**`backend/research/news_impact/geo/analogs.py`**:
+- **RAG in the literal sense, but interpretable.** The "corpus" is the **graded event panel** (each past event
+  already carries its realised forward node moves); the retriever is a **structured nearest-neighbour**, not a
+  black-box embedding (consistent with the no-paid-embeddings stance — Anthropic has no embeddings endpoint).
+  `fingerprint(event) = [one-hot(asset_type) | one-hot(event_type) | L2-normalised signed conviction vector]`;
+  cosine similarity over the concat scores an analog high when it shares asset class + event verb + the
+  **directional** impact pattern, and an opposite event (a `restart` vs a `closure`) scores LOW because the
+  conviction block flips sign. Added a `title` column to `build_event_panel` so analogs cite the source headline.
+- **API.** `build_analog_index` (collapses the panel to one record per event, memoised via `get_index`),
+  `find_analogs(query, k)` (ranked analogs + each shared node's realised Δ + whether it agreed with the query's
+  predicted direction), `analog_forecast(query, k, horizon)` (similarity-weighted per-node nowcast: mean realised
+  Δ, mean vol-normalised Δ, and an **analog-grounded direction-agreement** — distinct from the regression beta,
+  this is retrieval not a fit), `score_headline_analogs(title)` (headline → extract → analogs, the live
+  entrypoint). New endpoint **`GET /api/news/geo/analogs?title=&k=&horizon=`** (loose-jsonify pattern like
+  `/api/news/live`; reuses the memoised index + cached extractions).
+- **Verified on the real index (206 graded geo-events).** "Iran closes Strait of Hormuz" → chokepoint/closure,
+  retrieves chokepoint analogs at cosine ≈1.0; "Drone strike at a Saudi refinery" → refinery/attack, retrieves
+  refinery attack/fire/outage analogs. **It independently corroborates the Sprint-4b 5d reversal:** for a Hormuz
+  closure the nearest analogs show `brent_flat` **agree≈0–25% @5d** (they mostly moved crude flat DOWN by day 5) —
+  the same horizon structure the event-study regression flagged, recovered by a completely different (retrieval)
+  method. Honest scope: the index is the single 2026-Hormuz episode, so analogs are within-episode (same caveat as
+  Sprint 4b); the agreement %/mean-move are descriptive retrieval stats, not a fitted edge.
+- **Tests:** +11 hermetic (`tests/test_geo_analogs.py` — fingerprint identical→cosine 1 / opposite-direction
+  scores lower / zero-vector safe; panel→event collapse; nearest-neighbour ranks same-kind top + opposite-direction
+  low; direction-agreement flags; weighted forecast aggregation + no-analog node; headline entrypoint via
+  monkeypatched extractor; non-geo unavailable; empty-index safe). Fixed the same falsy-empty trap as Sprint 4b
+  (`index or build_analog_index()` → `is None`, since `AnalogIndex.__len__` makes an empty index falsy). **253
+  tests pass** (was 242). Standalone: `python backend/research/news_impact/geo/analogs.py`.
+- **Next:** the **dashboard geo-map + node-impact table** (News tab) consuming `/api/news/geo/analogs` +
+  `/api/regime/inventory`-style edge surfaces — a self-contained UI sprint; optionally a typed Pydantic schema for
+  the analogs payload (currently loose-jsonify). Bigger result-unlock remains a price tape past 2026-05-24.
+
+### ✅ Geo news-impact engine — Sprint 4b: LLM geo-extraction re-grade (the polarity fix lands) (2026-06-30)
+Branch `phase4-live-feature-overlay` (not merged to main). Sprint 4's MEASURED edge was on the **keyword**
+fallback, which can't tell "Hormuz closes" from "Hormuz reopens" — so `brent_flat` was anti-signed and most
+slices were coin-flips. This session ran a **free LLM re-grade** over the GDELT corpus to fix the
+closure-vs-reopen event-polarity error, and it materially strengthened the result.
+- **Free-LLM routing around the Groq 70b cap.** 70b (`llama-3.3-70b-versatile`) was token-capped (99.7k/100k
+  TPD) and `llama-3.1-8b-instant` is too weak (it *nulls* reopen events instead of typing them `restart`, so
+  they'd just be dropped). Found **`openai/gpt-oss-120b`** (and `qwen/qwen3-32b`) on Groq match 70b on the
+  polarity test (closure↔restart↔opec_hike all correct, "drone strike"→attack) and have a **separate** free
+  daily budget → made it the default `extract.GROQ_MODEL`. **Fixed two latent bugs:** (1) `extract_cached` now
+  **only caches LLM-sourced records** (a rate-limited fallback is no longer persisted — last session's cache was
+  1,009 poisoned keyword rows that silently shadowed the LLM, producing byte-identical "re-grades"); (2)
+  `annotate_impact` now honours an **explicitly-passed `cached={}`** (was `cached or load_cached()`, so an empty
+  map silently reloaded the real edge file — exposed once a real `brent_flat` edge existed).
+- **Result: the LLM extraction 2.3× the gradeable sample AND flipped crude-flat from noise to a measured edge.**
+  Gradeable **events 30 → 68**, node-claims 216 → 879 (the LLM resolves far more headlines to asset+event than
+  keyword); event mix now carries the sign-flippers keyword conflated — 10 `restart` / 10 `closure` / 18
+  `blockage` / 8 `attack` / 8 `force_majeure` / 8 `sanction` / 2 `opec_hike`. The graded edge map (cached to
+  `geo_event_study.json`), 2026-03-30→05-24:
+  - **@1d (immediate reaction):** `brent_flat` **0.51 coin-flip → 0.60 hit (n=203, p=0.007 EDGE)**, **measured
+    beta +0.137 t=3.59**; `brent_structure` **measured beta +0.150 t=4.27** (the strongest). Chokepoint
+    disruption lifts crude flat + backwardation next-day — correctly signed now that closures vs reopens are
+    distinguished.
+  - **@5d (week-out):** the original **`ho_crack` (US distillate crack) edge SURVIVES and strengthens — 0.66
+    hit (n=149, p≈0.000 EDGE)** (was 0.69/n=35/p=0.017). BUT `brent_flat` **reverses to 0.39 (p=0.008,
+    anti-signed)** and `gasoil_crack` 0.40 (p=0.012) — the day-1 crude spike mean-reverts as the risk premium
+    bleeds off, while genuine physical tightness persists in the **US distillate crack** (rerouting/voyage
+    length keeps diesel bid). A real **horizon structure** the keyword pass was blind to: trade the crude-flat
+    +1d pop and fade it; hold the distillate crack for the week. `brent_structure` measured beta +0.191 t=2.14 @5d.
+- **Honest caveats (load-bearing):** (1) **single episode** — this is the 2026 Iran/Hormuz war, a *within-episode*
+  reaction study, not yet validated across independent chokepoint episodes; (2) **p-values are optimistic** — the
+  879 claims come from 68 clustered events with overlapping forward windows in one 2-month episode, so they are
+  not independent and the binomial test overstates significance → read the **direction + cross-node/horizon
+  pattern** (brent_flat↑@1d, ho_crack↑@5d, brent_flat reverses@5d) as the signal, not the exact p; (3) still
+  bounded by the price tape ending **2026-05-24** — the June war peak remains ungradeable (a refreshed `/Data`
+  feed is the #1 unlock, not more LLM). **No paid Claude used** (Groq free tier throughout; a Claude Max
+  *subscription* is chat/Claude-Code, not an API key, and can't clear the binding data blockers anyway).
+- **Tests:** 47 geo tests green (the `annotate_impact` fix kept `test_empty_inputs_dont_crash` honest); **242
+  pass** total. Re-run the grade: `python backend/research/news_impact/geo/event_study_geo.py` (uses the cached
+  LLM extractions; set `ANTHROPIC_API_KEY` to prefer Claude, else free Groq gpt-oss-120b).
+- **Next:** RAG geo-analogs (reuse `backend/rag/` — "this event ≈ these k past events that moved node X by Y%")
+  + dashboard geo-map/node-impact table + `/api/news/geo`; optionally condition on the ACLED conflict regime;
+  the bigger result-unlock is a price tape past 2026-05-24 (and a products feed for direct crack reactions).
+
 ### ✅ Geo news-impact engine — Sprint 4: GDELT corpus + ACLED feed → a MEASURED edge (2026-06-29)
 Branch `phase4-live-feature-overlay` (not merged to main). A friend/desk supplied four datasets; two are
 load-bearing and unblock Sprint 3's "not gradeable" verdict. Copied into `backend/data/research/news_impact/geo/`
@@ -1298,6 +1623,13 @@ Converted to `Data/parquet/` for DuckDB. Research caches (COT, FRED/external, cr
     turns off the scheduler jobs.
 16. **Contract ordinal mapping is by expiry, not month code** — Brent front is Q26, WTI front is N26 in the
     current feed (earlier months rolled off). `live_feed.list_contracts` sorts by decoded expiry so c1=front.
+17. **Products OHLCV feed** (`I:\Public\Summer Interns Energy\OHLCV`, override `PULSE_OHLCV_DIR`) — hourly
+    continuous contracts c1..c12 for RBOB/HO/LGO/LCO/CL, read by `geo/products_feed.py`. RBOB is 2019→2026 (the
+    gasoline curve → `rbob_crack`); HO/LGO/LCO/CL are only ~2026-04-30→06-26 but extend the node tape past the
+    lake's 2026-05-26 settle (`nodes.build_node_panel` appends only the post-lake tail). **Pandas gotcha when
+    parsing:** build the OHLCV columns from `.to_numpy()` before attaching the datetime index — passing
+    `index=ts` while the columns keep their 0..N integer index makes pandas align on mismatched labels and
+    silently NaN every row.
 
 **Deployment (Phase 3.D)**
 12. gunicorn MUST stay `--workers 1` (scheduler must be singular) and **no `--preload`** (APScheduler

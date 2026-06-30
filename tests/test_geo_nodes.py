@@ -65,8 +65,9 @@ def test_catalog_available_and_gaps_are_disjoint_and_documented():
     assert not (avail & gaps)
     for g in gaps:
         assert nodes.NODES[g].get("gap_reason"), f"{g} gap must state a reason"
-    # gaps the plan explicitly flagged
-    assert {"rbob_crack", "brent_dubai"} <= gaps
+    # brent_dubai stays a gap (no sour feed); rbob_crack is now REAL (OHLCV feed)
+    assert "brent_dubai" in gaps
+    assert "rbob_crack" in avail
 
 
 def test_real_data_panel_plausible_when_lake_present():
