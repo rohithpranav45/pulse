@@ -18,12 +18,21 @@ type Scenario = {
   expected_brent_move_pct: number; glut_regime_move_pct: number;
   direction: string; conviction: string;
 };
+type HistAccuracy = {
+  regime: string | null; hit: number | null; n: number; p?: number;
+  significant: boolean; tradeable: boolean; size?: string; basis: string;
+} | null;
+type BestSeriesNow = {
+  recommended_series: string | null; recommended_hit: number | null;
+  recommended_regime: string | null; note: string;
+} | null;
 type Call = {
   week_ending?: string; release_date?: string; release_day_name?: string;
   actual_change_mbbl: number; surprise_mbbl: number; surprise_z: number;
   surprise_source: string; surprise_std_mbbl?: number;
   call: 'BULLISH' | 'BEARISH' | 'NEUTRAL'; p_bullish: number; p_bearish: number;
   confidence: 'HIGH' | 'MEDIUM' | 'LOW'; expected_brent_move_pct: number;
+  tradeable?: boolean; historical_accuracy?: HistAccuracy; best_series_now?: BestSeriesNow;
   regime: { regime_label: string; inv_vs_5yr_pct: number | null; sensitivity: string; applicable_beta: Beta };
   regime_sensitive: boolean; regime_beta_pct_per_sigma?: number; regime_t?: number;
   quality_of_draw: number | null;
@@ -31,9 +40,14 @@ type Call = {
   scenario_tree?: Scenario[];
   top_factors: string[];
 };
+const SERIES_LABEL_SHORT: Record<string, string> = {
+  crude_ex_spr: 'Crude', gasoline: 'Gasoline', distillate: 'Distillate',
+};
 type NextRelease = {
   week_ending: string; release_date: string; release_day_name: string;
   iso_week: number; seasonal_expected_change_mbbl: number | null;
+  api_nowcast_mbbl?: number | null; blended_nowcast_mbbl?: number | null;
+  api_nowcast?: { api_release_date?: string } | null; nowcast_note?: string;
 };
 type Inventory = {
   available: boolean; error?: string; call?: Call; next_release?: NextRelease;
@@ -44,6 +58,83 @@ const tone = (c: string) => (c === 'BULLISH' ? 'bull' : c === 'BEARISH' ? 'bear'
 const mm = (v: number | null | undefined) =>
   v == null ? '—' : `${v > 0 ? '+' : ''}${(v / 1000).toFixed(1)} MMbbl`;
 
+const SPREAD_LABEL: Record<string, string> = {
+  wti_flat: 'WTI flat', brent_flat: 'Brent flat',
+  wti_brent: 'WTI–Brent', wti_m1_m2: 'WTI M1–M2',
+};
+
+// WTI vs Brent reaction + per-spread impact. Crude inventories are US data → WTI
+// is the affected benchmark (Brent barely reacts); the spread impacts are the
+// event-study betas × today's surprise.
+function PriceReaction({ live }: { live: any }) {
+  const pr = live?.price_reaction;
+  // flats are shown (regime-gated, correct sign) in the WTI/Brent cards below; the
+  // spread-impact table is for the actual spreads only.
+  const impacts: any[] = (live?.spread_impacts ?? []).filter((s: any) => !String(s.instrument).endsWith('_flat'));
+  if (!pr?.wti && !impacts.length) return null;
+  // the DIRECTIONAL point estimate (always shown); confidence comes from the t-stat
+  const pointTxt = (p: any) =>
+    !p || p.point_move_pct == null ? '—' : `${p.point_move_pct > 0 ? '+' : ''}${p.point_move_pct.toFixed(2)}%`;
+  const moveTone = (p: any) =>
+    !p ? 'text-text-muted' : (p.point_move_pct ?? 0) > 0 ? 'text-bull' : (p.point_move_pct ?? 0) < 0 ? 'text-bear' : 'text-text-muted';
+  return (
+    <div className="rounded-lg border border-border/50 bg-bg-card/30 p-3 mb-4">
+      <div className="text-[10px] font-mono uppercase tracking-[0.15em] text-text-tertiary mb-2">
+        Price reaction to the surprise · <span className="text-gold">WTI</span> is the affected benchmark (US crude) · Brent barely reacts
+      </div>
+      {pr?.wti && (
+        <div className="grid grid-cols-2 gap-3 mb-3">
+          {[['WTI', pr.wti], ['Brent', pr.brent]].map(([lab, p]: any) => (
+            <div key={lab} className={clsx('rounded border px-2.5 py-1.5',
+              lab === 'WTI' ? 'border-gold/40 bg-gold/5' : 'border-border/40')}>
+              <div className="flex items-baseline justify-between">
+                <span className="text-[12px] font-mono font-bold">{lab}</span>
+                <span className={clsx('text-[14px] font-mono font-bold tabular', moveTone(p))}>{pointTxt(p)}</span>
+              </div>
+              <div className="flex items-center justify-between mt-0.5">
+                <span className={clsx('text-[8.5px] font-mono uppercase tracking-wider px-1 rounded',
+                  p?.sensitive ? 'text-bull bg-bull/10' : 'text-text-muted bg-bg-card/60')}>
+                  {p?.sensitive ? 'directional signal' : 'low conf · not a catalyst'}
+                </span>
+                <span className="text-[8.5px] font-mono text-text-muted">
+                  β{Number(p?.beta_pct_per_sigma ?? 0).toFixed(3)}/σ t={p?.t}{p?.day_range_pct != null ? ` · day ±${p.day_range_pct}%` : ''}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {impacts.length > 0 && (
+        <>
+          <div className="text-[9.5px] font-mono uppercase tracking-wide text-text-muted mb-1">
+            Spread impact · expected move per the current surprise (z={live.surprise_z})
+          </div>
+          <div className="space-y-0.5">
+            {impacts.map((s) => (
+              <div key={s.instrument} className="grid grid-cols-[1fr_auto_64px] gap-2 items-center text-[10.5px] font-mono tabular">
+                <span className={clsx(s.instrument === 'brent_flat' ? 'text-text-muted' : 'text-text-secondary')}>
+                  {SPREAD_LABEL[s.instrument] ?? s.instrument}
+                </span>
+                <span className="text-[9px] text-text-muted">β {Number(s.beta_per_sigma).toFixed(4)}/σ · t={s.t}</span>
+                <span className={clsx('text-right font-bold',
+                  s.expected_move > 0 ? 'text-bull' : s.expected_move < 0 ? 'text-bear' : 'text-text-muted')}>
+                  {s.expected_move >= 0 ? '+' : ''}{Number(s.expected_move).toFixed(3)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+      <div className="mt-1.5 text-[9.5px] font-mono text-text-muted leading-snug">
+        These are the directional point estimates from the <span className="text-text-secondary">surprise alone</span> — not a
+        forecast of the total move. <span className="text-text-muted">"low conf"</span> means the inventory print isn't a reliable
+        directional catalyst in this regime (t&lt;2): price still moves ~<span className="text-text-secondary">±{pr?.wti?.day_range_pct ?? pr?.brent?.day_range_pct ?? '0.8'}%</span> on
+        the day, just driven by other factors (geopolitics, macro), not the number. WTI reacts ~17× Brent (US data).
+      </div>
+    </div>
+  );
+}
+
 function DeliverableTag({ n, label }: { n: number; label: string }) {
   return (
     <div className="flex items-center gap-1.5 mb-1.5">
@@ -53,9 +144,9 @@ function DeliverableTag({ n, label }: { n: number; label: string }) {
   );
 }
 
-export function InventoryImpactPanel() {
+export function InventoryImpactPanel({ series = 'crude_ex_spr' }: { series?: string }) {
   const { data, lastUpdated, error } = usePolling<Inventory>(
-    () => api.regimeInventory() as Promise<Inventory>, 600_000,
+    () => api.regimeInventory(series) as Promise<Inventory>, 600_000, [series],
   );
   // consensus calculator (manual override)
   const [actualIn, setActualIn] = useState('');
@@ -71,6 +162,7 @@ export function InventoryImpactPanel() {
       const r = await api.regimeInventoryLive(
         actualIn === '' ? undefined : Number(actualIn) * 1000,
         consensusIn === '' ? undefined : Number(consensusIn) * 1000,
+        series,
       ) as Inventory;
       if (r?.call) setOverride(r.call);
     } finally { setBusy(false); }
@@ -105,13 +197,55 @@ export function InventoryImpactPanel() {
 
   return (
     <Panel
-      title="Inventory Impact · EIA crude release — the call"
+      title={`Inventory Impact · EIA ${(data as any)?.series_label ?? 'crude'} release — the call`}
       subtitle={nr
         ? `next release: week ending ${nr.week_ending} · out ${nr.release_day_name} ${nr.release_date} · ${data.n_releases} releases backtested`
         : `${data.n_releases} releases backtested`}
       accent="gold" source="inventory_impact" staticMount
       lastSuccess={lastUpdated} fetchError={error}
     >
+      {/* ── TRACK RECORD + redirect (the honest accuracy fix) ──────── */}
+      {live.historical_accuracy && (() => {
+        const h = live.historical_accuracy!;
+        const bs = live.best_series_now;
+        const hitPct = h.hit != null ? Math.round(h.hit * 100) : null;
+        const redirect = bs?.recommended_series && bs.recommended_series !== series;
+        return (
+          <div className={clsx('rounded-lg border p-3 mb-4',
+            h.tradeable ? 'border-bull/40 bg-bull/5' : 'border-neut/40 bg-neut/[0.06]')}>
+            <div className="flex items-baseline justify-between flex-wrap gap-2">
+              <div className="text-[10px] font-mono uppercase tracking-[0.15em] text-text-tertiary">
+                Track record · this {SERIES_LABEL_SHORT[series] ?? series} call, this regime
+              </div>
+              <span className={clsx('text-[9.5px] font-mono font-bold px-2 py-0.5 rounded border',
+                h.tradeable ? 'text-bull border-bull/40 bg-bull/10' : 'text-neut border-neut/40 bg-neut/10')}>
+                {h.tradeable ? '✓ TRADEABLE' : '⊘ COIN FLIP — ABSTAIN ON FLAT'}
+              </span>
+            </div>
+            <div className="flex items-baseline gap-3 mt-1.5 flex-wrap">
+              <span className={clsx('text-2xl font-display font-extrabold leading-none',
+                h.tradeable ? 'text-bull' : 'text-neut')}>
+                {hitPct != null ? `${hitPct}%` : '—'}
+              </span>
+              <span className="text-[10.5px] font-mono text-text-tertiary">
+                directional hit-rate in <span className="text-text-secondary">{h.regime ?? 'this regime'}</span>
+                {h.size ? ` · ${h.size}` : ''} · n={h.n}{h.p != null ? ` · p=${h.p}` : ''}
+              </span>
+            </div>
+            <div className="text-[9.5px] font-mono text-text-muted leading-snug mt-1">{h.basis}</div>
+            {/* redirect to the series with the proven edge today */}
+            {bs?.recommended_series && (
+              <div className={clsx('mt-2 rounded border px-2.5 py-1.5 text-[10px] font-mono leading-snug',
+                redirect ? 'border-gold/40 bg-gold/[0.07] text-text-secondary' : 'border-border/40 text-text-tertiary')}>
+                {redirect
+                  ? <>↪ <span className="text-gold font-bold">Trade {SERIES_LABEL_SHORT[bs.recommended_series] ?? bs.recommended_series} today</span> — it carries the proven edge ({bs.recommended_hit != null ? `${Math.round(bs.recommended_hit * 100)}%` : '—'} in {bs.recommended_regime}). {bs.note}</>
+                  : <>{bs.note}</>}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       {/* ── HERO ───────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-4">
         {/* DELIVERABLE 1 — expectation */}
@@ -128,7 +262,19 @@ export function InventoryImpactPanel() {
           <div className="grid grid-cols-3 gap-2 mt-2 text-[10.5px] font-mono">
             <div><div className="text-text-muted">confidence</div><div className="text-text-secondary font-bold">{live.confidence}</div></div>
             <div><div className="text-text-muted">P(bull/bear)</div><div className="text-text-secondary">{live.p_bullish.toFixed(2)} / {live.p_bearish.toFixed(2)}</div></div>
-            <div><div className="text-text-muted">exp. move</div><div className={live.regime_sensitive ? 'text-text-secondary' : 'text-text-muted'}>{live.regime_sensitive ? `${live.expected_brent_move_pct > 0 ? '+' : ''}${live.expected_brent_move_pct.toFixed(2)}%` : '≈0'}</div></div>
+            {(() => {
+              const wti = (live as any).price_reaction?.wti;
+              const mv = wti ? wti.point_move_pct : live.expected_brent_move_pct;
+              const sens = wti ? wti.sensitive : live.regime_sensitive;
+              return (
+                <div><div className="text-text-muted">est. {wti ? 'WTI' : 'Brent'}</div>
+                  <div className={clsx(sens ? 'text-text-secondary' : 'text-text-muted',
+                    (mv ?? 0) > 0 ? 'text-bull' : (mv ?? 0) < 0 ? 'text-bear' : '')}
+                    title={sens ? 'directional signal (significant)' : 'point estimate — low confidence, not a reliable catalyst'}>
+                    {mv == null ? '—' : `${mv > 0 ? '+' : ''}${mv.toFixed(2)}%`}{!sens && '*'}
+                  </div></div>
+              );
+            })()}
           </div>
         </div>
         {/* regime gate — the why */}
@@ -173,6 +319,27 @@ export function InventoryImpactPanel() {
           </ol>
         </div>
       </div>
+
+      {/* ── PRICE REACTION · WTI vs Brent + per-spread impact ──────── */}
+      <PriceReaction live={live as any} />
+
+      {/* ── API leading-indicator nowcast (pre-release) ──────────── */}
+      {nr?.api_nowcast_mbbl != null && (
+        <div className="rounded-lg border border-blue/30 bg-blue/[0.06] p-3 mb-4">
+          <div className="text-[10px] font-mono uppercase tracking-[0.15em] text-blue mb-1.5">
+            Pre-release nowcast · API crude leading indicator (Tue)
+          </div>
+          <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-[11px] font-mono">
+            <span className="text-text-tertiary">API actual{nr.api_nowcast?.api_release_date ? ` (${nr.api_nowcast.api_release_date})` : ''}:{' '}
+              <span className="text-text-primary font-bold">{mm(nr.api_nowcast_mbbl)}</span></span>
+            <span className="text-text-tertiary">seasonal: <span className="text-text-secondary">{mm(nr.seasonal_expected_change_mbbl)}</span></span>
+            <span className="text-text-tertiary">blended nowcast: <span className="text-blue font-bold">{mm(nr.blended_nowcast_mbbl)}</span></span>
+          </div>
+          <div className="mt-1.5 text-[9.5px] font-mono text-text-muted leading-snug">
+            {nr.nowcast_note ?? 'API crude (Tue) front-runs the EIA by ~1 day (corr 0.77 w/ the EIA actual, 2019+). A pre-release input — not the EIA number; the real consensus arrives Wednesday.'}
+          </div>
+        </div>
+      )}
 
       {/* ── consensus calculator ───────────────────────────────── */}
       <div className="rounded-lg border border-gold/30 bg-gold/5 p-3 mb-4">

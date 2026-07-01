@@ -1,0 +1,23 @@
+# Treat binary assets as binary — never apply text/EOL (autocrlf) normalization.
+# Without this, git's smudge filter silently corrupts pulse_cache.db on checkout
+# (the blob stays valid, but the working-tree file is mangled and SQLite reports
+# "database disk image is malformed"). Covers every binary the repo tracks.
+*.db        binary
+*.db-wal    binary
+*.db-shm    binary
+*.sqlite    binary
+*.sqlite3   binary
+*.parquet   binary
+*.pkl       binary
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.ico       binary
+*.gif       binary
+*.pdf       binary
+*.woff      binary
+*.woff2     binary
+*.ttf       binary
+*.xls       binary
+*.xlsx      binary
+*.zip       binary

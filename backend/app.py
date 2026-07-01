@@ -51,7 +51,7 @@ from flask_cors import CORS
 from schemas import (
     PricesResponse, SignalResponse, TradeIdeaResponse, FundamentalsResponse,
     NewsResponse, PaperPositionsResponse, PaperPerformanceResponse,
-    HealthDetailResponse, respond,
+    HealthDetailResponse, NewsImpactResponse, NewsFactorsResponse, respond,
 )
 from dotenv import load_dotenv
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -1052,6 +1052,26 @@ def _paper_mtm():
 
 _scheduler.add_job(_paper_mtm, "interval", seconds=60, id="_paper_mtm")
 
+# EIA Weekly Petroleum Status Report — pull the ACTUAL number live from the EIA v2
+# API so the inventory framework grades against the real printed release (not the
+# static scrape). Throttled internally; runs ~2 min after boot then every 6h, so the
+# Wednesday 10:30-ET release is reflected within hours. Opt out: PULSE_EIA_REFRESH_DISABLED=1.
+TTL_EIA_REPORT = 21600  # 6h
+def _eia_report_refresh():
+    if os.environ.get("PULSE_EIA_REFRESH_DISABLED") == "1":
+        return
+    try:
+        from research.inventory_impact import eia_report
+        s = eia_report.refresh_report(force=True)
+        if s.get("refreshed"):
+            log.info("EIA report refreshed live: latest week %s (%s weeks)",
+                     s.get("latest_week"), s.get("n_weeks"))
+    except Exception as exc:
+        log.warning("EIA report live refresh failed: %s", exc)
+
+_scheduler.add_job(_eia_report_refresh, "interval", seconds=TTL_EIA_REPORT,
+                   next_run_time=_NOW + timedelta(minutes=2), id="_eia_report_refresh")
+
 # Phase 2.8.6-followup A/B harness — dual-push pooled + gated arms once per day.
 # Idempotent: ab_test.tick() dedups on open (asset, direction, ab_mode), so
 # multiple firings within a session are safe.
@@ -1147,6 +1167,70 @@ def _auto_desk_tick():
 _scheduler.add_job(
     _auto_desk_tick, "interval", seconds=900,
     next_run_time=_dt.now() + timedelta(minutes=8), id="_auto_desk_tick",
+)
+
+
+# News Impact — pipe the live news wire into the news-impact corpus and classify
+# the new headlines, so the Impact feed scores TODAY's news instead of only the
+# 2021 backfill. Reads the already-cached /api/news payload (no double fetch),
+# dedups on URL, and classifies only the newly-added rows (cheap: a handful per
+# tick, Groq with keyword fallback). Opt out with PULSE_NEWS_IMPACT_DISABLED=1.
+def _news_corpus_ingest():
+    if os.getenv("PULSE_NEWS_IMPACT_DISABLED", "").strip().lower() in ("1", "true", "yes"):
+        return
+    try:
+        from research.news_impact import corpus, classify
+    except Exception as exc:
+        log.warning("news_impact import failed: %s", exc)
+        return
+    try:
+        news = get_cached("news", TTL_NEWS) or {}
+        articles = news.get("articles") or []
+        if not articles:
+            return
+        added = corpus.upsert_articles(articles)
+        if added:
+            res = classify.classify_corpus(limit=100)
+            log.info("news_impact ingest: +%d live headlines, classified %s %s",
+                     added, res.get("classified"), res.get("by_source"))
+    except Exception as exc:
+        log.warning("news_impact ingest failed: %s", exc)
+
+_scheduler.add_job(
+    _news_corpus_ingest, "interval", seconds=TTL_NEWS,
+    next_run_time=_dt.now() + timedelta(minutes=2), id="_news_corpus_ingest",
+)
+
+
+# Geo news-impact — the geospatial twin of _news_corpus_ingest. Pull the same
+# cached /api/news wire, keep only geo-candidate headlines (the is_geo_candidate
+# prefilter, so the free Groq budget is spent only on geo news), score each into
+# a {asset, event, severity} → node-vector geo event with EDGE/prior tags, and
+# persist them to the accumulating live store. Surfaced at /api/news/geo/live.
+# Opt out with PULSE_GEO_DISABLED=1.
+def _geo_news_ingest():
+    if os.getenv("PULSE_GEO_DISABLED", "").strip().lower() in ("1", "true", "yes"):
+        return
+    try:
+        from research.news_impact.geo import live as geo_live
+    except Exception as exc:
+        log.warning("geo live import failed: %s", exc)
+        return
+    try:
+        news = get_cached("news", TTL_NEWS) or {}
+        articles = news.get("articles") or []
+        if not articles:
+            return
+        res = geo_live.ingest_wire(articles)
+        if res.get("added"):
+            log.info("geo ingest: scanned %d, %d candidates, +%d geo events (total %d)",
+                     res["scanned"], res["candidates"], res["added"], res["total"])
+    except Exception as exc:
+        log.warning("geo news ingest failed: %s", exc)
+
+_scheduler.add_job(
+    _geo_news_ingest, "interval", seconds=TTL_NEWS,
+    next_run_time=_dt.now() + timedelta(minutes=3), id="_geo_news_ingest",
 )
 
 
@@ -1417,9 +1501,24 @@ def regime_inventory_route():
 
         actual = request.args.get("actual", type=float)
         consensus = request.args.get("consensus", type=float)
-        call = framework.assess_release(actual_change=actual, consensus=consensus)
-        panel = regime_conditioning.build_daily_panel("seasonal")
+        series = (request.args.get("series") or "crude_ex_spr").lower()
+        if series not in ("crude_ex_spr", "gasoline", "distillate"):
+            series = "crude_ex_spr"
+        call = framework.assess_series(series, actual_change=actual, consensus=consensus)
+        panel = regime_conditioning.build_daily_panel("seasonal", series=series)
         cond = regime_conditioning.conditional_table(panel, "ret")
+        # WTI "when it mattered" — US crude inventories are a US signal, so WTI is the
+        # more directly affected benchmark. Crude-only (the WTI study is crude-specific).
+        cond_wti = (regime_conditioning.conditional_table(panel, "ret_wti").to_dict("records")
+                    if series == "crude_ex_spr" else None)
+        wti_compare = (regime_conditioning.wti_sharpness_compare(panel)
+                       if series == "crude_ex_spr" else None)
+        # graded: did the REAL consensus surprise sharpen the regime betas vs the
+        # seasonal proxy? (the framework now defaults to real consensus)
+        consensus_sharpening = regime_conditioning.consensus_sharpening_compare(series)
+        # measured directional track record + the selective-confidence policy
+        from research.inventory_impact import accuracy as _accuracy
+        accuracy_summary = _accuracy.accuracy_summary(series)
 
         def _f(v):
             try:
@@ -1428,18 +1527,19 @@ def regime_inventory_route():
             except (TypeError, ValueError):
                 return None
 
-        # recent releases — surprise history + quality, newest first
-        sp = eia_report.surprise_series("crude_ex_spr")
-        dec = eia_report.decomposition()
+        # recent releases — surprise history (+ quality for crude), newest first
+        sp = eia_report.surprise_series(series, "consensus")  # surprise vs REAL consensus
+        dec = eia_report.decomposition() if series == "crude_ex_spr" else None
         recent = []
         for we in sp.dropna(subset=["surprise"]).index[-12:][::-1]:
             rel = release_datetime(we).tz_convert("America/New_York")
-            q = dec.loc[we, "quality_of_draw"] if we in dec.index else None
+            q = (dec.loc[we, "quality_of_draw"] if (dec is not None and we in dec.index) else None)
             recent.append({
                 "week_ending":   str(we.date()),
                 "release_date":  str(rel.date()),
                 "actual_change": _f(sp.loc[we, "actual_change"]),
                 "expected":      _f(sp.loc[we, "expected_change"]),
+                "expected_source": str(sp.loc[we].get("expected_source", "seasonal")),
                 "surprise":      _f(sp.loc[we, "surprise"]),
                 "surprise_z":    _f(sp.loc[we, "surprise_z"]),
                 "bullish":       bool(sp.loc[we, "bullish"]),
@@ -1478,10 +1578,19 @@ def regime_inventory_route():
 
         return {
             "available": True,
+            "series": series,
+            "series_label": call.get("series_label", series),
+            "series_options": ["crude_ex_spr", "gasoline", "distillate"],
             "call": call,
             "next_release": framework.next_release_context(),
-            "spread_betas": framework.spread_attribution_betas(),
+            # spread attribution is the crude→WTI event study; only meaningful for crude
+            "spread_betas": framework.spread_attribution_betas() if series == "crude_ex_spr" else None,
             "when_it_mattered": cond.to_dict("records"),
+            "when_it_mattered_wti": cond_wti,
+            "wti_compare": wti_compare,
+            "consensus_sharpening": consensus_sharpening,
+            "accuracy": accuracy_summary,
+            "surprise_method": "consensus",
             "recent_releases": recent,
             "latest_report": latest_report,
             "n_releases": int(len(panel)),
@@ -1507,6 +1616,64 @@ def regime_inventory_chart_route(name):
     if not _os.path.exists(path):
         return ("chart not generated — run inventory_impact.charts", 404)
     return send_file(path, mimetype="image/png")
+
+
+@app.route("/api/regime/inventory/reaction")
+def regime_inventory_reaction_route():
+    """
+    PREDICTED vs ACTUAL spread reaction to today's EIA crude print. Returns the
+    model's pre-release call (direction + per-spread point estimates) alongside
+    the realised move at +5/+15/+30/+60 min, read from the desk 1-min feed
+    (CO/CL bars). Pass ?actual=&consensus= (MBBL) to anchor the prediction on the
+    real consensus + API (else the seasonal proxy).
+    """
+    def _rx():
+        from research.inventory_impact import eia_report, framework, release_reaction
+        actual = request.args.get("actual", type=float)
+        consensus = request.args.get("consensus", type=float)
+        series = (request.args.get("series") or "crude_ex_spr").lower()
+        if series not in ("crude_ex_spr", "gasoline", "distillate"):
+            series = "crude_ex_spr"
+        # Re-anchor the live grade on the ACTUAL EIA number pulled LIVE from the EIA
+        # v2 API (authoritative) + the real consensus, when the caller supplies
+        # nothing — not the static scrape or the API/industry proxy. refresh=True
+        # triggers a throttled live pull so we grade against the real printed number
+        # the moment it's out. e.g. 24-Jun crude actual -6.088M vs consensus -3.900M.
+        do_refresh = request.args.get("refresh") in ("1", "true", "yes")
+        lr = eia_report.latest_release(series, refresh=(do_refresh or (actual is None and consensus is None)))
+        anchored_on = "supplied" if (actual is not None or consensus is not None) else None
+        if actual is None and consensus is None and lr:
+            actual, consensus = lr["actual_mbbl"], lr["consensus_mbbl"]
+            anchored_on = lr.get("actual_source", "real_eia_print")
+        call = framework.assess_series(series, actual_change=actual, consensus=consensus)
+        rx = release_reaction.compute_reaction()
+        return {
+            "anchored_on": anchored_on,
+            "actual_source": (lr or {}).get("actual_source"),
+            "latest_release": lr,
+            "available": bool(rx.get("available")),
+            "reason": rx.get("reason"),
+            "series": series,
+            "series_label": call.get("series_label", series),
+            # the desk feed is crude-only (WTI/Brent) — gasoline/distillate product
+            # cracks (RBOB/ULSD) aren't recorded, so for those series the "actual"
+            # is the crude-complex reaction to the joint 10:30 ET release.
+            "crude_only_feed": True,
+            "predicted": {
+                "call": call.get("call"),
+                "confidence": call.get("confidence"),
+                "surprise_mbbl": call.get("surprise_mbbl"),
+                "surprise_z": call.get("surprise_z"),
+                "surprise_source": call.get("surprise_source"),
+                "price_reaction": call.get("price_reaction"),
+                "spread_impacts": call.get("spread_impacts"),
+                "product_spread": call.get("spreads", {}).get("primary"),
+                "regime": call.get("regime", {}).get("regime_label"),
+                "regime_sensitive": call.get("regime_sensitive"),
+            },
+            "actual": rx,
+        }
+    return jsonify({"data": safe_fetch(_rx, {"available": False}), "timestamp": _now()})
 
 
 @app.route("/api/regime/ab")
@@ -1939,6 +2106,213 @@ def fundamentals():
 @app.route("/api/news")
 def news():
     return respond(NewsResponse, _fetch_news(), _now())
+
+
+@app.route("/api/news/impact")
+def news_impact_route():
+    """
+    News Headline Impact Model — the ranked 'what just printed and what is it
+    worth' feed. Each recent classified headline → {factor, direction, expected
+    Brent % move, t-stat, regime}. The expected move uses the empirically fitted
+    per-factor beta when it's statistically earned (basis="measured"), else a
+    labelled prior (basis="prior") — never a fabricated-precise number.
+
+    Read-only; serves the cached event-study betas (news_impact_betas.json) over
+    the live corpus. Regenerate the betas with
+    `python -m backend.research.news_impact.event_study`.
+    """
+    def _impact():
+        from research.news_impact import impact
+        return impact.to_results(limit=50)
+    return respond(NewsImpactResponse,
+                   safe_fetch(_impact, {"available": False, "feed": [], "factors": []}),
+                   _now())
+
+
+@app.route("/api/news/live")
+def news_live_route():
+    """
+    The live news wire, each headline scored with its factor + expected Brent %
+    move (the Live Headlines strip). Reads the cached /api/news payload and
+    enriches every article via the news-impact model — factor from the corpus's
+    stored Groq label when the URL is already classified, else keyword; timestamps
+    normalised to ISO (GDELT's compact format breaks the browser's parser).
+    """
+    def _live():
+        from research.news_impact import impact
+        news = get_cached("news", TTL_NEWS) or {}
+        arts = news.get("articles") or []
+        if not arts:
+            return {"available": False, "articles": []}
+        reg = impact.current_regime()
+        return {"available": True, "as_of": reg.get("as_of"), "regime": reg,
+                "articles": impact.live_scored(arts, limit=60)}
+    return jsonify({"data": safe_fetch(_live, {"available": False, "articles": []}),
+                    "timestamp": _now()})
+
+
+_news_refresh_lock = threading.Lock()
+
+@app.route("/api/news/refresh", methods=["POST"])
+def news_refresh_route():
+    """
+    Force a live-news re-fetch + corpus ingest now (the dashboard 'Refresh news'
+    button). The upstream sources are slow (NewsAPI backoff, GDELT's 5s rate
+    limit) — up to a minute — so this runs ASYNC: it kicks the re-fetch + ingest
+    on a background thread and returns immediately. The client keeps polling
+    /api/news/live and sees the fresh, re-scored headlines when it lands. A lock
+    coalesces overlapping clicks into one in-flight refresh.
+    """
+    if not _news_refresh_lock.acquire(blocking=False):
+        return jsonify({"data": {"ok": True, "started": False, "busy": True},
+                        "timestamp": _now()})
+
+    def _bg():
+        try:
+            _refresh_news()          # re-fetch + cache the wire
+            _news_corpus_ingest()    # upsert + classify the newly-arrived headlines
+            _geo_news_ingest()       # score the geo-relevant headlines into geo events
+        except Exception as exc:
+            log.warning("manual news refresh failed: %s", exc)
+        finally:
+            _news_refresh_lock.release()
+
+    threading.Thread(target=_bg, daemon=True, name="news-refresh").start()
+    return jsonify({"data": {"ok": True, "started": True}, "timestamp": _now()})
+
+
+@app.route("/api/news/factors")
+def news_factors_route():
+    """
+    Per-factor beta table behind the impact model: every factor in the taxonomy
+    with its measured beta (when significant) or labelled prior, the t-stat / R²,
+    the WTI beta, the sentiment-aligned magnitude, and the curve-regime split.
+    """
+    def _factors():
+        from research.news_impact import impact
+        return impact.to_results(limit=0)
+    return respond(NewsFactorsResponse,
+                   safe_fetch(_factors, {"available": False, "feed": [], "factors": []}),
+                   _now())
+
+
+@app.route("/api/news/geo")
+def news_geo_route():
+    """
+    Geo node-impact edge map — the graded "does location-news move each price node?"
+    table behind the geospatial engine. Serves the cached per-node event study
+    (directional hit-rate + magnitude beta, sliced by node × asset-type × regime,
+    prior-then-learn EDGE flags) joined with the node catalog (which nodes are
+    real/estimate/gap) and the analog index size. Read-only; regenerate with
+    `python backend/research/news_impact/geo/event_study_geo.py`.
+    """
+    def _geo():
+        from research.news_impact.geo import event_study_geo as es
+        from research.news_impact.geo import nodes as geo_nodes
+        cached = es.load_cached()
+        if not cached or not cached.get("available"):
+            return {"available": False, "reason": "no graded geo edge map cached yet"}
+        try:
+            from research.news_impact.geo import analogs as an
+            idx_size = len(an.get_index())
+        except Exception:
+            idx_size = None
+        return {**cached, "node_catalog": geo_nodes.describe(), "index_size": idx_size}
+
+    return jsonify({"data": safe_fetch(_geo, {"available": False}), "timestamp": _now()})
+
+
+@app.route("/api/news/geo/analogs")
+def news_geo_analogs_route():
+    """
+    Geo RAG analogs — paste/click a location-news headline and get the k closest
+    historical geo-events plus what each actually did to the price nodes, and a
+    similarity-weighted per-node nowcast ("this ≈ these k past events; they moved
+    ho_crack +X over 5d, agreeing Y% of the time").
+
+    Retrieval over the GRADED event panel (each past event carries its realised
+    forward node moves); the fingerprint is interpretable (asset_type + event_type
+    + signed conviction), so an opposite-direction event (a restart vs a closure)
+    ranks low. Read-only; reuses the cached LLM extractions + the memoised index.
+    Query: ?title=<headline>&k=5&horizon=5  (horizon ∈ {1,5}).
+    """
+    title = (request.args.get("title") or "").strip()
+    try:
+        k = max(1, min(int(request.args.get("k", 5)), 20))
+    except (TypeError, ValueError):
+        k = 5
+    try:
+        horizon = int(request.args.get("horizon", 5))
+        horizon = horizon if horizon in (1, 5) else 5
+    except (TypeError, ValueError):
+        horizon = 5
+    want_narrate = (request.args.get("narrate") or "").strip().lower() in ("1", "true", "yes")
+
+    def _analogs():
+        from research.news_impact.geo import analogs as an
+        idx = an.get_index()
+        if not title:
+            return {"available": False, "reason": "supply ?title=<headline>",
+                    "index_size": len(idx)}
+        res = an.score_headline_analogs(title, k=k, horizon=horizon, index=idx)
+        res["index_size"] = len(idx)
+        if want_narrate:                      # LLM-narrated desk note (Sprint 10)
+            res["narration"] = an.narrate(res, horizon=horizon)
+        return res
+
+    return jsonify({"data": safe_fetch(_analogs, {"available": False, "index_size": 0}),
+                    "timestamp": _now()})
+
+
+@app.route("/api/news/geo/live")
+def news_geo_live_route():
+    """
+    Live geo alerts — the geo engine's real-time feed. Recent live-scored geo
+    events (the wire's geo-candidate headlines, each resolved to a physical asset
+    + throughput event + a signed price-node vector with EDGE/prior tags),
+    ranked by |conviction| × tradeable. Populated by the `_geo_news_ingest`
+    scheduler job; read-only here. Query: ?limit=30.
+    """
+    try:
+        limit = max(1, min(int(request.args.get("limit", 30)), 100))
+    except (TypeError, ValueError):
+        limit = 30
+
+    def _live():
+        from research.news_impact.geo import live as geo_live
+        events = geo_live.recent_events(limit=limit)
+        return {"available": True, "count": len(events), "events": events,
+                "caveat": ("single episode (2026 Hormuz war); EDGE tags from the "
+                           "graded edge map — read direction, not exact p-values")}
+
+    return jsonify({"data": safe_fetch(_live, {"available": False, "events": []}),
+                    "timestamp": _now()})
+
+
+@app.route("/api/news/geo/map")
+def news_geo_map_route():
+    """
+    Geo map — every placeable registry asset (chokepoint / refinery / pipeline /
+    field / producer) with its lat/lon, disruption_bias prior, and recent
+    live-event activity from the Sprint-8 store (event count, peak conviction,
+    EDGE flag, newest timestamp, a few headlines). The registry is the single
+    source of truth for the coordinates + the desk priors; the activity overlay
+    is the live size/colour. Drops the GLOBAL generics (no real coords).
+    Read-only; the dashboard plots it on an SVG world map. No query args.
+    """
+    def _map():
+        from research.news_impact.geo import live as geo_live
+        from research.news_impact.geo import registry as reg
+        assets = geo_live.map_assets()
+        active = sum(1 for a in assets if (a["activity"]["events"] or 0) > 0)
+        return {"available": True, "count": len(assets), "active": active,
+                "assets": assets, "nodes": dict(reg.NODES),
+                "caveat": ("disruption_bias is the desk prior (the event study "
+                           "grades it); activity is the live geo-alert store — "
+                           "single episode, read direction")}
+
+    return jsonify({"data": safe_fetch(_map, {"available": False, "assets": []}),
+                    "timestamp": _now()})
 
 
 @app.route("/api/weather")

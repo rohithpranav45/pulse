@@ -516,10 +516,15 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
                 else:
                     direction = "NEUTRAL"; target = stop = None
 
+                degraded = bool(health.get("degraded"))
                 if not health["ok"]:
                     direction  = "NEUTRAL"
                     target     = stop = None
                     confidence = 0.0
+                elif degraded and direction != "NEUTRAL":
+                    # coherent, well-trained cell the OOS window just didn't cover —
+                    # keep the signal but cap confidence (z-based, since r2_oos n/a).
+                    confidence = round(min(abs(z_score), 3.0) / 3.0 * 0.35, 4)
 
                 regime_candidate = {
                     "spread":          spread,
@@ -549,6 +554,7 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
                     "recommendation_source": "regime",
                     "regime":          regime,
                     "model_health":    health,
+                    "model_health_degraded": degraded,
                 }
 
         # ── Legacy per-cell pooled/composite candidate (skipped when in global)

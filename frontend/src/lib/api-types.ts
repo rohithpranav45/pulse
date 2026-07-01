@@ -40,6 +40,32 @@ export interface ABArms {
   [key: string]: unknown;
 }
 
+export interface ABBacktestArm {
+  n_closed?: number | null;
+  hit_rate?: number | null;
+  mean_pnl_net?: number | null;
+  sharpe_net?: number | null;
+  [key: string]: unknown;
+}
+
+export interface ABBacktestArms {
+  pooled?: ABBacktestArm | null;
+  gated?: ABBacktestArm | null;
+  baseline?: ABBacktestArm | null;
+  [key: string]: unknown;
+}
+
+export interface ABBacktestVerdict {
+  available?: boolean;
+  error?: string | null;
+  source?: string | null;
+  arms?: ABBacktestArms | null;
+  welch?: ABWelch | null;
+  verdict?: string | null;
+  verdict_note?: string | null;
+  [key: string]: unknown;
+}
+
 export interface ABDiff {
   mean_pnl_net_delta?: number | null;
   sharpe_net_delta?: number | null;
@@ -68,23 +94,6 @@ export interface ABReportData {
   verdict_note?: string | null;
   backtest_verdict?: ABBacktestVerdict | null;
   [key: string]: unknown;
-}
-
-export interface ABBacktestArm {
-  n_closed?: number | null;
-  hit_rate?: number | null;
-  mean_pnl_net?: number | null;
-  sharpe_net?: number | null;
-}
-
-export interface ABBacktestVerdict {
-  available: boolean;
-  error?: string;
-  source?: string;
-  arms?: { pooled?: ABBacktestArm | null; gated?: ABBacktestArm | null; baseline?: ABBacktestArm | null };
-  welch?: ABWelch | null;
-  verdict?: string | null;
-  verdict_note?: string | null;
 }
 
 export interface ABStopCriteria {
@@ -204,6 +213,70 @@ export interface NewsData {
   articles?: Array<NewsArticle>;
   negative_count?: number | null;
   stale?: boolean | null;
+  [key: string]: unknown;
+}
+
+export interface NewsFactorRow {
+  factor: string;
+  label?: string | null;
+  n?: number | null;
+  basis?: string | null;
+  beta_pct?: number | null;
+  t_stat?: number | null;
+  r2?: number | null;
+  beta_wti_pct?: number | null;
+  aligned_mean_move?: number | null;
+  aligned_hit_rate?: number | null;
+  significant?: boolean | null;
+  prior_note?: string | null;
+  by_curve?: Record<string, unknown> | null;
+  [key: string]: unknown;
+}
+
+export interface NewsImpactData {
+  available?: boolean;
+  as_of?: string | null;
+  regime?: NewsRegime | null;
+  horizon?: string | null;
+  n_headlines?: number | null;
+  span?: Array<string | null> | null;
+  min_n?: number | null;
+  t_min?: number | null;
+  feed?: Array<NewsImpactItem>;
+  factors?: Array<NewsFactorRow>;
+  source?: string | null;
+  [key: string]: unknown;
+}
+
+export interface NewsImpactItem {
+  title?: string | null;
+  published_at?: string | null;
+  factor?: string | null;
+  factor_source?: string | null;
+  factor_label?: string | null;
+  sentiment?: number | null;
+  direction?: string | null;
+  expected_pct_move?: number | null;
+  beta_pct?: number | null;
+  t_stat?: number | null;
+  n?: number | null;
+  basis?: string | null;
+  regime_context?: NewsRegimeContext | null;
+  rationale?: string | null;
+  [key: string]: unknown;
+}
+
+export interface NewsRegime {
+  curve?: string | null;
+  as_of?: string | null;
+  baseline_vol_pct?: number | null;
+  [key: string]: unknown;
+}
+
+export interface NewsRegimeContext {
+  curve?: string | null;
+  regime_beta_pct?: number | null;
+  as_of?: string | null;
   [key: string]: unknown;
 }
 
@@ -365,6 +438,18 @@ export interface HealthDetailResponse {
   [key: string]: unknown;
 }
 
+export interface NewsFactorsResponse {
+  data: NewsImpactData;
+  timestamp: string;
+  [key: string]: unknown;
+}
+
+export interface NewsImpactResponse {
+  data: NewsImpactData;
+  timestamp: string;
+  [key: string]: unknown;
+}
+
 export interface NewsResponse {
   data: NewsData;
   timestamp: string;
@@ -407,6 +492,8 @@ export interface ApiResponseMap {
   "/api/fundamentals": FundamentalsResponse;
   "/api/health-detail": HealthDetailResponse;
   "/api/news": NewsResponse;
+  "/api/news/factors": NewsFactorsResponse;
+  "/api/news/impact": NewsImpactResponse;
   "/api/paper/performance": PaperPerformanceResponse;
   "/api/paper/positions": PaperPositionsResponse;
   "/api/prices": PricesResponse;

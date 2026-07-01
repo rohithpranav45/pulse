@@ -4,6 +4,7 @@ import type {
   TradeIdeaData,
   FundamentalsData,
   NewsData,
+  NewsImpactData,
   PaperPosition,
   PaperPerformanceData,
   HealthDetailData,
@@ -24,6 +25,11 @@ export type {
   RigCount,
   NewsData,
   NewsArticle,
+  NewsImpactData,
+  NewsImpactItem,
+  NewsFactorRow,
+  NewsRegime,
+  NewsRegimeContext,
   PaperPosition,
   PaperPerformanceData,
   PaperTradeRef,
@@ -131,6 +137,17 @@ export const api = {
   correlations:  () => getJSON('/api/correlations'),
   fundamentals:  () => getJSON<FundamentalsData>('/api/fundamentals'),
   news:          () => getJSON<NewsData>('/api/news'),
+  // News Headline Impact Model (Sprint 2) — event-study % move per factor
+  newsImpact:    () => getJSON<NewsImpactData>('/api/news/impact'),
+  newsFactors:   () => getJSON<NewsImpactData>('/api/news/factors'),
+  newsLive:      () => getJSON('/api/news/live'),   // live wire, each headline scored
+  newsRefresh:   () => postJSON('/api/news/refresh', {}, 60000),  // force re-fetch + ingest
+  // Geospatial news-impact engine (Sprint 3-6) — node edge map + RAG analogs
+  newsGeo:       () => getJSON('/api/news/geo'),
+  newsGeoAnalogs: (title: string, k = 5, horizon = 5, narrate = false) =>
+    getJSON(`/api/news/geo/analogs?title=${encodeURIComponent(title)}&k=${k}&horizon=${horizon}${narrate ? '&narrate=1' : ''}`),
+  newsGeoLive:   (limit = 30) => getJSON(`/api/news/geo/live?limit=${limit}`),  // live geo alerts
+  newsGeoMap:    () => getJSON('/api/news/geo/map'),  // registry assets + lat/lon + live activity
   weather:       () => getJSON('/api/weather'),
   technicals:    () => getJSON('/api/technicals'),
   termStructure: () => getJSON('/api/term-structure'),
@@ -164,11 +181,21 @@ export const api = {
   // Phase 8 — per-spread gate summary
   regimePerspreadGate:    () => getJSON('/api/regime/perspread_gate'),
   // Inventory Surprise Impact Model — EIA crude release framework
-  regimeInventory:        () => getJSON('/api/regime/inventory'),
-  regimeInventoryLive:    (actual?: number, consensus?: number) => {
+  regimeInventory:        (series?: string) =>
+                            getJSON(`/api/regime/inventory${series ? '?series=' + series : ''}`),
+  regimeInventoryReaction:(actual?: number, consensus?: number, series?: string) => {
                             const p = new URLSearchParams();
                             if (actual != null) p.set('actual', String(actual));
                             if (consensus != null) p.set('consensus', String(consensus));
+                            if (series) p.set('series', series);
+                            const qs = p.toString();
+                            return getJSON(`/api/regime/inventory/reaction${qs ? '?' + qs : ''}`);
+                          },
+  regimeInventoryLive:    (actual?: number, consensus?: number, series?: string) => {
+                            const p = new URLSearchParams();
+                            if (actual != null) p.set('actual', String(actual));
+                            if (consensus != null) p.set('consensus', String(consensus));
+                            if (series) p.set('series', series);
                             const qs = p.toString();
                             return getJSON(`/api/regime/inventory${qs ? '?' + qs : ''}`);
                           },
