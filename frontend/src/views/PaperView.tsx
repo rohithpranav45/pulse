@@ -2,16 +2,17 @@ import { Fragment, useCallback, useMemo, useState } from 'react';
 import clsx from 'clsx';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Panel } from '@/components/ui/Panel';
+import { PageHeader, SectionHeader } from '@/components/ui/SectionHeader';
 import { Chip } from '@/components/ui/Chip';
 import { Stat } from '@/components/ui/Stat';
 import { SkeletonRows } from '@/components/ui/Skeleton';
 import { fmt } from '@/lib/fmt';
 import { api } from '@/lib/api';
 import { usePolling } from '@/lib/hooks';
-import { staggerContainer, staggerTight, fadeUp, scaleIn } from '@/lib/motion';
+import { staggerTight, fadeUp, scaleIn } from '@/lib/motion';
 import {
   Play, TrendingUp, TrendingDown,
-  ShieldCheck, AlertOctagon, Wallet, Activity, Trash2, Zap, Bot,
+  AlertOctagon, Wallet, Activity, Trash2, Zap, Bot,
 } from 'lucide-react';
 
 /**
@@ -64,14 +65,19 @@ type Performance = {
   total_trades: number;
   wins: number;
   losses: number;
+  scratches: number;
+  decisive: number;
   win_rate_pct: number;
   total_pnl: number;
+  total_pnl_pct: number | null;
   avg_pnl_per_trade: number;
   avg_win: number;
   avg_loss: number;
   profit_factor: number | null;
   sharpe_annualised: number | null;
+  avg_holding_days: number | null;
   max_drawdown: number;
+  max_drawdown_pct: number | null;
   best_trade: { id: number; pnl: number; asset: string } | null;
   worst_trade:{ id: number; pnl: number; asset: string } | null;
   equity_curve: { trade_id: number; closed_at: string; cum_pnl: number }[];
@@ -400,14 +406,17 @@ function OpenPositions({ rows, onClose }: { rows: Position[]; onClose: (id: numb
 
 // ─── Closed history ────────────────────────────────────────────────────────
 
-function ClosedHistory({ rows }: { rows: Position[] }) {
+function ClosedHistory({ rows, total }: { rows: Position[]; total?: number }) {
   if (!rows.length) return (
     <Panel title="Closed Trades" staticMount>
       <div className="text-[11px] font-mono text-text-tertiary p-4 text-center">No closed trades yet.</div>
     </Panel>
   );
+  const subtitle = total && total > rows.length
+    ? `newest ${rows.length} of ${total} closed`
+    : `${rows.length} in history`;
   return (
-    <Panel title="Closed Trades" subtitle={`${rows.length} in history`} staticMount>
+    <Panel title="Closed Trades" subtitle={subtitle} staticMount>
       <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
         <table className="w-full text-[11px] font-mono tabular">
           <thead className="sticky top-0 bg-bg-elev">
@@ -537,7 +546,8 @@ function PerformancePanel({ perf, onClear }: { perf: Performance | null; onClear
                 value={`${perf.total_pnl >= 0 ? '+' : ''}$${perf.total_pnl.toFixed(2)}`} />,
           <Stat label="Trades"    value={`${perf.total_trades}`} />,
           <Stat label="Win Rate"  tone={perf.win_rate_pct >= 50 ? 'bull' : 'bear'}
-                value={`${perf.win_rate_pct.toFixed(1)}%`} sub={`${perf.wins}W / ${perf.losses}L`} />,
+                value={`${perf.win_rate_pct.toFixed(1)}%`}
+                sub={`${perf.wins}W / ${perf.losses}L${perf.scratches ? ` / ${perf.scratches}S` : ''}`} />,
           <Stat label="Sharpe (ann.)" tone={sharpeTone as any}
                 value={perf.sharpe_annualised === null ? '—' : perf.sharpe_annualised.toFixed(2)} />,
         ].map((node, i) => (
@@ -751,6 +761,31 @@ function RunEngineButton({ onPushed }: { onPushed: () => void }) {
 }
 
 
+// ─── KPI tile ──────────────────────────────────────────────────────────────
+
+type KpiTone = 'plain' | 'bull' | 'bear' | 'gold' | 'blue';
+const kpiColor: Record<KpiTone, string> = {
+  plain: 'text-text-primary', bull: 'text-bull', bear: 'text-bear',
+  gold: 'text-gold', blue: 'text-accent-blue',
+};
+
+function Kpi({ label, value, sub, tone = 'plain', icon }: {
+  label: string; value: string; sub?: string; tone?: KpiTone; icon?: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-lg border border-border/50 bg-bg-surface/40 px-3.5 py-3 transition-colors hover:border-border-strong/60">
+      <div className="flex items-center gap-1.5 text-[9px] font-mono uppercase tracking-widest text-text-muted">
+        {icon}{label}
+      </div>
+      <div className={clsx('mt-1.5 text-[22px] font-display font-extrabold tabular leading-none', kpiColor[tone])}>
+        {value}
+      </div>
+      {sub && <div className="mt-1 text-[9.5px] font-mono text-text-tertiary truncate">{sub}</div>}
+    </div>
+  );
+}
+
+
 // ─── Top-level view ────────────────────────────────────────────────────────
 
 export function PaperView({ tradeIdea }: { tradeIdea: any }) {
@@ -777,7 +812,9 @@ export function PaperView({ tradeIdea }: { tradeIdea: any }) {
   const allClosed = useMemo(() => (positions ?? []).filter(p => p.status === 'CLOSED'), [positions]);
   const open   = useMemo(() => allOpen.filter(matchesSrc), [allOpen, matchesSrc]);
   const closed = useMemo(() => allClosed.filter(matchesSrc), [allClosed, matchesSrc]);
-  const autoOpenCount = useMemo(() => allOpen.filter(isAuto).length, [allOpen]);
+  // Source-filter counts over the whole loaded book (open + closed), not just open.
+  const autoBookCount = useMemo(() => (positions ?? []).filter(isAuto).length, [positions]);
+  const bookLoaded = allOpen.length + allClosed.length;
 
   const handleClose = useCallback(async (id: number) => {
     try { await api.paperClose(id); } finally { bump(); }
@@ -790,111 +827,81 @@ export function PaperView({ tradeIdea }: { tradeIdea: any }) {
 
   const handlePush = useCallback(async (_size: number) => { bump(); }, [bump]);
 
-  // Hero KPIs reflect the whole book (not the source filter, which only scopes the tables).
+  // KPIs reflect the whole book from the authoritative performance endpoint
+  // (closed count via perf.total_trades, not the capped positions list).
   const openCount = allOpen.length;
-  const closedCount = allClosed.length;
+  const closedCount = perf?.total_trades ?? allClosed.length;
   const realisedTotal = perf?.total_pnl ?? 0;
-  const realisedTone = realisedTotal >= 0 ? 'bull' : 'bear';
+  const realisedTone: KpiTone = realisedTotal >= 0 ? 'bull' : 'bear';
+  const pf = perf?.profit_factor ?? null;
+  const wr = perf?.win_rate_pct ?? null;
 
   return (
-    <motion.div
-      className="space-y-4"
-      variants={staggerContainer}
-      initial="hidden"
-      animate="show"
-    >
-      {/* Manual A/B engine trigger — for demos and missed daily ticks */}
-      <motion.div variants={fadeUp}>
-        <RunEngineButton onPushed={bump} />
-      </motion.div>
+    <div className="space-y-6">
+      <PageHeader
+        eyebrow="Paper Book"
+        title="Paper trading book"
+        desc={<>The live forward book: the regime engine's <span className="text-accent-blue">A/B arms</span>{' '}
+          (pooled vs gated) plus manual and <span className="text-accent-blue">auto-desk</span> pushes, marked to
+          market every minute on the live tape. Exits on the tuned rule — TP halfway-to-fair · SL 2.5σ · 30-day
+          time-stop. Win rate is over decisive trades (break-even scratches excluded).</>}
+        badges={
+          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-bull/30 bg-bull/5 text-bull text-[9px] font-mono uppercase tracking-wider">
+            <span className="w-1.5 h-1.5 rounded-full bg-bull animate-pulse-soft" /> Live MTM · 60s
+          </span>
+        }
+      />
 
-      {/* Hero KPI strip — at-a-glance counters */}
-      <motion.div
-        variants={staggerTight}
-        initial="hidden"
-        animate="show"
-        className="grid grid-cols-2 md:grid-cols-4 gap-3"
-      >
-        <motion.div variants={scaleIn}>
-          <Panel title="Open" accent="blue" bodyClassName="!p-3" staticMount>
-            <div className="flex items-baseline gap-2">
-              <Wallet className="w-4 h-4 text-accent-blue" />
-              <span className="text-3xl font-display font-extrabold tabular text-text-primary">{openCount}</span>
-              <span className="text-[10px] font-mono uppercase tracking-widest text-text-tertiary">positions</span>
-            </div>
-          </Panel>
-        </motion.div>
-        <motion.div variants={scaleIn}>
-          <Panel title="Closed" accent="gold" bodyClassName="!p-3" staticMount>
-            <div className="flex items-baseline gap-2">
-              <Activity className="w-4 h-4 text-gold" />
-              <span className="text-3xl font-display font-extrabold tabular text-text-primary">{closedCount}</span>
-              <span className="text-[10px] font-mono uppercase tracking-widest text-text-tertiary">trades</span>
-            </div>
-          </Panel>
-        </motion.div>
-        <motion.div variants={scaleIn}>
-          <Panel
-            title="Realised PnL"
-            accent={realisedTone as any}
-            bodyClassName="!p-3"
-            staticMount
-          >
-            <div className="flex items-baseline gap-2">
-              {realisedTotal >= 0
-                ? <TrendingUp className="w-4 h-4 text-bull" />
-                : <TrendingDown className="w-4 h-4 text-bear" />}
-              <span className={clsx(
-                'text-3xl font-display font-extrabold tabular transition-colors duration-300',
-                realisedTone === 'bull' ? 'text-bull' : 'text-bear',
-              )}>
-                {perf ? ((realisedTotal >= 0 ? '+$' : '-$') + Math.abs(realisedTotal).toFixed(2)) : '—'}
-              </span>
-            </div>
-          </Panel>
-        </motion.div>
-        <motion.div variants={scaleIn}>
-          <Panel title="Win rate / Sharpe" accent="neut" bodyClassName="!p-3" staticMount>
-            <div className="flex items-baseline gap-3">
-              <span className="text-2xl font-display font-extrabold tabular text-text-primary">
-                {perf ? `${perf.win_rate_pct.toFixed(0)}%` : '—'}
-              </span>
-              <span className="text-[10px] font-mono uppercase tracking-widest text-text-tertiary">
-                · Sharpe {perf?.sharpe_annualised?.toFixed(2) ?? '—'}
-              </span>
-            </div>
-          </Panel>
-        </motion.div>
-      </motion.div>
+      {/* KPI strip — the book at a glance */}
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+        <Kpi label="Open" value={`${openCount}`} sub="positions now" tone="blue"
+             icon={<Wallet className="w-3 h-3 text-accent-blue" />} />
+        <Kpi label="Closed" value={`${closedCount}`} sub="trades in book" tone="plain"
+             icon={<Activity className="w-3 h-3 text-text-muted" />} />
+        <Kpi label="Realised PnL" tone={realisedTone}
+             value={perf ? `${realisedTotal >= 0 ? '+$' : '-$'}${Math.abs(realisedTotal).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '—'}
+             sub={perf?.total_pnl_pct != null ? `${perf.total_pnl_pct >= 0 ? '+' : ''}${perf.total_pnl_pct.toFixed(2)}% on NAV` : 'realised only'}
+             icon={realisedTotal >= 0 ? <TrendingUp className="w-3 h-3 text-bull" /> : <TrendingDown className="w-3 h-3 text-bear" />} />
+        <Kpi label="Win rate" tone={wr == null ? 'plain' : wr >= 50 ? 'bull' : 'bear'}
+             value={wr == null ? '—' : `${wr.toFixed(1)}%`}
+             sub={perf ? `${perf.wins}W / ${perf.losses}L${perf.scratches ? ` / ${perf.scratches}S` : ''}` : 'decisive trades'} />
+        <Kpi label="Profit factor" tone={pf == null ? 'plain' : pf >= 1 ? 'gold' : 'bear'}
+             value={pf == null ? '—' : pf.toFixed(2)}
+             sub={perf?.avg_holding_days != null ? `~${perf.avg_holding_days.toFixed(0)}d avg hold` : 'gross win / loss'} />
+        <Kpi label="Sharpe / Max DD"
+             tone={perf?.sharpe_annualised == null ? 'plain' : perf.sharpe_annualised >= 1 ? 'bull' : perf.sharpe_annualised < 0 ? 'bear' : 'plain'}
+             value={perf?.sharpe_annualised == null ? '—' : perf.sharpe_annualised.toFixed(2)}
+             sub={perf ? `-$${Math.abs(perf.max_drawdown).toLocaleString(undefined, { maximumFractionDigits: 0 })} max DD` : 'annualised'} />
+      </div>
 
-      {/* Suggested trade — push */}
-      <motion.div variants={fadeUp}>
-        <SuggestedTrade idea={tradeIdea} onPush={handlePush} />
-      </motion.div>
+      {/* Manual A/B engine trigger + the suggested trade to push */}
+      <RunEngineButton onPushed={bump} />
+      <SuggestedTrade idea={tradeIdea} onPush={handlePush} />
 
-      {/* Source filter — scopes the open/closed tables to auto-desk vs manual rows */}
-      <motion.div variants={fadeUp} className="flex items-center justify-between gap-3 flex-wrap">
-        <span className="text-[10px] font-mono uppercase tracking-widest text-text-muted">
-          Filter book by source
-        </span>
-        <SourceFilter
-          value={srcFilter}
-          onChange={setSrcFilter}
-          autoCount={autoOpenCount}
-          total={allOpen.length}
-        />
-      </motion.div>
+      {/* Positions */}
+      <SectionHeader
+        accent="blue"
+        eyebrow="Book · 01"
+        title="Open positions"
+        desc="Marked to market every minute on the live tape; each row exits on the tuned rule. Spread trades expand to their per-leg fills."
+        right={
+          <SourceFilter value={srcFilter} onChange={setSrcFilter}
+            autoCount={autoBookCount} total={bookLoaded} />
+        }
+      />
+      <OpenPositions rows={open} onClose={handleClose} />
 
-      {/* Open positions */}
-      <motion.div variants={fadeUp}>
-        <OpenPositions rows={open} onClose={handleClose} />
-      </motion.div>
-
-      {/* Performance + closed history side-by-side on wide screens */}
-      <motion.div variants={fadeUp} className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+      {/* Performance + closed history */}
+      <SectionHeader
+        accent="gold"
+        eyebrow="Book · 02"
+        title="Performance & closed history"
+        desc="Realised PnL over closed trades only. Sharpe is holding-period-aware (annualised by average hold, not naive √252); win rate excludes break-even scratches."
+      />
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
         <PerformancePanel perf={perf} onClear={handleClear} />
-        <ClosedHistory rows={closed} />
-      </motion.div>
-    </motion.div>
+        <ClosedHistory rows={closed} total={perf?.total_trades} />
+      </div>
+    </div>
   );
 }

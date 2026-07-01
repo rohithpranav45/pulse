@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { PageHeader, SectionHeader } from '@/components/ui/SectionHeader';
 import { GeoLiveAlertsPanel } from '@/components/panels/GeoLiveAlertsPanel';
 import { GeoMapPanel } from '@/components/panels/GeoMapPanel';
 import { LiveHeadlinesPanel } from '@/components/panels/LiveHeadlinesPanel';
@@ -8,43 +9,78 @@ import { GeoImpactPanel } from '@/components/panels/GeoImpactPanel';
 import { GeoAnalogPanel } from '@/components/panels/GeoAnalogPanel';
 
 /**
- * News Impact tab — one step deeper than headline sentiment.
+ * News tab — oil news, decoded into price, through two complementary engines:
  *
- * Every oil headline is classified into a price-driving FACTOR (Groq zero-shot +
- * keyword fallback), given a signed crude-polarity sentiment, and turned into an
- * expected Brent % move via an empirical event study of how that factor has
- * historically moved the tape (+1h/+4h/+1d, regime-gated). The number shown is a
- * MEASURED beta only when it cleared a t-stat/min-N gate, else a labelled prior —
- * the same prior-then-learn honesty as the per-spread gate.
+ *   1. GEOSPATIAL — headline → physical asset (chokepoint / refinery / pipeline)
+ *      → the price nodes it moves, graded by a per-node event study. Surfaces: the
+ *      live geo map, the live geo-alert tape, the node-impact edge table, and the
+ *      RAG analog box with an LLM-narrated desk note.
+ *   2. FACTOR MODEL — headline → price-driving factor → expected Brent % move,
+ *      from a per-factor event study. Surfaces: the ranked impact feed, the
+ *      per-factor beta table, and the raw scored wire.
  *
- * Backend: backend/research/news_impact/{corpus,classify,event_study,impact}.py
+ * Both are graded prior-then-learn: a measured number appears only where history
+ * cleared the significance gate, else a labelled prior — never a fabricated figure.
  */
+
 export function NewsView() {
   // Clicking an asset on the geo map pre-fills the analog lookup below.
   const [analogPrefill, setAnalogPrefill] = useState<string | null>(null);
+
   return (
-    <div className="space-y-4">
-      <GeoLiveAlertsPanel />
-      <GeoMapPanel onSelectHeadline={setAnalogPrefill} />
-      <LiveHeadlinesPanel />
-      <NewsImpactPanel />
-      <NewsFactorPanel />
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <GeoImpactPanel />
+    <div className="space-y-6">
+      <PageHeader
+        eyebrow="News Intelligence"
+        title="Oil news, decoded into price"
+        desc={<>Every headline is routed through two engines — a <span className="text-gold">geospatial
+          pipeline</span> (news → physical asset → price-node impact) and a <span className="text-accent-blue">factor
+          model</span> (news → driver → expected Brent move). Both grade prior-then-learn: a number is shown only
+          where history earned it, never a fabricated figure.</>}
+        badges={<>
+          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-gold/30 bg-gold/5 text-gold text-[9px] font-mono uppercase tracking-wider">
+            <span className="w-1.5 h-1.5 rounded-full bg-gold" /> Geospatial
+          </span>
+          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-accent-blue/30 bg-accent-blue/5 text-accent-blue text-[9px] font-mono uppercase tracking-wider">
+            <span className="w-1.5 h-1.5 rounded-full bg-accent-blue" /> Factor model
+          </span>
+        </>}
+      />
+
+      {/* ── 01 · geospatial engine ──────────────────────────────────── */}
+      <section className="space-y-4">
+        <SectionHeader
+          accent="gold"
+          eyebrow="Geospatial engine · 01"
+          title="Location → physical asset → price node"
+          desc="A headline names a chokepoint, refinery or pipeline; the registry maps it to the tradeable
+                nodes it moves, graded by a per-node event study over the 2026 Hormuz-war GDELT corpus × the price
+                tape (LLM geo-extraction via free Groq). Single episode — read direction, not exact p-values."
+        />
+        <GeoMapPanel onSelectHeadline={setAnalogPrefill} />
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
+          <GeoLiveAlertsPanel />
+          <GeoImpactPanel />
+        </div>
         <GeoAnalogPanel prefill={analogPrefill} />
-      </div>
-      <div className="text-[10px] font-mono text-text-muted leading-relaxed px-1">
-        Geo panels: location-news → physical asset (chokepoint/refinery/pipeline) → price-node impact,
-        graded by a per-node event study over the 2026 Hormuz-war GDELT corpus × the node tape (LLM
-        geo-extraction via free Groq). The analog box retrieves the nearest past geo-events. Single
-        episode ⇒ read direction, not exact p-values.
-      </div>
-      <div className="text-[10px] font-mono text-text-muted leading-relaxed px-1">
-        Event-study betas fitted over the GDELT historical corpus × the /Data Brent/WTI tape.
-        Sentiment is a deterministic crude-polarity lexicon (auditable, not a learned model);
-        the factor is Groq zero-shot with a keyword fallback. Most factors sit on a labelled
-        prior until the corpus carries enough significant evidence — by design.
-      </div>
+      </section>
+
+      {/* ── 02 · headline factor model ──────────────────────────────── */}
+      <section className="space-y-4">
+        <SectionHeader
+          accent="blue"
+          eyebrow="Factor model · 02"
+          title="Headline → price driver → expected Brent move"
+          desc="Each headline is classified into a price-driving factor (Groq zero-shot + keyword fallback),
+                given a signed crude-sentiment, and turned into an expected % move by an event study of how that
+                factor historically moved the tape. Measured beta only when it clears the t-stat / min-N gate —
+                otherwise a labelled prior."
+        />
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
+          <NewsImpactPanel />
+          <NewsFactorPanel />
+        </div>
+        <LiveHeadlinesPanel />
+      </section>
     </div>
   );
 }

@@ -490,18 +490,25 @@ def mark_to_market() -> dict:
 
 
 def list_positions(status: str = "all", limit: int = 200) -> list[dict]:
-    """Return positions, newest first. Marks open positions to market first."""
+    """Return positions, newest first. Marks open positions to market first.
+
+    For status='all' we return **every** OPEN position plus the newest `limit`
+    CLOSED trades — so a large closed history can never truncate the open book out
+    of the response (the old single `LIMIT` mixed both and could drop open rows once
+    >limit newer closed trades existed)."""
     if status == "all" or status == "open":
         mark_to_market()
     c = _conn()
-    where = ""
-    args: tuple = ()
     if status == "open":
-        where = "WHERE status='OPEN'"
+        rows = c.execute("SELECT * FROM paper_trades WHERE status='OPEN' ORDER BY id DESC").fetchall()
     elif status == "closed":
-        where = "WHERE status='CLOSED'"
-    rows = c.execute(f"SELECT * FROM paper_trades {where} ORDER BY id DESC LIMIT ?",
-                     args + (limit,)).fetchall()
+        rows = c.execute("SELECT * FROM paper_trades WHERE status='CLOSED' ORDER BY id DESC LIMIT ?",
+                         (limit,)).fetchall()
+    else:  # all → all open + newest `limit` closed
+        open_rows = c.execute("SELECT * FROM paper_trades WHERE status='OPEN' ORDER BY id DESC").fetchall()
+        closed_rows = c.execute("SELECT * FROM paper_trades WHERE status='CLOSED' ORDER BY id DESC LIMIT ?",
+                                (limit,)).fetchall()
+        rows = list(open_rows) + list(closed_rows)
     c.close()
     return [_row_to_dict(r) for r in rows]
 
@@ -622,6 +629,8 @@ def get_performance(window: str = "all") -> dict:
             "total_trades":     0,
             "wins":             0,
             "losses":           0,
+            "scratches":        0,
+            "decisive":         0,
             "win_rate_pct":     0.0,
             "total_pnl":        0.0,
             "avg_pnl_per_trade":0.0,
@@ -640,6 +649,12 @@ def get_performance(window: str = "all") -> dict:
     pcts = [r["realised_pct"] or 0.0 for r in rows]
     wins = [p for p in pnls if p > 0]
     losses = [p for p in pnls if p < 0]
+    # Scratches (exactly break-even closes — e.g. same-bar A/B exits) are neither a
+    # win nor a loss, so the WIN RATE is over DECISIVE trades only. Using all closed
+    # trades as the denominator (the old bug) understated it — 166/(166+69)=70.6%,
+    # not 166/379=43.8% — and contradicted the "166W / 69L" breakdown shown beside it.
+    decisive = len(wins) + len(losses)
+    scratches = len(rows) - decisive
     gross_w = sum(wins)
     gross_l = abs(sum(losses))
     cum, equity = 0.0, []
@@ -681,7 +696,9 @@ def get_performance(window: str = "all") -> dict:
         "total_trades":      len(rows),
         "wins":              len(wins),
         "losses":            len(losses),
-        "win_rate_pct":      round(len(wins) / len(rows) * 100, 2),
+        "scratches":         scratches,
+        "decisive":          decisive,
+        "win_rate_pct":      round(len(wins) / decisive * 100, 2) if decisive else 0.0,
         "total_pnl":         round(sum(pnls), 4),
         "avg_pnl_per_trade": round(sum(pnls) / len(pnls), 4),
         "avg_win":           round(sum(wins) / len(wins), 4) if wins else 0.0,
