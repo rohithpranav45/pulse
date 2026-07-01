@@ -292,14 +292,19 @@ class PaperPerformanceData(PulseModel):
     total_trades: Optional[int] = None
     wins: Optional[int] = None
     losses: Optional[int] = None
+    scratches: Optional[int] = None
+    decisive: Optional[int] = None
     win_rate_pct: Optional[float] = None
     total_pnl: Optional[float] = None
+    total_pnl_pct: Optional[float] = None
     avg_pnl_per_trade: Optional[float] = None
     avg_win: Optional[float] = None
     avg_loss: Optional[float] = None
     profit_factor: Optional[float] = None
     sharpe_annualised: Optional[float] = None
+    avg_holding_days: Optional[float] = None
     max_drawdown: Optional[float] = None
+    max_drawdown_pct: Optional[float] = None
     best_trade: Optional[PaperTradeRef] = None
     worst_trade: Optional[PaperTradeRef] = None
     equity_curve: list[EquityPoint] = Field(default_factory=list)
@@ -400,6 +405,31 @@ class ABArms(PulseModel):
     gated: ABArmMetrics
 
 
+# Instant backtest verdict (walk-forward tapes) that leads the A/B panel before
+# the slow live forward book accumulates. Produced by ab_test.backtest_verdict().
+class ABBacktestArm(PulseModel):
+    n_closed: Optional[int] = None
+    hit_rate: Optional[float] = None
+    mean_pnl_net: Optional[float] = None
+    sharpe_net: Optional[float] = None
+
+
+class ABBacktestArms(PulseModel):
+    pooled: Optional[ABBacktestArm] = None
+    gated: Optional[ABBacktestArm] = None
+    baseline: Optional[ABBacktestArm] = None
+
+
+class ABBacktestVerdict(PulseModel):
+    available: bool = False
+    error: Optional[str] = None
+    source: Optional[str] = None
+    arms: Optional[ABBacktestArms] = None
+    welch: Optional[ABWelch] = None
+    verdict: Optional[str] = None
+    verdict_note: Optional[str] = None
+
+
 class ABReportData(PulseModel):
     available: bool
     as_of: Optional[str] = None
@@ -410,10 +440,83 @@ class ABReportData(PulseModel):
     stop_criteria: Optional[ABStopCriteria] = None
     verdict: Optional[str] = None       # pooled_wins | gated_wins | undecided | undecided_timeout | no_data
     verdict_note: Optional[str] = None
+    backtest_verdict: Optional[ABBacktestVerdict] = None
 
 
 class ABReportResponse(PulseModel):
     data: ABReportData
+    timestamp: str
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# /api/news/impact  +  /api/news/factors — Sprint 2 news event-study impact model
+# ─────────────────────────────────────────────────────────────────────────────
+class NewsRegime(PulseModel):
+    curve: Optional[str] = None                # BACK | CONTANGO | None
+    as_of: Optional[str] = None
+    baseline_vol_pct: Optional[float] = None
+
+
+class NewsRegimeContext(PulseModel):
+    curve: Optional[str] = None
+    regime_beta_pct: Optional[float] = None
+    as_of: Optional[str] = None
+
+
+class NewsImpactItem(PulseModel):
+    title: Optional[str] = None
+    published_at: Optional[str] = None
+    factor: Optional[str] = None
+    factor_source: Optional[str] = None
+    factor_label: Optional[str] = None
+    sentiment: Optional[float] = None
+    direction: Optional[str] = None            # LONG | SHORT | NEUTRAL
+    expected_pct_move: Optional[float] = None
+    beta_pct: Optional[float] = None
+    t_stat: Optional[float] = None
+    n: Optional[int] = None
+    basis: Optional[str] = None                # measured | prior
+    regime_context: Optional[NewsRegimeContext] = None
+    rationale: Optional[str] = None
+
+
+class NewsFactorRow(PulseModel):
+    factor: str
+    label: Optional[str] = None
+    n: Optional[int] = None
+    basis: Optional[str] = None                # measured | prior
+    beta_pct: Optional[float] = None
+    t_stat: Optional[float] = None
+    r2: Optional[float] = None
+    beta_wti_pct: Optional[float] = None
+    aligned_mean_move: Optional[float] = None
+    aligned_hit_rate: Optional[float] = None
+    significant: Optional[bool] = None
+    prior_note: Optional[str] = None
+    by_curve: Optional[dict[str, Any]] = None
+
+
+class NewsImpactData(PulseModel):
+    available: bool = False
+    as_of: Optional[str] = None
+    regime: Optional[NewsRegime] = None
+    horizon: Optional[str] = None
+    n_headlines: Optional[int] = None
+    span: Optional[list[Optional[str]]] = None
+    min_n: Optional[int] = None
+    t_min: Optional[float] = None
+    feed: list[NewsImpactItem] = Field(default_factory=list)
+    factors: list[NewsFactorRow] = Field(default_factory=list)
+    source: Optional[str] = None
+
+
+class NewsImpactResponse(PulseModel):
+    data: NewsImpactData
+    timestamp: str
+
+
+class NewsFactorsResponse(PulseModel):
+    data: NewsImpactData
     timestamp: str
 
 
@@ -430,6 +533,8 @@ RESPONSE_MODELS: dict[str, type[PulseModel]] = {
     "/api/paper/performance": PaperPerformanceResponse,
     "/api/health-detail":     HealthDetailResponse,
     "/api/regime/ab":         ABReportResponse,
+    "/api/news/impact":       NewsImpactResponse,
+    "/api/news/factors":      NewsFactorsResponse,
 }
 
 

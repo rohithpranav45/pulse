@@ -85,12 +85,17 @@ def keyword_factor(title: str) -> tuple[str, float]:
 
 # ── Groq zero-shot ────────────────────────────────────────────────────────────
 
-def _groq_classify_batch(titles: list) -> list | None:
+def _groq_classify_batch(titles: list, retries: int = 4) -> list | None:
     """
     Classify a batch of headlines in one Groq call (JSON mode). Returns a list
     aligned to ``titles`` of {factor, confidence} dicts, or None if Groq is
     unavailable / the response can't be parsed. Unknown labels are dropped to
     None so the caller can fall back per-headline.
+
+    Free-tier Groq rate-limits (per-minute request/token caps) surface as HTTP
+    429; we honour the ``retry-after`` header with bounded exponential backoff so
+    a bulk re-classify doesn't silently fall back to keywords on every throttle.
+    A 429 whose message names the *daily* cap is terminal (no point retrying).
     """
     key = os.getenv("GROQ_API_KEY", "").strip()
     if not key or not titles:
@@ -105,43 +110,59 @@ def _groq_classify_batch(titles: list) -> list | None:
         '"confidence":<0..1>}]}. Use the exact LABELs above. confidence = how '
         "clearly the headline maps to that factor."
     )
-    try:
-        import requests
-        resp = requests.post(
-            "https://api.groq.com/openai/v1/chat/completions",
-            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-            json={
-                "model": os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
-                "messages": [
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": numbered},
-                ],
-                "temperature": 0.0,
-                "max_tokens": 1500,
-                "response_format": {"type": "json_object"},
-            },
-            timeout=30,
-        )
-        resp.raise_for_status()
-        content = (resp.json().get("choices") or [{}])[0].get("message", {}).get("content", "")
-        parsed = json.loads(content)
-        items = parsed.get("items") if isinstance(parsed, dict) else parsed
-        if not isinstance(items, list):
-            return None
-        out: list = [None] * len(titles)
-        for it in items:
-            try:
-                i = int(it.get("i"))
-                factor = str(it.get("factor", "")).upper().strip()
-                conf = float(it.get("confidence", 0.6))
-            except (TypeError, ValueError):
+    import time
+    import requests
+    for attempt in range(retries + 1):
+        try:
+            resp = requests.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                json={
+                    "model": os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
+                    "messages": [
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": numbered},
+                    ],
+                    "temperature": 0.0,
+                    "max_tokens": 1500,
+                    "response_format": {"type": "json_object"},
+                },
+                timeout=30,
+            )
+            if resp.status_code == 429:
+                body = resp.text.lower()
+                if "per day" in body or "daily" in body or "tokens per day" in body:
+                    log.info("Groq daily token cap reached — stopping Groq classification")
+                    return None
+                if attempt >= retries:
+                    log.info("Groq 429 — out of retries, keyword fallback")
+                    return None
+                wait = float(resp.headers.get("retry-after", 0)) or (2 ** attempt * 3)
+                wait = min(wait, 35)   # TPM windows reset within ~30s; cap the wait
+                log.info("Groq 429 — waiting %.1fs (attempt %d/%d)", wait, attempt + 1, retries)
+                time.sleep(wait)
                 continue
-            if 0 <= i < len(titles) and factor in VALID:
-                out[i] = {"factor": factor, "confidence": max(0.0, min(1.0, conf))}
-        return out
-    except Exception as exc:
-        log.info("Groq classify failed (%s) — keyword fallback", type(exc).__name__)
-        return None
+            resp.raise_for_status()
+            content = (resp.json().get("choices") or [{}])[0].get("message", {}).get("content", "")
+            parsed = json.loads(content)
+            items = parsed.get("items") if isinstance(parsed, dict) else parsed
+            if not isinstance(items, list):
+                return None
+            out: list = [None] * len(titles)
+            for it in items:
+                try:
+                    i = int(it.get("i"))
+                    factor = str(it.get("factor", "")).upper().strip()
+                    conf = float(it.get("confidence", 0.6))
+                except (TypeError, ValueError):
+                    continue
+                if 0 <= i < len(titles) and factor in VALID:
+                    out[i] = {"factor": factor, "confidence": max(0.0, min(1.0, conf))}
+            return out
+        except Exception as exc:
+            log.info("Groq classify failed (%s) — keyword fallback", type(exc).__name__)
+            return None
+    return None
 
 
 def classify_headlines(titles: list) -> list:
@@ -184,3 +205,44 @@ def classify_corpus(limit: int = 200, persist: bool = True) -> dict:
         if persist:
             corpus.set_classification(row["url"], res["factor"], res["confidence"])
     return {"classified": len(rows), "by_factor": by_factor, "by_source": by_source}
+
+
+def reclassify_factor(target_factor: str = "NOISE", *, batch_size: int = 50,
+                      sleep_between: float = 2.5, max_batches: int | None = None) -> dict:
+    """
+    Re-run Groq classification over headlines CURRENTLY labelled ``target_factor``
+    and overwrite the stored factor. The point of Sprint 3: the keyword fallback
+    over-assigns NOISE (no keyword hit ⇒ NOISE), and the broad theme pull dumps
+    non-oil news into GEOPOLITICAL — 70b fixes both.
+
+    Groq-only on purpose: if a batch fails (rate limit / parse), we **skip** it
+    rather than fall back to keywords (which would just re-confirm NOISE and burn
+    the row). Naturally resumable — rows that move out of ``target_factor`` drop
+    out of the next run's queue. Returns a summary incl. how many moved out.
+    """
+    import time
+    from . import corpus
+
+    rows = [r for r in corpus.recent(limit=10_000_000, factor=target_factor) if r.get("title")]
+    summary = {"target": target_factor, "considered": len(rows), "reclassified": 0,
+               "moved_out": 0, "by_factor": {}, "batches_ok": 0, "batches_failed": 0}
+    for bi, start in enumerate(range(0, len(rows), batch_size)):
+        if max_batches is not None and bi >= max_batches:
+            break
+        chunk = rows[start:start + batch_size]
+        res = _groq_classify_batch([r["title"] for r in chunk])
+        if res is None:
+            summary["batches_failed"] += 1
+            time.sleep(sleep_between)
+            continue
+        summary["batches_ok"] += 1
+        for r, g in zip(chunk, res):
+            if not g:
+                continue
+            corpus.set_classification(r["url"], g["factor"], g["confidence"])
+            summary["reclassified"] += 1
+            summary["by_factor"][g["factor"]] = summary["by_factor"].get(g["factor"], 0) + 1
+            if g["factor"] != target_factor:
+                summary["moved_out"] += 1
+        time.sleep(sleep_between)
+    return summary

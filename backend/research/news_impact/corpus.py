@@ -227,6 +227,26 @@ def unclassified(limit: int = 200) -> list:
     return [_row_to_dict(r) for r in _conn().execute(q, (int(limit),)).fetchall()]
 
 
+def factors_by_url(urls: list) -> dict:
+    """Map {url: (factor, factor_conf)} for any of the given URLs already classified
+    in the corpus — lets the live feed reuse the (Groq) factor without re-classifying."""
+    urls = [u for u in (urls or []) if u]
+    if not urls:
+        return {}
+    out: dict = {}
+    c = _conn()
+    # chunk to stay under SQLite's variable limit
+    for i in range(0, len(urls), 400):
+        chunk = urls[i:i + 400]
+        qs = ",".join("?" * len(chunk))
+        rows = c.execute(
+            f"SELECT url, factor, factor_conf FROM news_history "
+            f"WHERE factor IS NOT NULL AND url IN ({qs})", chunk).fetchall()
+        for r in rows:
+            out[r[0]] = (r[1], r[2])
+    return out
+
+
 def stats() -> dict:
     c = _conn()
     total = c.execute("SELECT COUNT(*) FROM news_history").fetchone()[0]
@@ -256,6 +276,7 @@ def backfill_gdelt(
     window_days: int = 7,
     max_per_window: int = 250,
     sleep_between: float = 0.0,
+    themes=None,
     fetch_fn=None,
 ) -> dict:
     """
@@ -263,12 +284,16 @@ def backfill_gdelt(
     upserting every article. GDELT throttles to ~1 req / 5 s (handled inside the
     fetcher), so a multi-year backfill takes a while — run it as a one-off.
 
-    ``fetch_fn`` defaults to the live GDELT fetcher; tests inject a synthetic one
-    to stay hermetic. Returns a summary: windows pulled, articles seen, NEW rows
-    inserted, and any windows that came back empty/unavailable.
+    ``themes`` defaults to the tighter oil-only corpus set (``OIL_CORPUS_THEMES``,
+    no generic MILITARY news). ``fetch_fn`` defaults to the live GDELT fetcher;
+    tests inject a synthetic one to stay hermetic. Returns a summary: windows
+    pulled, articles seen, NEW rows inserted, and empty/unavailable windows.
     """
     if fetch_fn is None:
-        from fetchers.gdelt import get_gdelt_articles_between as fetch_fn
+        from functools import partial
+        from fetchers.gdelt import get_gdelt_articles_between, OIL_CORPUS_THEMES
+        fetch_fn = partial(get_gdelt_articles_between,
+                           themes=themes if themes is not None else OIL_CORPUS_THEMES)
 
     if end is None:
         end = datetime.now(timezone.utc)

@@ -88,6 +88,17 @@ ENERGY_THEMES = [
     "WB_MENA_ENERGY",
 ]
 
+# Tighter, oil-only theme set for the impact-model corpus backfill. Drops MILITARY
+# and WB_MENA_ENERGY: those pull generic war / regional news (e.g. a Kabul drone
+# strike) that the classifier then mislabels GEOPOLITICAL, polluting the corpus
+# with non-oil headlines. The remaining four are all directly oil/energy-priced.
+OIL_CORPUS_THEMES = [
+    "ECON_OILPRICE",
+    "ENV_OIL",
+    "ENV_NATURALGAS",
+    "ECON_SHALE",
+]
+
 
 def get_gdelt_news(
     max_articles: int = 30,

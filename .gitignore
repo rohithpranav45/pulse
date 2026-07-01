@@ -53,3 +53,6 @@ Thumbs.db
 .claude/settings.local.json
 .ipynb_checkpoints/
 cloudflared.exe
+
+# Geo engine — runtime-accumulating live geo-event store (machine/time-specific)
+backend/data/research/news_impact/geo_live_events.json

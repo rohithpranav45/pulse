@@ -29,10 +29,10 @@ type Inventory = { available: boolean; error?: string; recent_releases?: Release
 const mm = (v: number | null) =>
   v == null ? '—' : `${v > 0 ? '+' : ''}${(v / 1000).toFixed(1)}`;
 
-export function InventoryReleasesPanel() {
+export function InventoryReleasesPanel({ series = 'crude_ex_spr' }: { series?: string }) {
   const { data, lastUpdated, error } = usePolling<Inventory>(
-    () => api.regimeInventory() as Promise<Inventory>,
-    600_000,
+    () => api.regimeInventory(series) as Promise<Inventory>,
+    600_000, [series],
   );
   const rows = useMemo(() => data?.recent_releases ?? [], [data]);
 

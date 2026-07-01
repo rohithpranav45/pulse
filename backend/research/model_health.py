@@ -151,51 +151,55 @@ def check_cell(
         "rolling_zscore":    None,
     }
 
-    # 1. Missing cell — the regime grid is incomplete for this combo.
-    if cell_report is None:
-        reasons.append("no model trained for this (spread, regime) cell")
-        return {"ok": False, "reasons": reasons, "details": details}
+    # HARD fails reject the cell (force NEUTRAL); SOFT fails only DEGRADE it
+    # (trade at reduced confidence). The distinction: a measured-but-bad stat or
+    # an incoherent/extrapolating prediction is a hard fail; a stat that is merely
+    # UNMEASURED (the held-out OOS window didn't happen to cover this regime cell)
+    # is soft — silencing a well-trained, coherent cell just because the test
+    # window missed it is what froze the live feed when the curve left BACK.
+    hard: list[str] = []
+    soft: list[str] = []
 
-    # 2. Sample size
+    # 1. Missing cell — the regime grid is incomplete for this combo. (HARD)
+    if cell_report is None:
+        hard.append("no model trained for this (spread, regime) cell")
+        return {"ok": False, "degraded": False, "reasons": hard,
+                "hard_reasons": hard, "soft_reasons": soft, "details": details}
+
+    # 2. Sample size (HARD — too little data to trust at all)
     n_train = cell_report.get("n_train")
     details["n_train"] = n_train
     if n_train is None or n_train < N_TRAIN_FLOOR:
-        reasons.append(f"thin training cell (n_train={n_train} < {N_TRAIN_FLOOR})")
+        hard.append(f"thin training cell (n_train={n_train} < {N_TRAIN_FLOOR})")
 
-    # 3. OOS R²
+    # 3. OOS R² — missing = SOFT (untested), measured-but-bad = HARD
     r2_oos = cell_report.get("ridge_r2_test")
     details["r2_oos"] = r2_oos
     if r2_oos is None:
-        reasons.append("cell never tested OOS (r2_oos missing — held-out test window did not cover this cell)")
+        soft.append("cell never tested OOS (r2_oos missing — held-out test window did not cover this cell)")
     elif r2_oos < R2_OOS_FLOOR:
-        reasons.append(f"r2_oos={r2_oos:+.3f} below floor {R2_OOS_FLOOR} (no better than predicting the mean)")
+        hard.append(f"r2_oos={r2_oos:+.3f} below floor {R2_OOS_FLOOR} (no better than predicting the mean)")
 
-    # 4. Band calibration
+    # 4. Band calibration — unmeasured = SOFT, measured-but-off = HARD
     band_hit = cell_report.get("band_hit_rate")
     details["band_hit_rate"] = band_hit
     if band_hit is None:
-        reasons.append("band hit-rate unmeasured (no OOS window) — quantile bands cannot be validated")
+        soft.append("band hit-rate unmeasured (no OOS window) — quantile bands cannot be validated")
     elif not (BAND_HIT_LO <= band_hit <= BAND_HIT_HI):
         side = "too narrow" if band_hit < BAND_HIT_LO else "too wide"
-        reasons.append(
-            f"band hit-rate {band_hit:.2f} {side} (target ~0.80) — resid_std unreliable"
-        )
+        hard.append(f"band hit-rate {band_hit:.2f} {side} (target ~0.80) — resid_std unreliable")
 
-    # 5. Quantile coherence — independent quantile regressors can produce
-    #    p10 > p90, OR a point estimate outside its own band, both of which
-    #    invalidate the z-score we're about to compute.
+    # 5. Quantile coherence (HARD — invalidates the z-score itself)
     quantile_ok = True
     if not (p10 <= p50 <= p90):
         quantile_ok = False
-        reasons.append(f"quantile bands incoherent: p10={p10:.3f} <= p50={p50:.3f} <= p90={p90:.3f} doesn't hold")
+        hard.append(f"quantile bands incoherent: p10={p10:.3f} <= p50={p50:.3f} <= p90={p90:.3f} doesn't hold")
     if not (p10 <= point <= p90):
         quantile_ok = False
-        reasons.append(f"fair_value {point:.3f} outside its own [p10={p10:.3f}, p90={p90:.3f}] band")
+        hard.append(f"fair_value {point:.3f} outside its own [p10={p10:.3f}, p90={p90:.3f}] band")
     details["quantile_coherent"] = quantile_ok
 
-    # 6. Prediction-extrapolation — has the model gone outside the historical
-    #    range of the SPREAD over its rolling window? If so, the prediction is
-    #    not justifiable from the data the model has seen recently.
+    # 6. Prediction-extrapolation (HARD — not justifiable from recent data)
     rolling_z = None
     in_dist = True
     if rolling_mean is not None and rolling_std is not None and rolling_std > 0:
@@ -203,10 +207,17 @@ def check_cell(
         details["rolling_zscore"] = round(float(rolling_z), 3)
         if abs(rolling_z) > PRED_EXTRAPOLATION_K:
             in_dist = False
-            reasons.append(
+            hard.append(
                 f"fair_value {point:.3f} is {abs(rolling_z):.1f}σ off the trailing-252d spread "
                 f"distribution (mean {rolling_mean:.3f}, σ {rolling_std:.3f}) — model is extrapolating"
             )
     details["in_distribution"] = in_dist
 
-    return {"ok": len(reasons) == 0, "reasons": reasons, "details": details}
+    return {
+        "ok": len(hard) == 0,            # passes (possibly degraded) when no hard fail
+        "degraded": len(hard) == 0 and len(soft) > 0,
+        "reasons": hard + soft,
+        "hard_reasons": hard,
+        "soft_reasons": soft,
+        "details": details,
+    }
