@@ -20,10 +20,11 @@ prior-then-learn, with RAG analogs and a dashboard.** Full per-sprint detail liv
 | 8 | **Live scheduler wiring + geo alerts** | `geo/live.py` + `_geo_news_ingest` job; `/api/news/geo/live`; `GeoLiveAlertsPanel` on the News tab |
 | 9 | **Geo-map visualization** | SVG world map (`worldOutline.ts`, no dep); `live.map_assets` + `/api/news/geo/map`; `GeoMapPanel` — 37 assets sized/coloured by live activity, click → bias + analog pre-fill |
 | 10 | **LLM-narrated RAG desk note** | `analogs.narrate` — free-Groq (or template) note grounded in the retrieved analogs + graded edges; `/api/news/geo/analogs?narrate=1`; "Desk note" card in `GeoAnalogPanel` |
+| 11 | **ACLED conflict-regime slice axis** | `build_event_panel` tags the causal ACLED bloc regime; `node×conflict` slice in `node_hit_table`; `annotate_impact` skips it (descriptive). Verdict: degenerate on the 2026-only corpus — data-bound. `rbob_crack` cert scoped as more-data-not-code |
 
 **Measured edges (2026 Hormuz war, single episode — read direction not exact p):** chokepoint disruption →
 WTI−Brent tightens (0.59 @5d, p=0.008) + distillate crack firms (`ho_crack` 0.57 @5d) + crude **flat reverses**
-(0.40 @5d); refinery outage → gasoline crack up 86–92% @1d (n=14, prior — too thin to certify). 280 tests pass.
+(0.40 @5d); refinery outage → gasoline crack up 86–92% @1d (n=14, prior — too thin to certify). 284 tests pass.
 
 ## ⬜ Forward plan (one sprint per session, in this order)
 
@@ -69,12 +70,27 @@ The analogs were structured/numeric (retrieval, no generation) — this adds the
   EDGE) — trust this read. ULSD crack reversed (0% agreement, n=5) — fade it. Single-episode evidence …"*. +6 hermetic
   tests (`tests/test_geo_analogs.py`, injected `llm_fn`) → **280 pass**; `tsc`/build clean.
 
-### Sprint 11 — Analytical depth (data-bound)
-- Condition the event study on the **ACLED conflict regime** (`conflict.conflict_regime`) as an extra slice axis
-  in `node_hit_table` — does the geo edge strengthen in HIGH-conflict months?
-- **Certify `rbob_crack`** + add an **RBOB M1-M2** gasoline-curve node — needs a thicker refinery sample
-  (broaden the GDELT corpus beyond the single 2026 episode, or a price-covered backfill) for cross-episode
-  validation. This is the honest "more data, not more code" item.
+### ✅ Sprint 11 — Analytical depth (data-bound) (done 2026-06-30)
+- **ACLED conflict-regime axis wired.** `build_event_panel` tags every event with the **causal** ACLED bloc regime
+  as-of its month (`_event_conflict_level` → `conflict.conflict_regime("BLOC", asof=…)`, memoised per month);
+  `node_hit_table` emits a **`node×conflict`** slice (every row carries a `conflict` field, `*` = not conditioned);
+  `annotate_impact` **skips** conflict rows so the live prior-then-learn tag is unchanged (the axis is descriptive).
+  `compute_and_cache` records `conflict_levels` / `n_events_no_conflict`.
+- **Verdict: DEGENERATE on this corpus (data-bound).** ACLED ends **2025-06**, so all **112** gradeable 2026-war
+  events map to a single stale bloc level (`LOW`) — the `node×conflict` slices just mirror the pooled rows (e.g.
+  `wti_brent/*/*/LOW` 0.57 n=284 = `wti_brent/*/*` 0.57 n=284). The machinery is proven on synthetic data (a HIGH 0.8
+  edge vs a NORMAL coin-flip is split correctly); the real strengthening-test needs **ACLED through the 2026 episode**.
+- **`rbob_crack` cert scoped, NOT built (more-data-not-code).** It's already priceable (Sprint 6 OHLCV) + graded
+  (Sprint 7 bias) but stays a **prior** (86–92% @1d, n=14 < MIN_N=20, single episode). Certifying it + an **RBOB
+  M1-M2** node needs a **cross-episode refinery sample** (broaden the GDELT corpus beyond the 2026 war, or a
+  price-covered backfill of past outages), not code.
+- **Tests:** +4 hermetic (`tests/test_geo_event_study.py`) → **284 pass**. Re-grade:
+  `python backend/research/news_impact/geo/event_study_geo.py`.
+
+## ✅ Planned sprints complete
+Sprints 1–11 are shipped. The remaining unlocks are **data, not code**: (1) ACLED coverage through the 2026 episode
+to make the conflict axis discriminating; (2) a cross-episode / price-covered refinery corpus to certify `rbob_crack`
+(+ RBOB M1-M2); (3) a broader price-covered geo corpus beyond the single Hormuz war to lift the single-episode caveat.
 
 ## Key facts the next session needs
 - **LLM:** free Groq, `extract.GROQ_MODEL = "openai/gpt-oss-120b"` (70B's 100k-TPD cap recurs; 8B too weak —
@@ -89,4 +105,4 @@ The analogs were structured/numeric (retrieval, no generation) — this adds the
   ESTIMATEs. The real result-unlock is a broader price-covered corpus, not more LLM.
 - **Run:** `python start.py` → http://127.0.0.1:5000. Tests: `python -m pytest tests/` (263 green). Frontend:
   portable Node at `~/nodejs` (gotcha 4b) — `$env:Path="$env:USERPROFILE\nodejs;"+$env:Path; npm run build`.
-- **Tests:** `python -m pytest tests/` → 280 green.
+- **Tests:** `python -m pytest tests/` → 284 green.

@@ -292,14 +292,19 @@ class PaperPerformanceData(PulseModel):
     total_trades: Optional[int] = None
     wins: Optional[int] = None
     losses: Optional[int] = None
+    scratches: Optional[int] = None
+    decisive: Optional[int] = None
     win_rate_pct: Optional[float] = None
     total_pnl: Optional[float] = None
+    total_pnl_pct: Optional[float] = None
     avg_pnl_per_trade: Optional[float] = None
     avg_win: Optional[float] = None
     avg_loss: Optional[float] = None
     profit_factor: Optional[float] = None
     sharpe_annualised: Optional[float] = None
+    avg_holding_days: Optional[float] = None
     max_drawdown: Optional[float] = None
+    max_drawdown_pct: Optional[float] = None
     best_trade: Optional[PaperTradeRef] = None
     worst_trade: Optional[PaperTradeRef] = None
     equity_curve: list[EquityPoint] = Field(default_factory=list)

@@ -7,14 +7,30 @@ spread engine), and serves a React dashboard with a paper-trading book.
 - **Stack:** Flask 3 · React 18 + Vite + Tailwind · SQLite (cache + paper book) ·
   DuckDB/Parquet over a 3.5 GB `/Data` desk feed · sklearn + XGBoost/LightGBM/CatBoost
 - **Run (local):** `python start.py` from the repo root → http://127.0.0.1:5000
-- **Last updated:** 2026-06-30 (**Geo news-impact engine — Sprint 10: LLM-narrated RAG desk note**
-  [branch `phase4-live-feature-overlay`, see §1 entry]. The generative "RAG" piece: new `analogs.narrate(result)`
+- **Last updated:** 2026-07-01 (**PAPER + SIGNAL LOG — restructure + bug-fixes** [branch
+  `phase4-live-feature-overlay`, see §1 entry]. Fixed the **paper win-rate bug** (`wins/total_trades` counted
+  break-even *scratches* in the denominator → 43.8%; now `wins/decisive` = **70.6%**, consistent with the 166W/69L
+  breakdown; `scratches`/`decisive` + `total_pnl_pct`/`max_drawdown_pct`/`avg_holding_days` — previously computed but
+  **silently dropped by the Pydantic response schema** — are now declared + surfaced). Fixed **`list_positions('all')`
+  truncation** (a single `LIMIT 200` mixed open+closed and could drop open rows; now returns **all** open + newest N
+  closed). Restructured both tabs with a shared `PageHeader`/`SectionHeader`: PAPER gets a 6-tile KPI strip (open ·
+  closed-from-perf · realised $/% · win% W/L/S · PF · Sharpe/maxDD) + Positions / Performance sections; SIGNAL LOG
+  gets a hero + Diagnostics divider. `tsc`/build clean. Prior: **Geo news-impact engine — Sprint 11: ACLED
+  conflict-regime slice axis** [see §1 entry]. The event study now tags every event with the **causal ACLED
+  bloc conflict regime** as-of its month and emits a **`node×conflict`** slice ("does the geo edge strengthen in
+  HIGH-conflict months?"); `annotate_impact` **skips** conflict rows so the live tag is unchanged (descriptive axis).
+  **Honest verdict: DEGENERATE on this corpus** — ACLED ends 2025-06 so all 112 2026-war events map to one stale level
+  (`LOW`), and the `node×conflict` slices just mirror the pooled rows; the machinery is proven on synthetic data but
+  the real test needs ACLED coverage through the episode (**more data, not code**). Also scoped `rbob_crack`
+  certification (+ an RBOB M1-M2 node) as **data-bound** — priceable+graded already, needs a cross-episode refinery
+  sample to clear n≥20. +4 hermetic tests → **284 pass**. **The geo roadmap's planned sprints are now complete.**
+  Prior: **Sprint 10: LLM-narrated RAG desk note** — new `analogs.narrate(result)`
   builds an **exact-number evidence block** from the analog forecast (per-node mean-Δ / agreement / n + EDGE tags),
   then either has **free Groq** (`gpt-oss-120b`) *phrase that block* under a strict no-invent prompt OR falls back to
   a **deterministic template** from the same numbers — **no key ⇒ template**, so it never hard-fails and never
   fabricates a figure. The note says which read to **trust** (EDGE/high agreement) and which to **fade** (agreement
   <50% = reversal). Surfaced at `GET /api/news/geo/analogs?narrate=1` + a gold **"Desk note"** card in
-  `GeoAnalogPanel`. +6 hermetic tests (injected `llm_fn`) → **280 pass**; `tsc`/build clean. Prior: **Sprint 9:
+  `GeoAnalogPanel`. Prior: **Sprint 9:
   geo-map visualization** — a hand-rolled SVG equirectangular world (`frontend/src/lib/worldOutline.ts`, **no map
   dep**) plots all **37 placeable assets** at their registry lat/lon, sized by live event count + coloured by activity
   (muted→amber→**gold when EDGE**); `live.map_assets` + `GET /api/news/geo/map`; **`GeoMapPanel`** at the top of the
@@ -710,6 +726,35 @@ regime_conditioning,release_reaction}.py`, `/api/regime/inventory[?series=][/rea
   panel anchors today's prediction on the **API −0.765M as a proxy** for the EIA actual — re-anchor on the real
   printed EIA number for an exact grade.
 
+### ✅ PAPER + SIGNAL LOG — restructure + bug-fixes (2026-07-01)
+Branch `phase4-live-feature-overlay` (not merged to main). Audited both tabs for bugs, fixed them at the source, and
+restructured the views to match the News-tab redesign (shared `PageHeader`/`SectionHeader`).
+- **Bug — paper win-rate denominator.** `get_performance` computed `win_rate_pct = wins / total_trades` where
+  `total_trades` includes **break-even scratches** (exactly-0 closes; 144 of 379 here) but `wins`/`losses` exclude
+  them — so the headline read **43.8%** while the "166W / 69L" breakdown beside it implied **70.6%**. Now win rate is
+  over **decisive** trades (`wins / (wins+losses)` = 70.6%), with new `decisive` + `scratches` fields; the panel sub
+  shows `166W / 69L / 144S`.
+- **Bug — Pydantic silently dropped computed metrics.** `get_performance` already returned `total_pnl_pct`,
+  `max_drawdown_pct`, `avg_holding_days`, but `PaperPerformanceData` didn't declare them, so `respond(...)` **stripped
+  them from the response**. Declared all of them (+ `scratches`/`decisive`) — the tab now shows realised %-on-NAV, DD %,
+  and average hold.
+- **Bug — `list_positions('all')` could truncate the open book.** A single `SELECT … ORDER BY id DESC LIMIT 200`
+  mixed open + closed, so once >200 closed trades were newer than an open row, that open position vanished from
+  `/api/paper/positions` (and its KPIs). Now `'all'` returns **every** OPEN row + the newest `limit` CLOSED
+  (verified: 3 open + 200 closed = 203). The PAPER hero also reads the **closed count from `perf.total_trades`** (379),
+  not the capped list (was showing 197), and the closed table is labelled "newest N of M".
+- **Restructure.** New shared `components/ui/SectionHeader.tsx` (`PageHeader` + `SectionHeader`, accent bar + eyebrow +
+  `font-display` title); **NewsView** refactored onto it (removed its inline copy). **PaperView**: a `PageHeader` +
+  a 6-tile **KPI strip** (Open · Closed · Realised $/% · Win% + W/L/S · Profit factor + avg-hold · Sharpe + max-DD) +
+  **01 Positions** (source filter moved into the section header, counts now over the whole loaded book) + **02
+  Performance & closed history** (2-col). **SignalLogView**: `PageHeader` (live-feed pulse badge) + the signal log +
+  a "Diagnostics" divider over the replay. `tsc` clean (only the pre-existing TS5101); `npm run build` clean
+  (1,325 kB JS). Backend restarted + verified: `win_rate_pct 70.64`, `scratches 144`, positions 203 (3 open + 200).
+- **Verified (not a bug):** spread **legs** are repriced symmetrically in both `close_trade` and `mark_to_market`,
+  but only when `_leg_prices_for(asset)` returns the outright c1/c2 settlements; when the feed can't decompose the
+  spread they retain their entry price (parent realised P&L is always authoritative). Not shown in closed history;
+  open-position legs MTM live when prices are available. Left as-is.
+
 ### ✅ Geo news-impact engine — Sprint 11: ACLED conflict-regime slice axis + rbob_crack scope (2026-06-30)
 Branch `phase4-live-feature-overlay` (not merged to main). Adds the conflict-intensity conditioning axis to the
 event study (the last analytical-depth item) and honestly scopes the `rbob_crack` certification as **data-bound**.
@@ -773,9 +818,12 @@ retrieved analogs + the graded edge map.
 Branch `phase4-live-feature-overlay` (not merged to main). Puts the registry on a **map** — the assets the engine
 reasons about, where they physically are, lit by live geo-alert activity.
 - **No heavy new dep.** The bundle has no map lib (only `recharts`/`lightweight-charts`), so the map is a hand-rolled
-  **SVG equirectangular world** — new `frontend/src/lib/worldOutline.ts` (coarse continent silhouettes as lon/lat
-  rings + a `projectLonLat` / `continentPaths` projection into a 720×360 viewBox; precision isn't the point — assets
-  plot at their exact registry lat/lon, the land is a faint backdrop). Bundle 1,295 → **1,304 kB JS** (+9 kB, no dep).
+  **SVG equirectangular world** — `frontend/src/lib/worldLand.ts` is **real Natural-Earth 110m coastlines**
+  (public domain, Douglas-Peucker–simplified to ~1k points, ~14 kB) and `worldOutline.ts` exposes `projectLonLat` +
+  a cached `landPaths(w,h)` builder (fill-rule evenodd for lakes). Rendered with an ocean gradient, faint graticule,
+  vignette, per-type marker colours, an amber glow on active assets + a **gold radar-pulse on EDGE** assets, hover
+  halos, and a selection ring; the viewBox crops the empty poles (lat +83°…−60°) so the populated latitudes fill the
+  frame. Assets plot at their exact registry lat/lon. Bundle ≈**1,320 kB JS** (+~16 kB incl. the coastline data, no dep).
 - **New backend `live.map_assets(store_path=)` + `GET /api/news/geo/map`.** Joins every **placeable** registry asset
   (drops the 4 GLOBAL generics at 0,0 → **37 plotted**) with its static facts + `disruption_bias` prior + **live
   activity** tallied from the Sprint-8 `geo_live_events.json` store (`_activity_index`: per-asset event count, peak
@@ -788,6 +836,12 @@ reasons about, where they physically are, lit by live geo-alert activity.
   pre-fills the `GeoAnalogPanel` lookup** (lifted `analogPrefill` state in `NewsView`; a clicked asset hands over its
   newest live headline, or a synthetic alias-resolvable disruption headline when it has none, and `GeoAnalogPanel`'s
   new `prefill` prop runs the analog query). Legend + click hint included.
+- **News-tab restructure (polish).** `NewsView` was reorganised from a flat 7-panel stack into a hero header +
+  **two labelled engine sections** — **01 Geospatial** (map hero → live geo-alerts ‖ node-impact edge table →
+  RAG analog/desk-note, full width) and **02 Factor model** (impact feed ‖ per-factor betas → raw scored wire) —
+  using `xl:grid-cols-2` pairings + a `SectionHeader` (accent bar + eyebrow + `font-display` title) so the two
+  similar headline feeds no longer read as duplicated; the two wall-of-text footers were folded into the section
+  descriptions. Map itself upgraded to real coastlines (above).
 - **Verified (Flask test client):** `/api/news/geo/map` → 200, `count:37 active:0` on this machine (no live store),
   Hormuz at **26.57/56.25** with `disruption_bias.brent_flat:2`. Activity overlay exercised by the hermetic store test.
 - **Tests:** +4 hermetic (`tests/test_geo_map.py` — generic/unplaceable exclusion, coords+bias for a known asset,
