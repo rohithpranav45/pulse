@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { Panel } from '@/components/ui/Panel';
 import { Chip } from '@/components/ui/Chip';
 import { SkeletonRows } from '@/components/ui/Skeleton';
+import { Sparkline } from '@/components/ui/Sparkline';
 import { PriceDecomposition } from '@/components/panels/PriceDecomposition';
 import { PositionRow, PositionRowHeader } from '@/components/panels/PositionRow';
 import { RiskPanel } from '@/components/panels/RiskPanel';
@@ -473,7 +474,7 @@ function IndicatorDrillPanel({
 // front-month spread, BRT–WTI arb, geopolitics index. Pure presentational.
 
 function KpiTile({
-  label, value, sub, tone, icon: Icon, glow,
+  label, value, sub, tone, icon: Icon, glow, spark,
 }: {
   label: string;
   value: string;
@@ -481,6 +482,8 @@ function KpiTile({
   tone?: 'bull' | 'bear' | 'neut' | 'gold';
   icon?: any;
   glow?: boolean;
+  /** Optional trailing daily series — renders an ambient sparkline. */
+  spark?: number[];
 }) {
   const toneColor =
     tone === 'bull' ? 'text-bull' :
@@ -519,19 +522,44 @@ function KpiTile({
         {value}
       </div>
       {sub && <div className="text-[9.5px] font-mono text-text-tertiary tabular mt-1 relative z-10">{sub}</div>}
+      {spark && spark.length > 2 && (
+        <div aria-hidden className="absolute right-1.5 bottom-1 opacity-50 group-hover:opacity-80 transition-opacity pointer-events-none">
+          <Sparkline data={spark} width={92} height={26} />
+        </div>
+      )}
     </motion.div>
   );
 }
 
 function KpiStrip({
-  rec, all,
+  rec, all, history,
 }: {
   rec: Recommendation | null;
   all: any;
+  history?: any;
 }) {
   const prices = all?.prices ?? {};
   const curve = all?.curve;
   const fundamentals = all?.fundamentals;
+
+  // Trailing 30-session sparkline series from the 90d daily history feed.
+  const brentSpark = useMemo(
+    () => ((history?.brent ?? []) as any[])
+      .map(c => c?.c)
+      .filter((x): x is number => typeof x === 'number')
+      .slice(-30),
+    [history],
+  );
+  const arbSpark = useMemo(() => {
+    const b = (history?.brent ?? []) as any[];
+    const w = (history?.wti ?? []) as any[];
+    if (!b.length || !w.length) return [];
+    const wByT = new Map(w.map(c => [c?.t, c?.c]));
+    return b
+      .map(c => (typeof c?.c === 'number' && typeof wByT.get(c?.t) === 'number' ? c.c - wByT.get(c.t) : null))
+      .filter((x): x is number => typeof x === 'number')
+      .slice(-30);
+  }, [history]);
 
   const brent = prices?.brent?.price ?? null;
   const brentChg = prices?.brent?.change_pct ?? null;
@@ -573,6 +601,7 @@ function KpiStrip({
         sub={brentChg !== null ? `${brentChg >= 0 ? '+' : ''}${brentChg.toFixed(2)}% intraday` : 'awaiting feed'}
         tone={brentChg !== null ? (brentChg >= 0 ? 'bull' : 'bear') : undefined}
         icon={Droplet}
+        spark={brentSpark}
       />
       <KpiTile
         label="M1 – M2"
@@ -587,6 +616,7 @@ function KpiStrip({
         sub="atlantic arb"
         tone="neut"
         icon={Wind}
+        spark={arbSpark}
       />
       <KpiTile
         label="Geo · idx"
@@ -603,10 +633,12 @@ function KpiStrip({
 
 export function DeskView({
   all,
+  history,
   tradeIdea,
   onNavigate,
 }: {
   all: any;
+  history?: any;
   tradeIdea: any;
   onNavigate?: (k: ViewKey) => void;
 }) {
@@ -639,45 +671,54 @@ export function DeskView({
       animate="show"
     >
       <motion.div variants={fadeUp}>
-        <KpiStrip rec={rec ?? null} all={all} />
+        <KpiStrip rec={rec ?? null} all={all} history={history} />
       </motion.div>
 
-      <motion.div variants={fadeUp}>
-        <HeroPick rec={rec ?? null} lastSuccess={recLastUpdated} fetchError={recError} />
-      </motion.div>
+      {/* Main desk grid — trading flow (hero pick → positions → decomposition)
+          takes the wide left column; context (brief, risk, geo calc) stacks on
+          the right. Collapses to a single column below xl. */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 items-start">
+        <div className="xl:col-span-2 space-y-4 min-w-0">
+          <motion.div variants={fadeUp}>
+            <HeroPick rec={rec ?? null} lastSuccess={recLastUpdated} fetchError={recError} />
+          </motion.div>
 
-      <motion.div variants={fadeUp}>
-        <OpenPositionsStrip
-          positions={pos}
-          onNavigate={onNavigate}
-          lastSuccess={posLastUpdated}
-          fetchError={posError}
-        />
-      </motion.div>
+          <motion.div variants={fadeUp}>
+            <OpenPositionsStrip
+              positions={pos}
+              onNavigate={onNavigate}
+              lastSuccess={posLastUpdated}
+              fetchError={posError}
+            />
+          </motion.div>
 
-      <motion.div variants={fadeUp}>
-        <RiskPanel positions={pos} correlations={correlations} />
-      </motion.div>
+          <motion.div variants={fadeUp}>
+            <PriceDecomposition fairValue={fv} signal={signal} curve={curve} />
+          </motion.div>
+        </div>
 
-      <motion.div variants={fadeUp}>
-        <MorningBrief idea={tradeIdea} />
-      </motion.div>
+        <div className="space-y-4 min-w-0">
+          <motion.div variants={fadeUp}>
+            <MorningBrief idea={tradeIdea} />
+          </motion.div>
 
-      <motion.div variants={fadeUp}>
-        <PriceDecomposition fairValue={fv} signal={signal} curve={curve} />
-      </motion.div>
+          <motion.div variants={fadeUp}>
+            <RiskPanel positions={pos} correlations={correlations} />
+          </motion.div>
+
+          <motion.div variants={fadeUp}>
+            <GeoRiskCalculator
+              defaultSpareCapacity={spareCapacity}
+              brentPrice={brentSpot}
+            />
+          </motion.div>
+        </div>
+      </div>
 
       <motion.div variants={fadeUp}>
         <IndicatorDrillPanel
           signal={signal}
           onPick={(asset, indicator) => setDrill({ asset, indicator })}
-        />
-      </motion.div>
-
-      <motion.div variants={fadeUp}>
-        <GeoRiskCalculator
-          defaultSpareCapacity={spareCapacity}
-          brentPrice={brentSpot}
         />
       </motion.div>
 

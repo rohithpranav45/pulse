@@ -31,9 +31,9 @@ const STEPS: Step[] = [
   },
   {
     target: 'nav',
-    title: 'Seven workspaces',
+    title: 'Eight workspaces',
     body:
-      'Each tab is a different angle on the market: Desk (the landing view), Charts, Markets, Paper Trading, Regime, Inventory (the EIA-release framework), and the Signal Log. Press 1–7 anywhere to jump.',
+      'Each tab is a different angle on the market: Desk (the landing view), Charts, Markets, Paper Trading, Regime, Inventory (the EIA-release framework), the Signal Log, and News Impact. Press 1–8 anywhere to jump — or Ctrl/Cmd+K opens the command palette from anywhere.',
     placement: 'right',
   },
   {

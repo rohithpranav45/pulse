@@ -60,7 +60,7 @@ export function StatusBar({
       <Item label="COT" value={cot !== null ? `${cot.toFixed(0)}%ile` : '—'} />
       <Item label="GEO·IDX" value={geo !== null ? geo.toFixed(0) : '—'} tone={geo !== null && geo > 60 ? 'bear' : undefined} />
       <div className="flex-1" />
-      <span className="text-text-muted tracking-wider">v2.0 · React</span>
+      <span className="text-text-muted tracking-wider">v2.2 · React</span>
       <span className="w-px h-3 bg-border" />
       <span className="text-text-tertiary">Updated {fmt.ago(lastUpdated)}</span>
     </motion.footer>

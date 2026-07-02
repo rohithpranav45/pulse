@@ -113,6 +113,7 @@ export function Sidebar({ active, onSelect }: { active: ViewKey; onSelect: (k: V
       <div className="px-3 pt-3 mt-2" style={{ borderTop: '1px solid var(--hairline)' }}>
         <div className="text-[9px] font-mono tracking-[0.24em] text-text-muted uppercase mb-2">Shortcuts</div>
         <div className="flex flex-col gap-1 text-[10px] font-mono text-text-tertiary">
+          <div className="flex justify-between items-center"><span>Command</span><kbd className="text-text-secondary px-1 rounded bg-bg-card/40 border border-border/40 text-[9px]">⌘K</kbd></div>
           <div className="flex justify-between items-center"><span>Refresh</span><kbd className="text-text-secondary px-1 rounded bg-bg-card/40 border border-border/40 text-[9px]">R</kbd></div>
           <div className="flex justify-between items-center"><span>Fullscreen</span><kbd className="text-text-secondary px-1 rounded bg-bg-card/40 border border-border/40 text-[9px]">F</kbd></div>
           <div className="flex justify-between items-center"><span>Print sheet</span><kbd className="text-text-secondary px-1 rounded bg-bg-card/40 border border-border/40 text-[9px]">P</kbd></div>
@@ -121,7 +122,7 @@ export function Sidebar({ active, onSelect }: { active: ViewKey; onSelect: (k: V
         <div className="mt-4 pt-3 border-t border-border/40 flex items-center justify-between">
           <div className="flex flex-col leading-none gap-0.5">
             <span className="text-[8.5px] font-mono tracking-[0.22em] text-text-muted uppercase">Build</span>
-            <span className="text-[10px] font-mono text-text-tertiary tabular">v2.1 · phase 8</span>
+            <span className="text-[10px] font-mono text-text-tertiary tabular">v2.2 · phase 8</span>
           </div>
           <span
             aria-hidden

@@ -1,23 +1,43 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
+import {
+  RefreshCw, Printer, Maximize2, Keyboard, Sun, Moon, MessageSquareText, Compass,
+} from 'lucide-react';
 import { TopBar } from '@/components/shell/TopBar';
 import { Sidebar, NAV_ITEMS, ViewKey } from '@/components/shell/Sidebar';
 import { StatusBar } from '@/components/shell/StatusBar';
+import { CommandPalette, PaletteAction } from '@/components/shell/CommandPalette';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
-import { usePolling, useLocalStorage } from '@/lib/hooks';
+import { usePolling, useLocalStorage, useTheme } from '@/lib/hooks';
 import { api } from '@/lib/api';
 import { DeskView } from '@/views/DeskView';
-import { ChartsView } from '@/views/ChartsView';
-import { MarketsView } from '@/views/MarketsView';
-import { PaperView } from '@/views/PaperView';
-import { RegimeView } from '@/views/RegimeView';
-import { InventoryView } from '@/views/InventoryView';
-import { SignalLogView } from '@/views/SignalLogView';
-import { NewsView } from '@/views/NewsView';
 import { ChatDock } from '@/components/chat/ChatDock';
-import { OnboardingTour } from '@/components/onboarding/OnboardingTour';
+import { OnboardingTour, resetOnboarding } from '@/components/onboarding/OnboardingTour';
 import { DailySheet } from '@/components/panels/DailySheet';
 import { ToastStack } from '@/components/alerts/ToastStack';
+
+// DESK stays eagerly bundled (first paint); every other view is code-split so
+// the heavy chart/table dependencies load on demand instead of on boot.
+const ChartsView    = lazy(() => import('@/views/ChartsView').then(m => ({ default: m.ChartsView })));
+const MarketsView   = lazy(() => import('@/views/MarketsView').then(m => ({ default: m.MarketsView })));
+const PaperView     = lazy(() => import('@/views/PaperView').then(m => ({ default: m.PaperView })));
+const RegimeView    = lazy(() => import('@/views/RegimeView').then(m => ({ default: m.RegimeView })));
+const InventoryView = lazy(() => import('@/views/InventoryView').then(m => ({ default: m.InventoryView })));
+const SignalLogView = lazy(() => import('@/views/SignalLogView').then(m => ({ default: m.SignalLogView })));
+const NewsView      = lazy(() => import('@/views/NewsView').then(m => ({ default: m.NewsView })));
+
+/** Skeleton shown for the ~100ms a lazy view chunk takes to arrive. */
+function ViewLoading() {
+  return (
+    <div className="space-y-4">
+      {[160, 280, 200].map((h, i) => (
+        <div key={i} className="panel overflow-hidden" style={{ height: h }}>
+          <div className="skeleton w-full h-full opacity-60" />
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export default function App() {
   const [view, setView] = useLocalStorage<ViewKey>('pulse.view', 'desk');
@@ -52,10 +72,13 @@ export default function App() {
   }, []);
 
   const [helpOpen, setHelpOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [theme, toggleTheme] = useTheme();
 
   // Keyboard shortcuts. Bare 1..8/R/F/P only fire outside form inputs; the
-  // modifier variant (Cmd/Ctrl+1..8) fires anywhere, so tab nav still works
-  // while typing in the ChatDock or a paper-trade entry field.
+  // modifier variants (Cmd/Ctrl+1..8, Cmd/Ctrl+K) fire anywhere, so tab nav
+  // and the palette still work while typing in the ChatDock or a paper-trade
+  // entry field.
   useEffect(() => {
     const map: Record<string, ViewKey> = {
       '1':'desk','2':'charts','3':'markets',
@@ -67,12 +90,22 @@ export default function App() {
       const k = e.key;
       const mod = e.metaKey || e.ctrlKey;
 
-      // Cmd/Ctrl+1..7 — global, works in inputs too.
+      // Cmd/Ctrl+K — command palette, global, works in inputs too.
+      if (mod && (k === 'k' || k === 'K')) {
+        e.preventDefault();
+        setPaletteOpen(v => !v);
+        return;
+      }
+
+      // Cmd/Ctrl+1..8 — global, works in inputs too.
       if (mod && map[k]) {
         e.preventDefault();
         setView(map[k]);
         return;
       }
+
+      // While the palette is open it owns the keyboard.
+      if (paletteOpen) return;
 
       // ? toggles the help overlay (Shift+/ produces '?'); Esc closes it.
       if (!inInput && k === '?') { e.preventDefault(); setHelpOpen(v => !v); return; }
@@ -86,7 +119,51 @@ export default function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [setView, refetch, helpOpen]);
+  }, [setView, refetch, helpOpen, paletteOpen]);
+
+  // Command palette actions — navigation (with live icons from NAV_ITEMS) +
+  // every global action that today only lives on a hotkey or a TopBar icon.
+  const paletteActions = useMemo<PaletteAction[]>(() => [
+    ...NAV_ITEMS.map(n => ({
+      id: `nav-${n.key}`,
+      label: n.label,
+      group: 'Navigate',
+      sub: n.sub,
+      hint: n.hint,
+      icon: n.icon,
+      run: () => setView(n.key),
+    })),
+    {
+      id: 'act-refresh', label: 'Refresh all data', group: 'Actions', hint: 'R', icon: RefreshCw,
+      run: () => { setRefreshing(true); refetch().finally(() => setTimeout(() => setRefreshing(false), 600)); },
+    },
+    {
+      id: 'act-theme',
+      label: theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme',
+      group: 'Actions', icon: theme === 'dark' ? Sun : Moon,
+      run: toggleTheme,
+    },
+    {
+      id: 'act-chat', label: 'Ask PULSE (RAG chat)', group: 'Actions', hint: '/', icon: MessageSquareText,
+      run: () => window.dispatchEvent(new CustomEvent('pulse-open-chat')),
+    },
+    {
+      id: 'act-print', label: 'Print daily briefing sheet', group: 'Actions', hint: 'P', icon: Printer,
+      run: () => window.print(),
+    },
+    {
+      id: 'act-fullscreen', label: 'Toggle fullscreen', group: 'Actions', hint: 'F', icon: Maximize2,
+      run: () => document.documentElement.requestFullscreen?.(),
+    },
+    {
+      id: 'act-help', label: 'Keyboard shortcuts', group: 'Actions', hint: '?', icon: Keyboard,
+      run: () => setHelpOpen(true),
+    },
+    {
+      id: 'act-tour', label: 'Restart onboarding tour', group: 'Actions', icon: Compass,
+      run: () => resetOnboarding(),
+    },
+  ], [theme, toggleTheme, refetch, setView]);
 
   const liveTicker = prices ?? all?.prices ?? null;
   const merged = { ...(all ?? {}), prices: liveTicker ?? all?.prices ?? {} };
@@ -178,9 +255,19 @@ export default function App() {
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-2 text-[9.5px] font-mono text-text-tertiary tabular tracking-[0.24em] uppercase pb-1.5">
-              <kbd className="px-1.5 py-0.5 rounded border border-border/40 bg-bg-card/40 text-text-secondary text-[9px]">?</kbd>
-              <span>shortcuts</span>
+            <div className="flex items-center gap-3 text-[9.5px] font-mono text-text-tertiary tabular tracking-[0.24em] uppercase pb-1.5">
+              <button
+                onClick={() => setPaletteOpen(true)}
+                className="flex items-center gap-2 px-2 py-1 rounded-md border border-border/40 bg-bg-card/40 hover:border-gold/40 hover:text-text-primary transition-colors group"
+                title="Open command palette (Ctrl/Cmd+K)"
+              >
+                <kbd className="text-[9px] text-text-secondary group-hover:text-gold-bright transition-colors">⌘K</kbd>
+                <span>command</span>
+              </button>
+              <div className="flex items-center gap-2">
+                <kbd className="px-1.5 py-0.5 rounded border border-border/40 bg-bg-card/40 text-text-secondary text-[9px]">?</kbd>
+                <span>shortcuts</span>
+              </div>
             </div>
           </div>
 
@@ -200,14 +287,16 @@ export default function App() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
               >
-                {view === 'desk'          && <DeskView all={merged} tradeIdea={tradeIdea} onNavigate={setView} />}
-                {view === 'charts'        && <ChartsView all={merged} history={history} ohlcv={ohlcv} />}
-                {view === 'markets'       && <MarketsView all={merged} />}
-                {view === 'paper'         && <PaperView tradeIdea={tradeIdea} />}
-                {view === 'regime'        && <RegimeView />}
-                {view === 'inventory'     && <InventoryView all={merged} />}
-                {view === 'signals'       && <SignalLogView />}
-                {view === 'news'          && <NewsView />}
+                <Suspense fallback={<ViewLoading />}>
+                  {view === 'desk'          && <DeskView all={merged} history={history} tradeIdea={tradeIdea} onNavigate={setView} />}
+                  {view === 'charts'        && <ChartsView all={merged} history={history} ohlcv={ohlcv} />}
+                  {view === 'markets'       && <MarketsView all={merged} />}
+                  {view === 'paper'         && <PaperView tradeIdea={tradeIdea} />}
+                  {view === 'regime'        && <RegimeView />}
+                  {view === 'inventory'     && <InventoryView all={merged} />}
+                  {view === 'signals'       && <SignalLogView />}
+                  {view === 'news'          && <NewsView />}
+                </Suspense>
               </motion.div>
             </ErrorBoundary>
           </div>
@@ -232,6 +321,9 @@ export default function App() {
         news={merged?.news}
       />
 
+      {/* Command palette — Cmd/Ctrl+K anywhere */}
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} actions={paletteActions} />
+
       <HelpOverlay open={helpOpen} onClose={() => setHelpOpen(false)} />
     </div>
   );
@@ -242,6 +334,7 @@ function HelpOverlay({ open, onClose }: { open: boolean; onClose: () => void }) 
   const isMac = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform);
   const mod = isMac ? '⌘' : 'Ctrl';
   const rows: { keys: string; desc: string }[] = [
+    { keys: `${mod}+K`,      desc: 'Command palette — jump anywhere, run anything' },
     { keys: '1 – 8',         desc: 'Switch tab (outside text inputs)' },
     { keys: `${mod}+1 – 8`,  desc: 'Switch tab (works inside inputs too)' },
     { keys: '/',             desc: 'Open Ask PULSE chat' },

@@ -205,6 +205,14 @@
     background: var(--panel-bg-hover);
     box-shadow: var(--panel-shadow-hover);
   }
+  /* Feature/hero panels — Panel.tsx sets --accent-mid/--accent-soft per accent;
+     give them a slightly stronger presence than a standard panel. */
+  .panel--feature {
+    border-color: var(--accent-soft, var(--border-accent));
+  }
+  .panel--feature:hover {
+    border-color: var(--accent-mid, var(--panel-border-hover));
+  }
   .panel-hdr {
     @apply flex items-center justify-between gap-2 px-4 py-3 border-b;
     border-color: var(--hairline);

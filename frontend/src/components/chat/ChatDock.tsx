@@ -105,7 +105,8 @@ export function ChatDock() {
     if (open) setTimeout(() => inputRef.current?.focus(), 100);
   }, [open]);
 
-  // Slash key opens chat (when not typing in another input)
+  // Slash key opens chat (when not typing in another input); the command
+  // palette opens it via the 'pulse-open-chat' custom event.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
@@ -115,8 +116,13 @@ export function ChatDock() {
         setOpen(true);
       }
     };
+    const onOpenEvent = () => setOpen(true);
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('pulse-open-chat', onOpenEvent);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('pulse-open-chat', onOpenEvent);
+    };
   }, []);
 
   const submit = useCallback(async (question: string) => {
