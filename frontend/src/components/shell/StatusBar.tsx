@@ -55,10 +55,14 @@ export function StatusBar({
       <span className="w-px h-3 bg-border" />
       <Item label="M1–M2" value={m1m2 !== null ? fmt.signed(m1m2) : '—'} tone={m1m2 !== null ? (m1m2 > 0 ? 'bull' : 'bear') : undefined} />
       <Item label="BRT–WTI" value={brtWti !== null ? `$${brtWti.toFixed(2)}` : '—'} />
-      <Item label="3-2-1" value={crack !== null ? `$${crack.toFixed(2)}` : '—'} />
-      <Item label="INV·DEV" value={inv !== null ? `${inv > 0 ? '+' : ''}${inv.toFixed(1)}%` : '—'} tone={inv !== null ? (inv > 0 ? 'bear' : 'bull') : undefined} />
-      <Item label="COT" value={cot !== null ? `${cot.toFixed(0)}%ile` : '—'} />
-      <Item label="GEO·IDX" value={geo !== null ? geo.toFixed(0) : '—'} tone={geo !== null && geo > 60 ? 'bear' : undefined} />
+      <span className="hidden md:flex items-center gap-5">
+        <Item label="3-2-1" value={crack !== null ? `$${crack.toFixed(2)}` : '—'} />
+        <Item label="INV·DEV" value={inv !== null ? `${inv > 0 ? '+' : ''}${inv.toFixed(1)}%` : '—'} tone={inv !== null ? (inv > 0 ? 'bear' : 'bull') : undefined} />
+      </span>
+      <span className="hidden lg:flex items-center gap-5">
+        <Item label="COT" value={cot !== null ? `${cot.toFixed(0)}%ile` : '—'} />
+        <Item label="GEO·IDX" value={geo !== null ? geo.toFixed(0) : '—'} tone={geo !== null && geo > 60 ? 'bear' : undefined} />
+      </span>
       <div className="flex-1" />
       <span className="text-text-muted tracking-wider">v2.2 · React</span>
       <span className="w-px h-3 bg-border" />

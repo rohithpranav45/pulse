@@ -2521,9 +2521,18 @@ def ask_stats_route():
 
 @app.route("/api/all")
 def all_data():
-    """Assemble all data from individual caches in one response."""
+    """Assemble all data from individual caches in one response.
+
+    Sends an ETag computed over the payload (excluding the per-request
+    timestamp) so the dashboard's 60s poll costs a 304 with no body whenever
+    nothing actually changed between polls. `Cache-Control: no-cache` makes
+    browsers revalidate (send If-None-Match) instead of trusting a stale copy.
+    """
+    import hashlib
+    import json as _json
+
     fv = _fetch_fair_value()
-    return jsonify({
+    payload = {
         "prices":       {"data": _fetch_prices(),       "stale": False},
         "curve":        {"data": _fetch_curve()},
         "fair_value":   {"brent": fv.get("brent", {}),
@@ -2553,8 +2562,39 @@ def all_data():
         "gdelt_tone":     {"data": _fetch_gdelt_tone()},
         "marketaux":      {"data": _fetch_marketaux()},
         "analogs":        {"data": _fetch_analogs()},
-        "timestamp":      _now(),
-    })
+    }
+
+    # Hash with per-section "timestamp" keys stripped — several fetchers stamp
+    # now() on every call (notably failing/stale ones), which would defeat the
+    # ETag even though the actual data is unchanged.
+    def _strip_ts(o):
+        if isinstance(o, dict):
+            return {k: _strip_ts(v) for k, v in o.items() if k != "timestamp"}
+        if isinstance(o, list):
+            return [_strip_ts(v) for v in o]
+        return o
+
+    try:
+        digest = hashlib.md5(
+            _json.dumps(_strip_ts(payload), sort_keys=True, default=str).encode("utf-8")
+        ).hexdigest()
+    except Exception:
+        digest = None
+
+    if digest is not None:
+        inm = request.headers.get("If-None-Match", "")
+        if digest in inm:
+            resp = app.make_response(("", 304))
+            resp.set_etag(digest)
+            resp.headers["Cache-Control"] = "no-cache"
+            return resp
+
+    payload["timestamp"] = _now()
+    resp = jsonify(payload)
+    if digest is not None:
+        resp.set_etag(digest)
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -208,11 +208,11 @@ export function TopBar({ ticker, onRefresh, refreshing }: { ticker: TickerData |
         ))}
       </div>
 
-      {/* Right cluster */}
+      {/* Right cluster — clocks and market chip shed first on narrow windows */}
       <div className="flex items-center gap-2 flex-shrink-0">
         <HealthPill />
-        <MarketStatus />
-        <div className="flex border-l border-border pl-2 ml-1">
+        <span className="hidden md:inline-flex"><MarketStatus /></span>
+        <div className="hidden xl:flex border-l border-border pl-2 ml-1">
           <TimeChip tz="America/New_York" label="NYC" />
           <TimeChip tz="Europe/London" label="LON" />
           <TimeChip tz="Asia/Singapore" label="SGP" />

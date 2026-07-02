@@ -7,7 +7,16 @@ spread engine), and serves a React dashboard with a paper-trading book.
 - **Stack:** Flask 3 · React 18 + Vite + Tailwind · SQLite (cache + paper book) ·
   DuckDB/Parquet over a 3.5 GB `/Data` desk feed · sklearn + XGBoost/LightGBM/CatBoost
 - **Run (local):** `python start.py` from the repo root → http://127.0.0.1:5000
-- **Last updated:** 2026-07-01 (**PAPER + SIGNAL LOG — restructure + bug-fixes** [branch
+- **Last updated:** 2026-07-02 (**UI glow-up — command palette + desk grid + code-split + live polish**
+  [branch `phase4-live-feature-overlay`, see §1 entry]. **Cmd/Ctrl+K command palette** (fuzzy nav across the
+  8 tabs + every global action); **DESK rebuilt** as a 2/3+1/3 grid with KPI sparklines, number-roll values,
+  and an honest **stale-feed banner** when the engine's `as_of` lags >4 days; **views code-split** via
+  React.lazy (boot JS **1,325 → 522 kB**, chart libs load on demand); **collapsible + responsive sidebar**
+  (manual toggle persisted; auto icon-rail below `lg`); ticker tape flashes on real ticks; `usePolling`
+  pauses in hidden tabs + catches up on focus; **`/api/all` sends an ETag** (timestamp-stripped hash) →
+  the 60s poll costs a **304** when nothing changed; `tsc` fully clean (baseUrl deprecation fixed); stale
+  "Seven workspaces" tour copy + undefined `.panel--feature` CSS fixed.) Prior: **PAPER + SIGNAL LOG —
+  restructure + bug-fixes** [branch
   `phase4-live-feature-overlay`, see §1 entry]. Fixed the **paper win-rate bug** (`wins/total_trades` counted
   break-even *scratches* in the denominator → 43.8%; now `wins/decisive` = **70.6%**, consistent with the 166W/69L
   breakdown; `scratches`/`decisive` + `total_pnl_pct`/`max_drawdown_pct`/`avg_holding_days` — previously computed but
@@ -725,6 +734,36 @@ regime_conditioning,release_reaction}.py`, `/api/regime/inventory[?series=][/rea
 - **Tests:** +4 (`test_assess_series_all_three` ×3, `test_release_reaction_computes_horizon_moves`). The reaction
   panel anchors today's prediction on the **API −0.765M as a proxy** for the EIA actual — re-anchor on the real
   printed EIA number for an exact grade.
+
+### ✅ UI glow-up — command palette + desk grid + code-split + live polish (2026-07-02)
+Branch `phase4-live-feature-overlay` (2 commits). Full-dashboard polish pass — audit first, then two waves.
+- **Cmd/Ctrl+K command palette** (`components/shell/CommandPalette.tsx`): fuzzy search over the 8 workspaces
+  + every global action (refresh, theme, Ask-PULSE chat via a `pulse-open-chat` custom event, print,
+  fullscreen, shortcuts, tour). Arrow-key nav, group headings, window-level Esc. Surfaced as a `⌘K command`
+  chip in the view header, in the help overlay, and the sidebar shortcut list.
+- **DESK rebuilt for wide screens**: KPI strip on top, then a 2/3 column (HeroPick → OpenPositions →
+  PriceDecomposition) beside a 1/3 column (MorningBrief → RiskPanel → GeoRiskCalculator); IndicatorDrill
+  full-width below. KPI tiles gained **30-session sparklines** (Brent close, BRT–WTI arb, computed from
+  `/api/history` candles) + **number-roll** values (`components/ui/AnimatedNumber.tsx`, rAF ease-out tween,
+  snaps on first paint, respects reduced-motion — also on the hero z-score + edge). A **stale-feed banner**
+  shows when `rec.as_of` lags >4 days (the HF Space always runs on baked settles — say so honestly).
+- **Perf**: all views except DESK are code-split via `React.lazy` — boot JS **1,325 → 522 kB** (164 kB gzip;
+  recharts/lightweight-charts now load with their tabs). `usePolling` skips polls while `document.hidden`
+  and refetches on focus when stale; `useLocalStorage` instances sync via a `pulse-ls` custom event (theme
+  toggled from palette + TopBar can't diverge). **`/api/all` sends an ETag** — MD5 over the payload with all
+  `timestamp` keys recursively stripped (failing fetchers stamp `now()` per call, e.g. gdelt_tone under
+  429, which would defeat it) + `Cache-Control: no-cache`; verified 304/0-bytes via test client (200s during
+  market hours are genuine data movement).
+- **Chrome**: sidebar is now collapsible (persisted `pulse.sidebar.collapsed`) + an automatic icon rail below
+  `lg`; Tailwind classes kept literal (JIT can't see interpolated names). Ticker cells flash green/red on
+  real price ticks (the `flash-up/dn` keyframes existed but were never wired). TopBar clocks hide below
+  `xl`, market chip below `md`; StatusBar items shed progressively.
+- **Fixes found by the audit**: `.panel--feature` was referenced by Panel.tsx but never defined in CSS (accent
+  vars now actually style feature panels); onboarding tour said "Seven workspaces / press 1–7" (stale since
+  the News tab); tsconfig `baseUrl` deprecation removed → **`tsc` fully clean for the first time** (the
+  TS5101 note in older entries is obsolete); version strings unified to v2.2.
+- **Verified**: `tsc` clean · `vite build` clean · served bundle smoke-checked on :5000 · ETag 304 verified
+  hermetically. No backend behaviour change beyond the additive ETag headers.
 
 ### ✅ PAPER + SIGNAL LOG — restructure + bug-fixes (2026-07-01)
 Branch `phase4-live-feature-overlay` (not merged to main). Audited both tabs for bugs, fixed them at the source, and
