@@ -106,6 +106,12 @@ def get_live_recommendation(*, include_wti: bool = False) -> dict:
             "overlaid":      sorted(rec.get("overlaid_features", [])),
             "n_overlaid":    len(rec.get("overlaid_features", [])),
             "carried_stale": CARRIED_STALE_COLS,
+            # Opt-in OHLCV settle tail (PULSE_SETTLE_TAIL=1): how far the daily
+            # tape itself was extended past the frozen lake — tail rows are
+            # session-end ESTIMATEs, and slow features are carried from the
+            # tape's last row (far fewer stale days when the tail is on).
+            "as_of_source":  rec.get("as_of_source", "lake"),
+            "settle_tail":   rec.get("settle_tail"),
         },
     }
     rec["live"] = True

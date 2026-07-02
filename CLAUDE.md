@@ -7,7 +7,16 @@ spread engine), and serves a React dashboard with a paper-trading book.
 - **Stack:** Flask 3 · React 18 + Vite + Tailwind · SQLite (cache + paper book) ·
   DuckDB/Parquet over a 3.5 GB `/Data` desk feed · sklearn + XGBoost/LightGBM/CatBoost
 - **Run (local):** `python start.py` from the repo root → http://127.0.0.1:5000
-- **Last updated:** 2026-07-02 (**UI glow-up — command palette + desk grid + code-split + live polish**
+- **Last updated:** 2026-07-02 (**Settle-tail — the regime engine's daily settle tape extends past the
+  frozen lake (2026-05-26 → feed latest) via the desk hourly OHLCV feed, OPT-IN `PULSE_SETTLE_TAIL=1`**
+  [branch `phase4-live-feature-overlay`, see §1 entry]. New `backend/research/settle_tail.py` (extend-only,
+  weekend-safe, lake rows never overwritten) wired into `data_lake.get_brent_settlements`/`get_wti_settlements`;
+  flag off (default) = bit-for-bit the lake. Verified live: feature-matrix last row **05-26 → 06-26**, live
+  z-scores in-distribution (max |z| 1.02 vs caps 6.3-10); tail rows flagged **`ohlcv_tail (ESTIMATE)`** on
+  `as_of_source` + `live_feed.feature_overlay` + `/api/regime/live`. Overlap validation (lake∩feed): Brent
+  m1_m2 mean|Δ| ≈ 0.36× its daily vol (usable), WTI ≈ 0.84× vs the synth lake (noisier — flagged). Training
+  untouched: pkls still end at the lake; run training/walk-forward with the flag off. +10 hermetic tests →
+  **294 pass**.) Prior: **UI glow-up — command palette + desk grid + code-split + live polish**
   [branch `phase4-live-feature-overlay`, see §1 entry]. **Cmd/Ctrl+K command palette** (fuzzy nav across the
   8 tabs + every global action); **DESK rebuilt** as a 2/3+1/3 grid with KPI sparklines, number-roll values,
   and an honest **stale-feed banner** when the engine's `as_of` lags >4 days; **views code-split** via
@@ -734,6 +743,50 @@ regime_conditioning,release_reaction}.py`, `/api/regime/inventory[?series=][/rea
 - **Tests:** +4 (`test_assess_series_all_three` ×3, `test_release_reaction_computes_horizon_moves`). The reaction
   panel anchors today's prediction on the **API −0.765M as a proxy** for the EIA actual — re-anchor on the real
   printed EIA number for an exact grade.
+
+### ✅ Settle-tail — daily settle tape extended past the frozen lake (2026-07-02)
+Branch `phase4-live-feature-overlay`. The standing "next" from geo Sprints 6-7: the /Data daily settle
+tape froze **2026-05-26**, so every regime-engine feature row after it simply didn't exist (the Phase-4
+live overlay fixes only TODAY's fast features; slow features + the tape date stayed carried from 05-26).
+The desk hourly OHLCV feed (`products_feed`; **LCO = Brent, CL = WTI**, c1..c12, 2026-04-30 →) now
+optionally EXTENDS the settle tape the engine reads, via the same extend-only pattern as the geo panel.
+- **New `backend/research/settle_tail.py`.** `extend_with_feed(lake, feed)` appends feed rows dated
+  **strictly after** the lake's last settle (lake rows never overwritten; tail reindexed to the lake's
+  columns so Brent c13..c31 stay NaN — the engine only needs c1/c2/c3/c6/c12; **weekend UTC-date rows
+  dropped** — the feed's midnight-UTC grouping yields Sat/Sun rows that are just the first thin hours of
+  Monday's session, and the lake calendar never has them). `extend_settlements` loads the feed + attaches
+  the measured lake↔feed `overlap` stats to the meta; `overlap_stats` is the pure validator. Provenance
+  constant `TAIL_SOURCE = "ohlcv_tail (ESTIMATE)"` (daily settle = last hourly bar per UTC date — a
+  session-end proxy, same synthesis class as the lake's own synth WTI). Standalone overlap report:
+  `python -m backend.research.settle_tail`.
+- **OPT-IN wiring (`PULSE_SETTLE_TAIL=1`, default OFF).** `data_lake.get_brent_settlements` /
+  `get_wti_settlements` extend after load when the flag is set; flag off returns the lake **bit-for-bit**
+  (separate cache keys per flag state so toggling the env var never serves the wrong variant; the tail is
+  **never persisted** back to the lake parquets). `data_lake.settle_tail_meta()` exposes per-tape
+  provenance. Everything downstream (`features.build_features`, `spread_universe.build_spread_series`,
+  live_ranker/live_engine/signal_log) inherits automatically.
+- **Verified live (07-02 desk):** feature-matrix last row **2026-05-26 → 2026-06-26** (+23 Brent / +25 WTI
+  weekday tail rows); `realised_vol_20d`/`brent_ret_5d` now computed over June (war spike + unwind) instead
+  of carried from May; regime reads NEUTRAL/LOW/STRESSED on the June-26 row. Live rec (flag on, WTI incl.):
+  all z-scores **in-distribution** — max |z| = 1.02 (wti_m1_m2 SELL) vs adaptive caps 6.27-10.0, no
+  blow-up. `as_of_source: "ohlcv_tail (ESTIMATE)"` surfaced on `get_recommendation` + the
+  `live_feed.feature_overlay` block + `/api/regime/live` (loose-jsonify, flows through).
+- **Overlap validation (lake∩feed, the honest read).** Same-date alignment confirmed correct for both
+  (±1-day shifts are 3-4× worse — no off-by-one). **Brent:** m1_m2 mean|Δ| $0.14 ≈ **0.36×** its daily
+  vol, c1 $0.83 ≈ 0.47× — genuine 19:30→22:00-UTC session-end drift in a high-vol month (day-change corr
+  **0.91**); usable, flagged. **WTI:** c1 $1.83 ≈ 0.91×, m1_m2 ≈ **0.84×**, change-corr only **0.52** —
+  the UTC-midnight cut lands inside CME's *next* session AND the lake WTI is itself synth (two estimates
+  disagreeing; gotcha 11's real-settlement file would arbitrate). Kept, with both estimate flags visible in
+  the meta. Note the flat-price proxy error matters least on the live path: the Phase-4 overlay replaces
+  the fast flat features with the 15-min feed anyway — the tail's real job is advancing the tape date,
+  regime, vol/return windows, and the rolling-z baseline history.
+- **Training untouched (by design).** Model pkls are unchanged (trained ≤ 2026-03-31 on the lake); the
+  tail feeds **inference** (feature freshness + z-scores) only. Run training / the walk-forward with the
+  flag off (the default) — the §5 gate/exit/A-B invariants were re-verified bit-for-bit with flag off.
+- **Tests:** +10 hermetic (`tests/test_settle_tail.py` — extend-only + lake-wins-on-overlap, column
+  alignment, weekend exclusion, no-lake/no-feed/no-new-rows no-ops, ESTIMATE provenance, overlap stats on
+  a known offset + no-overlap None, data_lake flag-off bit-for-bit, flag-on meta, per-flag cache isolation;
+  synthetic frames, no `I:\`/`/Data`). **294 pass** (was 284).
 
 ### ✅ UI glow-up — command palette + desk grid + code-split + live polish (2026-07-02)
 Branch `phase4-live-feature-overlay` (2 commits). Full-dashboard polish pass — audit first, then two waves.
@@ -1583,6 +1636,7 @@ open 80/443 (security list + iptables), `docker compose up -d --build`, hand ove
 | GARCH conditional-vol forecast accuracy (standalone) | `python -m backend.research.garch_vol` |
 | Portfolio vol-target sizing (standalone) | `python -m backend.research.vol_target` |
 | Live snapshot from feed (Phase 3.1) | `python -m backend.research.live_feed` (set `PULSE_LIVE_FEED_DIR`) |
+| Settle-tail overlap validation report | `python -m backend.research.settle_tail` (tail itself: `PULSE_SETTLE_TAIL=1`) |
 | Live recommendation on current market | `python -m backend.research.live_engine` |
 | Generate + list live signals | `python -m backend.research.signal_log` · `--update --list` |
 | Auto-desk dry-run (plan only) | `python -m backend.research.auto_desk` (`--live` to execute · `--wti`) |
@@ -1628,6 +1682,7 @@ pulse/
 | `live_ranker.py` | classify → predict → rank; **applies the tuned exit rule** (TP/SL/time-stop). Phase 3.1: additive `live_actuals`/`live_curve_m1m12` overrides |
 | `live_feed.py` | Phase 3.1 — reads the live 15-min bar share, builds real spreads + curve by expiry ordering. Phase 4: `recent_daily_frame` resamples to a daily c1/c12 frame for the live stress read |
 | `live_features.py` | Phase 4 (06-18) — overlays today's fast features (price/curve/lags/calendar) onto the stale daily row so the model scores on the live market; slow features carried-stale + reported |
+| `settle_tail.py` | Settle-tail (07-02) — opt-in `PULSE_SETTLE_TAIL=1` extend-only tail of the daily settle tape past the frozen lake from the hourly OHLCV feed (LCO=Brent, CL=WTI); rows flagged `ohlcv_tail (ESTIMATE)`; overlap validator + standalone report |
 | `live_engine.py` | Phase 3.1 — overlays the live snapshot onto the ranker → "what would it trade now" |
 | `signal_log.py` | Phase 3.1 — persists every live opportunity + subsequent-performance MTM (`signal_log` table) |
 | `gated_select.py` | Phase 2 (06-19) — greedy signed-P&L-corr filter → the decorrelated `portfolio` block |
@@ -1658,7 +1713,9 @@ risk/structure · paper trading (`/api/paper/*`) · **regime engine** (`/api/reg
 `MARKETAUX_KEY`, `APIFY_API_TOKEN`, `AISSTREAM_API_KEY`, `SENTRY_DSN`/`VITE_SENTRY_DSN`,
 `BETTER_STACK_TOKEN`. Optional regime flags: `PULSE_REGIME_MODE=pooled`, `PULSE_GATED_BLEND=1`,
 `PULSE_GATED_SIZE=full|half|kelly`, `PULSE_AB_TEST_DISABLED=1`, `PULSE_PERSPREAD_GATE=0` (Phase 8 — revert
-the per-spread gate to the uniform Phase 2.6 global gate; default on).
+the per-spread gate to the uniform Phase 2.6 global gate; default on), `PULSE_SETTLE_TAIL=1` (opt-in —
+extend the daily settle tape past the frozen lake with the hourly-OHLCV tail, rows flagged
+`ohlcv_tail (ESTIMATE)`; default OFF = lake bit-for-bit; keep OFF for training/walk-forward runs).
 
 **/Data lake.** Brent C1-C31 daily settlements (real); WTI C1-C6 (synth from 1-min mids → flagged
 ESTIMATE via `data_lake.get_wti_settlements()`); 1-min mids (Brent/WTI/HO/Gasoil); spread/OHLCV xlsx.

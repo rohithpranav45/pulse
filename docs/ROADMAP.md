@@ -1,8 +1,10 @@
 # PULSE — Roadmap & Backlog
 
 **The *future* of the project.** Companion to `CLAUDE.md` (the *present* — current state)
-and `docs/PHASE_HISTORY.md` (the *past* — how we got here). Last updated 2026-06-22
-(Phase 8 per-spread gate shipped + deployed live; the Phase 2.8.x model backlog is closed).
+and `docs/PHASE_HISTORY.md` (the *past* — how we got here). Last updated 2026-07-02
+(settle-tail shipped: the regime engine's daily tape now optionally extends past the frozen lake via the
+hourly OHLCV feed, `PULSE_SETTLE_TAIL=1`; prior 2026-06-22 — Phase 8 per-spread gate shipped + deployed
+live; the Phase 2.8.x model backlog is closed).
 
 This file exists so nothing slips through the cracks again. It captures **every** task
 we planned, deferred, or owe someone — with a timeline and a copy-paste prompt per task.
@@ -48,6 +50,22 @@ Startup-folder launcher) never landed a free ARM instance after 400+ tries; HF s
 loop can be stopped (remove the Startup-folder `.vbs`) — keep only if you still want a persistent VM
 later. The Docker/Caddy artifacts (`Dockerfile`, `docker-compose.yml`, `deploy/README.md`) remain
 valid for any VPS/Oracle host.
+
+---
+
+## ✅ SHIPPED — Settle-tail: daily settle tape extended past the frozen lake (2026-07-02)
+
+The /Data daily settles froze 2026-05-26; `backend/research/settle_tail.py` (opt-in
+`PULSE_SETTLE_TAIL=1`, default OFF = lake bit-for-bit) extends the tape the regime engine reads with the
+desk hourly OHLCV feed's post-lake tail (LCO=Brent, CL=WTI; extend-only, weekend-safe, rows flagged
+`ohlcv_tail (ESTIMATE)`, never persisted). Feature matrix advances 05-26 → feed latest; provenance on
+`as_of_source` / `live_feed.feature_overlay` / `/api/regime/live`. Overlap-validated (Brent m1_m2 proxy
+error ≈ 0.36× daily vol; WTI ≈ 0.84× vs the synth lake — flagged). Training still ends at the lake — keep
+the flag OFF for training/walk-forward. Detail: `CLAUDE.md` §1. **Follow-ups:** (1) set
+`PULSE_SETTLE_TAIL=1` on the desk process once you want the live engine running on the extended tape
+day-to-day; (2) the real WTI daily-settlement file (T1.3 ask) would arbitrate the two WTI estimates;
+(3) a session-close (21:00/22:00 UTC) cut instead of the midnight-UTC grouping would tighten the proxy —
+shared with the geo `products_feed`, do it there if ever needed.
 
 ---
 

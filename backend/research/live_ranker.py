@@ -421,6 +421,21 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
     latest_spreads  = spreads_ffilled.iloc[-1] if not spreads_ffilled.empty else None
     regime = str(latest_features[regime_col])
     as_of  = df.index[-1].strftime("%Y-%m-%d")
+    # Opt-in OHLCV settle tail (PULSE_SETTLE_TAIL=1, data_lake) — when the
+    # feature matrix's last row is a hourly-feed tail row rather than a lake
+    # settle, the as_of provenance must say so (it's a session-end ESTIMATE).
+    as_of_source = "lake"
+    settle_tail = None
+    try:
+        from data_lake import settle_tail_meta
+        _tm = settle_tail_meta()
+        if _tm:
+            settle_tail = _tm
+            _brent_tail = _tm.get("brent") or {}
+            if _brent_tail and as_of > _brent_tail.get("lake_end", as_of):
+                as_of_source = _brent_tail.get("source", "ohlcv_tail (ESTIMATE)")
+    except Exception:
+        pass
 
     # Phase 3.1 — live overlay: recompute today's regime from the live curve.
     # The curve axis is defined on Brent M1-M12 (regimes.classify_curve), so a
@@ -852,6 +867,8 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
         "size_mode":             size_mode if gated else None,  # Phase 2.7
         "recommendation_source": (top.get("recommendation_source") if top else None),
         "as_of":                 as_of,
+        "as_of_source":          as_of_source,  # "lake" | "ohlcv_tail (ESTIMATE)" (PULSE_SETTLE_TAIL)
+        "settle_tail":           settle_tail,   # per-tape tail provenance, None when off/inactive
         "n_eligible":            len(ranked),
         "n_universe":            len(INSTRUMENTS) - len(TUNED_EXCLUDED_SPREADS),
         "excluded_spreads":      sorted(TUNED_EXCLUDED_SPREADS),
