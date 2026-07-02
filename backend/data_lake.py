@@ -272,10 +272,55 @@ def _load_brent_daily_ohlcv_multi() -> Optional[pd.DataFrame]:
     return df.sort_values(["timestamp", "instrument"]).reset_index(drop=True)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Opt-in OHLCV settle-tail extension (PULSE_SETTLE_TAIL=1, default OFF)
+# ─────────────────────────────────────────────────────────────────────────────
+# The lake's daily settles froze on 2026-05-26; the desk hourly OHLCV feed
+# (research.settle_tail → products_feed; LCO=Brent, CL=WTI) can EXTEND the tape
+# with post-lake rows (last hourly bar per UTC date — an ESTIMATE, never
+# persisted back to the lake parquets, never overwriting lake rows). Flag off →
+# these accessors return the lake bit-for-bit as before.
+_TAIL_META: dict = {}
+
+
+def settle_tail_meta() -> dict:
+    """Per-tape tail provenance ({'brent': {...}, 'wti': {...}}) — populated
+    only when PULSE_SETTLE_TAIL=1 actually appended rows this process."""
+    return dict(_TAIL_META)
+
+
+def _maybe_extend_tail(df: Optional[pd.DataFrame], product_key: str) -> Optional[pd.DataFrame]:
+    try:
+        from research.settle_tail import extend_settlements
+        ext, meta = extend_settlements(df, product_key)
+        if meta:
+            _TAIL_META[product_key] = meta
+            log.info("data_lake: %s settle tape extended +%d rows to %s [%s]",
+                     product_key, meta["n_tail_rows"], meta["tail_end"], meta["source"])
+        return ext
+    except Exception as exc:
+        log.warning("data_lake: settle-tail extension failed (%s) — using lake only", exc)
+        return df
+
+
+def _settle_tail_enabled() -> bool:
+    try:
+        from research.settle_tail import tail_enabled
+        return tail_enabled()
+    except Exception:
+        return False
+
+
 def get_brent_settlements() -> Optional[pd.DataFrame]:
-    if "settlements" not in _cache:
-        _cache["settlements"] = _load_settlements_c1_to_c31()
-    return _cache["settlements"]
+    # cache key includes the tail flag so toggling the env var never serves the
+    # other variant from a warm cache
+    key = "settlements__tail" if _settle_tail_enabled() else "settlements"
+    if key not in _cache:
+        df = _load_settlements_c1_to_c31()
+        if key.endswith("__tail"):
+            df = _maybe_extend_tail(df, "brent")
+        _cache[key] = df
+    return _cache[key]
 
 
 def get_c12_15y() -> Optional[pd.DataFrame]:
@@ -385,9 +430,15 @@ def get_wti_settlements() -> Optional[pd.DataFrame]:
     See module docstring: this is a synthesis, not exchange-print settlements.
     Mentor file is the source of truth once she provides it.
     """
-    if "wti_settlements" not in _cache:
-        _cache["wti_settlements"] = _load_wti_settlements()
-    return _cache["wti_settlements"]
+    key = "wti_settlements__tail" if _settle_tail_enabled() else "wti_settlements"
+    if key not in _cache:
+        df = _load_wti_settlements()
+        if key.endswith("__tail"):
+            # the lake WTI is itself synth (gotcha 11); the tail is a SECOND
+            # estimate source (hourly CL feed) — both flags stay visible in meta
+            df = _maybe_extend_tail(df, "wti")
+        _cache[key] = df
+    return _cache[key]
 
 
 # ═════════════════════════════════════════════════════════════════════════════
