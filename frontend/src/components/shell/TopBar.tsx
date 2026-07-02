@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import { useClock, useTheme } from '@/lib/hooks';
 import { fmt } from '@/lib/fmt';
 import { Chip } from '@/components/ui/Chip';
@@ -11,6 +12,57 @@ import clsx from 'clsx';
 
 type Quote = { price: number; change_abs?: number; change_pct?: number };
 type TickerData = Record<string, Quote>;
+
+/** One ticker-tape cell — flashes green/red when the live price ticks. */
+function TickerItem({ label, q, first }: { label: string; q?: Quote; first: boolean }) {
+  const prev = useRef<number | null>(null);
+  const [flash, setFlash] = useState<'up' | 'dn' | null>(null);
+  const price = q?.price;
+
+  useEffect(() => {
+    if (typeof price !== 'number') return;
+    if (prev.current !== null && price !== prev.current) {
+      setFlash(price > prev.current ? 'up' : 'dn');
+      const t = window.setTimeout(() => setFlash(null), 1250);
+      prev.current = price;
+      return () => window.clearTimeout(t);
+    }
+    prev.current = price;
+  }, [price]);
+
+  const chg = q?.change_pct ?? 0;
+  const up = chg >= 0;
+  return (
+    <div
+      className={clsx(
+        'ticker-item hover:bg-gold/5 transition-colors group',
+        !first && 'border-l border-border/40',
+        flash === 'up' && 'animate-flash-up',
+        flash === 'dn' && 'animate-flash-dn',
+      )}
+    >
+      <span className="text-[8.5px] font-mono tracking-[0.22em] text-text-muted uppercase group-hover:text-text-tertiary transition-colors">{label}</span>
+      <motion.span
+        key={price ?? '—'}
+        initial={{ opacity: 0.6 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.4 }}
+        className={clsx('text-sm font-mono font-semibold tabular', q ? 'text-text-primary' : 'text-text-muted')}
+      >
+        {q ? fmt.price(q.price) : '—'}
+      </motion.span>
+      <span
+        className={clsx(
+          'text-[10px] font-mono font-semibold tabular px-1.5 py-0.5 rounded',
+          up ? 'text-bull bg-bull/8' : 'text-bear bg-bear/8',
+          q?.change_pct === undefined && 'opacity-0',
+        )}
+      >
+        {up ? '▲' : '▼'} {q?.change_pct !== undefined ? `${Math.abs(q.change_pct).toFixed(2)}%` : ''}
+      </span>
+    </div>
+  );
+}
 
 function TimeChip({ tz, label }: { tz: string; label: string }) {
   const now = useClock();
@@ -151,40 +203,9 @@ export function TopBar({ ticker, onRefresh, refreshing }: { ticker: TickerData |
 
       {/* Ticker tape */}
       <div className="flex-1 flex items-center gap-0 overflow-hidden">
-        {TICKER_KEYS.map(({ key, label }, idx) => {
-          const q = ticker?.[key];
-          const chg = q?.change_pct ?? 0;
-          const up = chg >= 0;
-          return (
-            <div
-              key={key}
-              className={clsx(
-                'ticker-item hover:bg-gold/5 transition-colors group',
-                idx !== 0 && 'border-l border-border/40',
-              )}
-            >
-              <span className="text-[8.5px] font-mono tracking-[0.22em] text-text-muted uppercase group-hover:text-text-tertiary transition-colors">{label}</span>
-              <motion.span
-                key={q?.price ?? '—'}
-                initial={{ opacity: 0.6 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.4 }}
-                className={clsx('text-sm font-mono font-semibold tabular', q ? 'text-text-primary' : 'text-text-muted')}
-              >
-                {q ? fmt.price(q.price) : '—'}
-              </motion.span>
-              <span
-                className={clsx(
-                  'text-[10px] font-mono font-semibold tabular px-1.5 py-0.5 rounded',
-                  up ? 'text-bull bg-bull/8' : 'text-bear bg-bear/8',
-                  q?.change_pct === undefined && 'opacity-0',
-                )}
-              >
-                {up ? '▲' : '▼'} {q?.change_pct !== undefined ? `${Math.abs(q.change_pct).toFixed(2)}%` : ''}
-              </span>
-            </div>
-          );
-        })}
+        {TICKER_KEYS.map(({ key, label }, idx) => (
+          <TickerItem key={key} label={label} q={ticker?.[key]} first={idx === 0} />
+        ))}
       </div>
 
       {/* Right cluster */}
