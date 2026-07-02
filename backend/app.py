@@ -1634,13 +1634,17 @@ def regime_inventory_reaction_route():
         series = (request.args.get("series") or "crude_ex_spr").lower()
         if series not in ("crude_ex_spr", "gasoline", "distillate"):
             series = "crude_ex_spr"
-        # Re-anchor the live grade on the ACTUAL EIA number pulled LIVE from the EIA
-        # v2 API (authoritative) + the real consensus, when the caller supplies
-        # nothing — not the static scrape or the API/industry proxy. refresh=True
-        # triggers a throttled live pull so we grade against the real printed number
-        # the moment it's out. e.g. 24-Jun crude actual -6.088M vs consensus -3.900M.
+        # Re-anchor the live grade on the ACTUAL EIA number the EIA v2 API prints
+        # (authoritative) + the real consensus, when the caller supplies nothing —
+        # not the static scrape or the API/industry proxy. e.g. 24-Jun crude actual
+        # -6.088M vs consensus -3.900M. The cached report is kept current by the
+        # `_eia_report_refresh` scheduler job (force pull ~2 min after boot, then
+        # every TTL_EIA_REPORT, throttled to 6h) — so we do NOT do a blocking live
+        # pull on the request path (that first-hit network call cost ~25s of latency
+        # and tripped the panel's timeout). Pass ?refresh=1 to force an on-demand
+        # throttled pull (e.g. to grade a just-released number before the next tick).
         do_refresh = request.args.get("refresh") in ("1", "true", "yes")
-        lr = eia_report.latest_release(series, refresh=(do_refresh or (actual is None and consensus is None)))
+        lr = eia_report.latest_release(series, refresh=do_refresh)
         anchored_on = "supplied" if (actual is not None or consensus is not None) else None
         if actual is None and consensus is None and lr:
             actual, consensus = lr["actual_mbbl"], lr["consensus_mbbl"]
