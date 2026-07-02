@@ -5,6 +5,7 @@ import { Panel } from '@/components/ui/Panel';
 import { Chip } from '@/components/ui/Chip';
 import { SkeletonRows } from '@/components/ui/Skeleton';
 import { Sparkline } from '@/components/ui/Sparkline';
+import { AnimatedNumber } from '@/components/ui/AnimatedNumber';
 import { PriceDecomposition } from '@/components/panels/PriceDecomposition';
 import { PositionRow, PositionRowHeader } from '@/components/panels/PositionRow';
 import { RiskPanel } from '@/components/panels/RiskPanel';
@@ -195,7 +196,7 @@ function HeroPick({
                       : 'drop-shadow(0 0 20px var(--bull-ring))',
                 }}
               >
-                {top.z_score >= 0 ? '+' : ''}{top.z_score.toFixed(2)}
+                <AnimatedNumber value={top.z_score} format={n => `${n >= 0 ? '+' : ''}${n.toFixed(2)}`} />
               </div>
               <div className="text-[9px] font-mono uppercase tracking-[0.24em] text-text-muted mt-1.5">σ from fair</div>
             </div>
@@ -210,7 +211,7 @@ function HeroPick({
                     edge >= 0 ? 'text-bull' : 'text-bear',
                   )}
                 >
-                  {edge >= 0 ? '+' : ''}${Math.abs(edge).toFixed(2)}
+                  <AnimatedNumber value={edge} format={n => `${n >= 0 ? '+' : ''}$${Math.abs(n).toFixed(2)}`} />
                 </span>
                 <span className="text-[11px] font-mono text-text-tertiary tabular">
                   ({edgePct >= 0 ? '+' : ''}{edgePct.toFixed(1)}%)
@@ -469,12 +470,49 @@ function IndicatorDrillPanel({
   );
 }
 
+// ── Stale-feed banner ───────────────────────────────────────────────────────
+// The public HF Space runs on the baked parquet lake, so the engine's as_of
+// can lag by weeks. Say so honestly instead of letting visitors assume the
+// numbers are today's ("honesty over polish").
+
+/** Days since the engine's as_of settle; 0 when unknown/unparseable. */
+function staleDaysOf(asOf?: string): number {
+  if (!asOf) return 0;
+  const t = Date.parse(asOf);
+  if (!Number.isFinite(t)) return 0;
+  return Math.floor((Date.now() - t) / 86_400_000);
+}
+
+function StaleFeedBanner({ asOf, days }: { asOf: string; days: number }) {
+  const t = Date.parse(asOf);
+  return (
+    <div
+      className="flex items-center gap-3 px-4 py-2.5 rounded-lg border text-[11px] font-mono"
+      style={{
+        background: 'var(--neut-soft)',
+        borderColor: 'var(--neut-ring)',
+      }}
+    >
+      <span className="text-neut text-[13px] flex-shrink-0">⚠</span>
+      <span className="text-text-secondary">
+        <span className="text-neut font-semibold">Engine data is {days} days old</span>
+        {' — '}latest settle{' '}
+        <span className="text-text-primary tabular">
+          {new Date(t).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+        </span>
+        . The regime engine is scoring the most recent baked daily settle; the live desk feed is not
+        visible from this host.
+      </span>
+    </div>
+  );
+}
+
 // ── KPI strip ───────────────────────────────────────────────────────────────
 // Premium hero strip across the top — quick orientation: regime, brent spot,
 // front-month spread, BRT–WTI arb, geopolitics index. Pure presentational.
 
 function KpiTile({
-  label, value, sub, tone, icon: Icon, glow, spark,
+  label, value, sub, tone, icon: Icon, glow, spark, numeric, format,
 }: {
   label: string;
   value: string;
@@ -484,6 +522,9 @@ function KpiTile({
   glow?: boolean;
   /** Optional trailing daily series — renders an ambient sparkline. */
   spark?: number[];
+  /** When set (with `format`), the value rolls smoothly on live updates. */
+  numeric?: number | null;
+  format?: (n: number) => string;
 }) {
   const toneColor =
     tone === 'bull' ? 'text-bull' :
@@ -519,7 +560,7 @@ function KpiTile({
           : undefined
         }
       >
-        {value}
+        {typeof numeric === 'number' && format ? <AnimatedNumber value={numeric} format={format} /> : value}
       </div>
       {sub && <div className="text-[9.5px] font-mono text-text-tertiary tabular mt-1 relative z-10">{sub}</div>}
       {spark && spark.length > 2 && (
@@ -602,6 +643,8 @@ function KpiStrip({
         tone={brentChg !== null ? (brentChg >= 0 ? 'bull' : 'bear') : undefined}
         icon={Droplet}
         spark={brentSpark}
+        numeric={brent}
+        format={n => `$${n.toFixed(2)}`}
       />
       <KpiTile
         label="M1 – M2"
@@ -609,6 +652,8 @@ function KpiStrip({
         sub={m1m2 !== null ? (m1m2 > 0 ? 'backwardation' : 'contango') : 'front-end curve'}
         tone={m1m2 !== null ? (m1m2 > 0 ? 'bull' : 'bear') : undefined}
         icon={Flame}
+        numeric={m1m2}
+        format={n => `${n >= 0 ? '+' : ''}$${n.toFixed(2)}`}
       />
       <KpiTile
         label="BRT – WTI"
@@ -617,6 +662,8 @@ function KpiStrip({
         tone="neut"
         icon={Wind}
         spark={arbSpark}
+        numeric={brtWti}
+        format={n => `$${n.toFixed(2)}`}
       />
       <KpiTile
         label="Geo · idx"
@@ -673,6 +720,13 @@ export function DeskView({
       <motion.div variants={fadeUp}>
         <KpiStrip rec={rec ?? null} all={all} history={history} />
       </motion.div>
+
+      {/* >4 days covers weekends + a holiday without crying wolf. */}
+      {rec?.as_of && staleDaysOf(rec.as_of) > 4 && (
+        <motion.div variants={fadeUp}>
+          <StaleFeedBanner asOf={rec.as_of} days={staleDaysOf(rec.as_of)} />
+        </motion.div>
+      )}
 
       {/* Main desk grid — trading flow (hero pick → positions → decomposition)
           takes the wide left column; context (brief, risk, geo calc) stacks on

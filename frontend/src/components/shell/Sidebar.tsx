@@ -9,7 +9,10 @@ import {
   ScrollText,
   Droplets,
   Newspaper,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react';
+import { useLocalStorage } from '@/lib/hooks';
 
 export type ViewKey = 'desk' | 'charts' | 'markets' | 'paper' | 'regime' | 'signals' | 'inventory' | 'news';
 
@@ -27,12 +30,28 @@ export const NAV_ITEMS: { key: ViewKey; label: string; icon: any; hint: string; 
 ];
 
 export function Sidebar({ active, onSelect }: { active: ViewKey; onSelect: (k: ViewKey) => void }) {
+  // Manual collapse (persisted). Even when expanded, the label column only
+  // exists from lg: up — below that the sidebar is an icon rail automatically.
+  const [collapsed, setCollapsed] = useLocalStorage<boolean>('pulse.sidebar.collapsed', false);
+  // 'hidden lg:*' = responsive auto-rail below lg; plain 'hidden' = manual
+  // collapse. Literal strings only — Tailwind's scanner can't see
+  // interpolated class names.
+  const L = {
+    flex:        collapsed ? 'hidden' : 'hidden lg:flex',
+    block:       collapsed ? 'hidden' : 'hidden lg:block',
+    inline:      collapsed ? 'hidden' : 'hidden lg:inline',
+    inlineBlock: collapsed ? 'hidden' : 'hidden lg:inline-block',
+  };
+
   return (
     <motion.nav
       initial={{ opacity: 0, x: -6 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.36, ease: [0.16, 1, 0.3, 1] }}
-      className="w-60 flex-shrink-0 flex flex-col gap-0.5 px-2 py-4 relative z-20"
+      className={clsx(
+        'flex-shrink-0 flex flex-col gap-0.5 px-2 py-4 relative z-20 transition-[width] duration-300',
+        collapsed ? 'w-[64px]' : 'w-[64px] lg:w-60',
+      )}
       style={{
         background: 'var(--sidebar-grad)',
         backdropFilter: 'blur(8px)',
@@ -45,11 +64,14 @@ export function Sidebar({ active, onSelect }: { active: ViewKey; onSelect: (k: V
         className="absolute top-0 right-0 bottom-0 w-px pointer-events-none"
         style={{ background: 'linear-gradient(180deg, transparent, var(--border-accent) 18%, var(--hairline) 50%, var(--border-accent) 82%, transparent)' }}
       />
-      <div className="px-3 pb-3 mb-2 flex items-center justify-between" style={{ borderBottom: '1px solid var(--hairline)' }}>
-        <div className="text-[9px] font-mono tracking-[0.30em] text-text-muted uppercase">Workspace</div>
+      <div
+        className={clsx('pb-3 mb-2 flex items-center', collapsed ? 'justify-center px-0' : 'justify-center lg:justify-between px-0 lg:px-3')}
+        style={{ borderBottom: '1px solid var(--hairline)' }}
+      >
+        <div className={clsx('text-[9px] font-mono tracking-[0.30em] text-text-muted uppercase', L.block)}>Workspace</div>
         <div className="flex items-center gap-1">
           <span className="live-dot" />
-          <span className="text-[8.5px] font-mono tracking-[0.20em] text-text-tertiary uppercase">live</span>
+          <span className={clsx('text-[8.5px] font-mono tracking-[0.20em] text-text-tertiary uppercase', L.inline)}>live</span>
         </div>
       </div>
       {NAV_ITEMS.map((item, i) => {
@@ -63,11 +85,16 @@ export function Sidebar({ active, onSelect }: { active: ViewKey; onSelect: (k: V
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.28, delay: 0.04 + i * 0.025, ease: [0.16, 1, 0.3, 1] }}
             whileHover={{ x: 2 }}
-            className={clsx('nav-item w-full text-left', isActive && 'active')}
+            title={`${item.label} (${item.hint})`}
+            className={clsx(
+              'nav-item w-full text-left',
+              isActive && 'active',
+              collapsed ? 'justify-center' : 'justify-center lg:justify-start',
+            )}
           >
             <span
               className={clsx(
-                'flex items-center justify-center w-7 h-7 rounded-md border transition-all',
+                'flex items-center justify-center w-7 h-7 rounded-md border transition-all flex-shrink-0',
                 isActive ? 'text-gold-bright' : 'text-text-tertiary',
               )}
               style={
@@ -85,11 +112,11 @@ export function Sidebar({ active, onSelect }: { active: ViewKey; onSelect: (k: V
             >
               <Icon className="w-4 h-4" strokeWidth={2} />
             </span>
-            <span className="flex-1 flex flex-col leading-tight gap-0.5">
-              <span className="nav-label">{item.label}</span>
+            <span className={clsx('flex-1 flex-col leading-tight gap-0.5 min-w-0', L.flex)}>
+              <span className="nav-label truncate">{item.label}</span>
               {item.sub && (
                 <span className={clsx(
-                  'font-mono text-[8.5px] tracking-[0.14em] uppercase',
+                  'font-mono text-[8.5px] tracking-[0.14em] uppercase truncate',
                   isActive ? 'text-gold/65' : 'text-text-muted',
                 )}>
                   {item.sub}
@@ -99,6 +126,7 @@ export function Sidebar({ active, onSelect }: { active: ViewKey; onSelect: (k: V
             <kbd
               className={clsx(
                 'text-[9px] font-mono px-1.5 py-0.5 rounded border tabular',
+                L.inlineBlock,
                 isActive
                   ? 'text-gold-bright bg-gold/10 border-gold/30'
                   : 'text-text-muted bg-bg-card/40 border-border/50',
@@ -110,7 +138,7 @@ export function Sidebar({ active, onSelect }: { active: ViewKey; onSelect: (k: V
         );
       })}
       <div className="flex-1" />
-      <div className="px-3 pt-3 mt-2" style={{ borderTop: '1px solid var(--hairline)' }}>
+      <div className={clsx('pt-3 mt-2', L.block, 'px-3')} style={{ borderTop: '1px solid var(--hairline)' }}>
         <div className="text-[9px] font-mono tracking-[0.24em] text-text-muted uppercase mb-2">Shortcuts</div>
         <div className="flex flex-col gap-1 text-[10px] font-mono text-text-tertiary">
           <div className="flex justify-between items-center"><span>Command</span><kbd className="text-text-secondary px-1 rounded bg-bg-card/40 border border-border/40 text-[9px]">⌘K</kbd></div>
@@ -131,6 +159,18 @@ export function Sidebar({ active, onSelect }: { active: ViewKey; onSelect: (k: V
           />
         </div>
       </div>
+      {/* Collapse toggle — icon rail ⇄ full labels (persisted) */}
+      <button
+        onClick={() => setCollapsed(!collapsed)}
+        title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        className={clsx(
+          'mt-2 hidden lg:flex items-center gap-2 rounded-md py-2 text-text-muted hover:text-gold-bright hover:bg-gold/5 transition-colors',
+          collapsed ? 'justify-center px-0' : 'justify-center lg:justify-start px-3',
+        )}
+      >
+        {collapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
+        <span className={clsx('text-[9px] font-mono uppercase tracking-[0.22em]', L.inline)}>Collapse</span>
+      </button>
     </motion.nav>
   );
 }
