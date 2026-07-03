@@ -329,11 +329,24 @@ function OpenPositionsStrip({
         lastSuccess={lastSuccess}
         fetchError={fetchError}
       >
-        <div className="text-[11px] font-mono text-text-tertiary p-4 text-center">
-          {fetchError
-            ? `Paper book endpoint failed: ${(fetchError as any)?.message ?? String(fetchError)}`
-            : 'No open paper trades. Push a regime pick from above.'}
-        </div>
+        {fetchError ? (
+          <div className="text-[11px] font-mono text-text-tertiary p-4 text-center">
+            Paper book endpoint failed: {(fetchError as any)?.message ?? String(fetchError)}
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-2 py-6 text-center">
+            <span
+              className="flex items-center justify-center w-10 h-10 rounded-xl border border-border/60 text-text-muted"
+              style={{ background: 'var(--blue-soft)' }}
+            >
+              <BookOpen className="w-4.5 h-4.5" style={{ width: 18, height: 18 }} />
+            </span>
+            <div className="text-[12px] font-mono text-text-secondary">Flat book — nothing at risk.</div>
+            <div className="text-[10px] font-mono text-text-muted">
+              Push the mission-control pick above, or let the auto-desk take it during market hours.
+            </div>
+          </div>
+        )}
       </Panel>
     );
   }
@@ -371,8 +384,10 @@ function MorningBrief({ idea }: { idea: any }) {
   if (!text) {
     return (
       <Panel title="Morning Brief" subtitle="awaiting brief" source="groq_brief" staticMount>
-        <div className="text-[11px] font-mono text-text-tertiary p-3 text-center">
-          Brief not generated yet. Refreshes every 10 min.
+        <div className="flex flex-col items-center gap-1.5 py-5 text-center">
+          <BookOpen className="w-4 h-4 text-text-muted" />
+          <div className="text-[11px] font-mono text-text-tertiary">The analyst hasn't filed yet.</div>
+          <div className="text-[10px] font-mono text-text-muted">Brief regenerates every 10 minutes.</div>
         </div>
       </Panel>
     );

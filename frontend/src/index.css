@@ -204,6 +204,10 @@
     border-color: var(--panel-border-hover);
     background: var(--panel-bg-hover);
     box-shadow: var(--panel-shadow-hover);
+    transform: translateY(-1px);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .panel:hover { transform: none; }
   }
   /* Feature/hero panels — Panel.tsx sets --accent-mid/--accent-soft per accent;
      give them a slightly stronger presence than a standard panel. */
