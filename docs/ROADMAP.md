@@ -1,10 +1,11 @@
 # PULSE — Roadmap & Backlog
 
 **The *future* of the project.** Companion to `CLAUDE.md` (the *present* — current state)
-and `docs/PHASE_HISTORY.md` (the *past* — how we got here). Last updated 2026-07-02
-(settle-tail shipped: the regime engine's daily tape now optionally extends past the frozen lake via the
-hourly OHLCV feed, `PULSE_SETTLE_TAIL=1`; prior 2026-06-22 — Phase 8 per-spread gate shipped + deployed
-live; the Phase 2.8.x model backlog is closed).
+and `docs/PHASE_HISTORY.md` (the *past* — how we got here). Last updated 2026-07-03
+(settle-tail turned ON operationally: `start.py` defaults `PULSE_SETTLE_TAIL=1` for the desk dashboard
+process only — deliberately NOT in `.env`, so training/walk-forward CLI runs stay on the frozen lake;
+full live session validated on the extended tape + ESTIMATE provenance chip on the REGIME pick card;
+prior 2026-07-02 — settle-tail shipped; 2026-06-22 — Phase 8 per-spread gate deployed live).
 
 This file exists so nothing slips through the cracks again. It captures **every** task
 we planned, deferred, or owe someone — with a timeline and a copy-paste prompt per task.
@@ -61,11 +62,17 @@ desk hourly OHLCV feed's post-lake tail (LCO=Brent, CL=WTI; extend-only, weekend
 `ohlcv_tail (ESTIMATE)`, never persisted). Feature matrix advances 05-26 → feed latest; provenance on
 `as_of_source` / `live_feed.feature_overlay` / `/api/regime/live`. Overlap-validated (Brent m1_m2 proxy
 error ≈ 0.36× daily vol; WTI ≈ 0.84× vs the synth lake — flagged). Training still ends at the lake — keep
-the flag OFF for training/walk-forward. Detail: `CLAUDE.md` §1. **Follow-ups:** (1) set
-`PULSE_SETTLE_TAIL=1` on the desk process once you want the live engine running on the extended tape
-day-to-day; (2) the real WTI daily-settlement file (T1.3 ask) would arbitrate the two WTI estimates;
-(3) a session-close (21:00/22:00 UTC) cut instead of the midnight-UTC grouping would tighten the proxy —
-shared with the geo `products_feed`, do it there if ever needed.
+the flag OFF for training/walk-forward. Detail: `CLAUDE.md` §1. **Follow-ups:** (1) ✅ **DONE 2026-07-03**
+— `start.py` now defaults `PULSE_SETTLE_TAIL=1` into the desk app process's env (overridable with
+`PULSE_SETTLE_TAIL=0`); deliberately NOT in `.env` because `features.py → external_history` calls
+`load_dotenv()`, which would silently flip training/walk-forward CLI runs onto the tail. Full live
+session validated on the extended tape (signal log extends on today's bars, auto-desk sane, live-feed
+stress read engaged, ESTIMATE chip on the REGIME pick card); (2) the real WTI daily-settlement file
+(T1.3 ask) would arbitrate the two WTI estimates; (3) a session-close (21:00/22:00 UTC) cut instead of
+the midnight-UTC grouping would tighten the proxy — shared with the geo `products_feed`, do it there if
+ever needed; (4) the desk OHLCV export itself lags (files written Mon 06-29 but last bar Fri 06-26) —
+ask for a refreshed/scheduled export so the tail tracks the market week; until then the DESK stale-feed
+banner correctly reports the tape's true age.
 
 ---
 
