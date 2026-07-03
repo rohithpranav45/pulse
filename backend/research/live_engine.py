@@ -93,9 +93,16 @@ def get_live_recommendation(*, include_wti: bool = False) -> dict:
         rec["top"] = rec["ranked"][0] if rec["ranked"] else None
         rec["n_eligible"] = len(rec["ranked"])
 
+    # Honest provenance: is this snapshot the live desk recorder, or the committed
+    # frozen feed the deployment falls back to when it can't see the I:\ share?
+    from research.frozen_feed import is_frozen, FROZEN_AS_OF
+    _frozen = is_frozen(snap_co.get("source_file") or "")
+
     rec["live_feed"] = {
         "as_of":        snap_co.get("as_of"),
         "source_file":  snap_co.get("source_file"),
+        "frozen":       _frozen,
+        "frozen_as_of": FROZEN_AS_OF if _frozen else None,
         "curve_m1_m12": live_curve,
         "spreads":      live_actuals,
         "products":     ["CO"] + (["CL"] if (include_wti and snap_cl and snap_cl.get("available")) else []),

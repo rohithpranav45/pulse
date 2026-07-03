@@ -80,8 +80,11 @@ _TABLE_RE = re.compile(r"^(CO|CL)_([FGHJKMNQUVXZ])(\d{2})$")
 
 
 def resolve_feed_dir() -> Path:
-    """Live feed directory: PULSE_LIVE_FEED_DIR override, else the office share."""
-    return Path(os.environ.get("PULSE_LIVE_FEED_DIR") or _DEFAULT_FEED_DIR)
+    """Live feed directory: PULSE_LIVE_FEED_DIR override → office share (if it holds
+    bar files) → the committed frozen snapshot (so the deployment always has bars)."""
+    from research.frozen_feed import resolve_dir
+    return resolve_dir("PULSE_LIVE_FEED_DIR", _DEFAULT_FEED_DIR, "DB",
+                       require=("bars_15min_*.db",))
 
 
 def _date_from_name(p: Path) -> str:
