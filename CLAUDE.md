@@ -7,7 +7,20 @@ spread engine), and serves a React dashboard with a paper-trading book.
 - **Stack:** Flask 3 · React 18 + Vite + Tailwind · SQLite (cache + paper book) ·
   DuckDB/Parquet over a 3.5 GB `/Data` desk feed · sklearn + XGBoost/LightGBM/CatBoost
 - **Run (local):** `python start.py` from the repo root → http://127.0.0.1:5000
-- **Last updated:** 2026-07-02 (**Settle-tail — the regime engine's daily settle tape extends past the
+- **Last updated:** 2026-07-03 (**Settle-tail ON operationally — `start.py` now defaults
+  `PULSE_SETTLE_TAIL=1` into the desk app process's env; deliberately NOT in `.env` (training/walk-forward
+  CLI runs load `.env` transitively via `features.py → external_history` and must stay on the frozen
+  lake — verified: CLI `tail_enabled()=False`, tape ends 05-26)** [branch `phase4-live-feature-overlay`,
+  see §1 entry]. Full live session validated on the extended tape: rec `as_of` **06-26** ·
+  `as_of_source="ohlcv_tail (ESTIMATE)"`; signal log EXTENDS on today's live bars (open wti_m1_m2 session
+  `last_seen 2026-07-03`, 25 bars); auto-desk dry-run sane (market open, breaker off, hold wti_m1_m2);
+  **live-feed stress read ENGAGED** (`source=live_feed`, CALM, P(stress) 0.22 — the §5 latched-breaker
+  caveat is resolved). New **`TAIL · ESTIMATE` provenance chip** on the REGIME pick card + tail-aware
+  stale-banner copy. Honest limit: the OHLCV export itself is stale (last bar Fri 06-26, files written
+  Mon 06-29) → the DESK >4d banner still shows at 7d lag, correctly. Same day: **A/B panel removed from
+  the REGIME tab** (user call — `ABComparePanel.tsx` deleted; backend A/B harness + `/api/regime/ab`
+  intact). 294 tests green.) Prior:
+  **Settle-tail — the regime engine's daily settle tape extends past the
   frozen lake (2026-05-26 → feed latest) via the desk hourly OHLCV feed, OPT-IN `PULSE_SETTLE_TAIL=1`**
   [branch `phase4-live-feature-overlay`, see §1 entry]. New `backend/research/settle_tail.py` (extend-only,
   weekend-safe, lake rows never overwritten) wired into `data_lake.get_brent_settlements`/`get_wti_settlements`;
@@ -743,6 +756,45 @@ regime_conditioning,release_reaction}.py`, `/api/regime/inventory[?series=][/rea
 - **Tests:** +4 (`test_assess_series_all_three` ×3, `test_release_reaction_computes_horizon_moves`). The reaction
   panel anchors today's prediction on the **API −0.765M as a proxy** for the EIA actual — re-anchor on the real
   printed EIA number for an exact grade.
+
+### ✅ Settle-tail ON operationally — desk process runs the extended tape (2026-07-03)
+Branch `phase4-live-feature-overlay`. The 07-02 sprint shipped the tail behind an opt-in flag; this session
+turns it on for the desk and validates a full live session on the estimate rows.
+- **Flag scoped to the desk launcher, not `.env`.** `start.py` now injects
+  `PULSE_SETTLE_TAIL=1` into the app subprocess env (override: launch with `PULSE_SETTLE_TAIL=0`).
+  It was first added to `.env` and then **deliberately pulled back out**: `features.build_features` imports
+  `research.external_history`, whose module-level `load_dotenv()` would put a `.env` flag into *every*
+  research CLI process — training/walk-forward would silently run on the tail. Verified both sides of the
+  invariant: server rec `as_of_source="ohlcv_tail (ESTIMATE)"`; a CLI process that loads `.env` +
+  `data_lake` reads `tail_enabled()=False`, Brent tape ends **2026-05-26**, `settle_tail_meta()={}`.
+- **Live session validated (07-03, desk):** rec `as_of` **2026-06-26**, tail meta served (Brent +23 rows
+  05-27→06-26, WTI +25, overlap stats attached). `/api/regime/live`: `live=true`, 15-min feed bar current
+  (02:15 UTC, ~15 min old), z in-distribution (max |z| ≈ 1.2 vs adaptive caps 6.3-10). **Signal log
+  advances on the estimate tape:** generate → `extended: 1` on today's bar; the open `wti_m1_m2 SELL`
+  session shows `last_seen 2026-07-03 02:15`, `bar_count 25` (session dedup extending, not duplicating).
+  **Auto-desk dry-run sane:** market_open=true, breaker_active=false, entries allowed, selected
+  `[wti_m1_m2]`, plan = hold (1 auto position, no spurious actions). **Live-feed stress read ENGAGED:**
+  `source="live_feed"`, as_of 2026-07-03, CALM, P(stress) 0.217 — the recorder has accumulated enough
+  daily closes, so the old daily-settle STRESS latch (§5 / Phase-3 caveat) is gone.
+- **Frontend provenance surfaces.** `RegimePickCard` gains a **`TAIL · ESTIMATE`** chip (amber, next to
+  the regime chip) whenever `rec.as_of_source != "lake"`, tooltip citing lake_end → tail_end + the
+  session-end-proxy caveat; `Recommendation` type gains `as_of_source`/`settle_tail`. `DeskView`'s
+  stale-feed banner is now **tail-aware**: when the as-of row is a tail row it says the OHLCV export
+  hasn't captured anything newer (the old copy claimed "live desk feed not visible from this host" —
+  false on the desk). `tsc` + `vite build` clean.
+- **Honest limits (reported, not fudged):** (1) the **stale banner does NOT clear** — the OHLCV export's
+  last bar is Fri **06-26** (files written Mon 06-29 contain nothing newer), so `as_of` genuinely lags
+  7 days and the >4d banner correctly stays up; it will clear once the desk refreshes the OHLCV export
+  (ROADMAP follow-up 4). (2) `gate: off` on ranked rows — the desk `.env` has never set
+  `PULSE_GATED_BLEND` (the HF Space sets it as a Space var); pre-existing, untouched this sprint.
+- **Tests: 294 pass** (no code-path changes beyond start.py env + frontend). Estimate rows behaved —
+  flag left ON.
+- **A/B panel removed from the REGIME tab (user call, same day).** `ABComparePanel.tsx` deleted +
+  unwired from `RegimeView` — the user judged it not working/not earning its place. Backend untouched:
+  the A/B harness, `/api/regime/ab` (+ `backtest_verdict`), and the live A/B book all keep running
+  (they're the forward validation; the pooled-vs-gated question is already answered in the walk-forward —
+  tied, baseline headline). `api.regimeAB*` helpers left in `api.ts` as the endpoint catalog. RegimeView
+  chunk 67.3 → 54.6 kB; `tsc`/build clean.
 
 ### ✅ Settle-tail — daily settle tape extended past the frozen lake (2026-07-02)
 Branch `phase4-live-feature-overlay`. The standing "next" from geo Sprints 6-7: the /Data daily settle
@@ -1713,9 +1765,12 @@ risk/structure · paper trading (`/api/paper/*`) · **regime engine** (`/api/reg
 `MARKETAUX_KEY`, `APIFY_API_TOKEN`, `AISSTREAM_API_KEY`, `SENTRY_DSN`/`VITE_SENTRY_DSN`,
 `BETTER_STACK_TOKEN`. Optional regime flags: `PULSE_REGIME_MODE=pooled`, `PULSE_GATED_BLEND=1`,
 `PULSE_GATED_SIZE=full|half|kelly`, `PULSE_AB_TEST_DISABLED=1`, `PULSE_PERSPREAD_GATE=0` (Phase 8 — revert
-the per-spread gate to the uniform Phase 2.6 global gate; default on), `PULSE_SETTLE_TAIL=1` (opt-in —
-extend the daily settle tape past the frozen lake with the hourly-OHLCV tail, rows flagged
-`ohlcv_tail (ESTIMATE)`; default OFF = lake bit-for-bit; keep OFF for training/walk-forward runs).
+the per-spread gate to the uniform Phase 2.6 global gate; default on), `PULSE_SETTLE_TAIL=1` (extend the daily settle
+tape past the frozen lake with the hourly-OHLCV tail, rows flagged `ohlcv_tail (ESTIMATE)`; default OFF =
+lake bit-for-bit. **Operationally ON for the desk dashboard**: `start.py` defaults it into the app
+subprocess env since 2026-07-03 — override with `PULSE_SETTLE_TAIL=0`. Do **NOT** put it in `.env`:
+research CLI runs load `.env` transitively via `external_history`'s `load_dotenv()`, and
+training/walk-forward must stay on the frozen lake).
 
 **/Data lake.** Brent C1-C31 daily settlements (real); WTI C1-C6 (synth from 1-min mids → flagged
 ESTIMATE via `data_lake.get_wti_settlements()`); 1-min mids (Brent/WTI/HO/Gasoil); spread/OHLCV xlsx.

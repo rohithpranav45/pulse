@@ -41,6 +41,8 @@ type Recommendation = {
   available: boolean;
   regime?: string;
   as_of?: string;
+  // "lake" | "ohlcv_tail (ESTIMATE)" — settle-tail provenance (PULSE_SETTLE_TAIL=1)
+  as_of_source?: string;
   top?: RankedOpp;
   ranked?: RankedOpp[];
 };
@@ -483,8 +485,9 @@ function staleDaysOf(asOf?: string): number {
   return Math.floor((Date.now() - t) / 86_400_000);
 }
 
-function StaleFeedBanner({ asOf, days }: { asOf: string; days: number }) {
+function StaleFeedBanner({ asOf, days, asOfSource }: { asOf: string; days: number; asOfSource?: string }) {
   const t = Date.parse(asOf);
+  const isTail = Boolean(asOfSource && asOfSource !== 'lake');
   return (
     <div
       className="flex items-center gap-3 px-4 py-2.5 rounded-lg border text-[11px] font-mono"
@@ -500,8 +503,9 @@ function StaleFeedBanner({ asOf, days }: { asOf: string; days: number }) {
         <span className="text-text-primary tabular">
           {new Date(t).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
         </span>
-        . The regime engine is scoring the most recent baked daily settle; the live desk feed is not
-        visible from this host.
+        {isTail
+          ? '. That row is an hourly-OHLCV tail ESTIMATE (settle-tail on); the desk OHLCV export has not captured anything newer.'
+          : '. The regime engine is scoring the most recent baked daily settle; the live desk feed is not visible from this host.'}
       </span>
     </div>
   );
@@ -724,7 +728,7 @@ export function DeskView({
       {/* >4 days covers weekends + a holiday without crying wolf. */}
       {rec?.as_of && staleDaysOf(rec.as_of) > 4 && (
         <motion.div variants={fadeUp}>
-          <StaleFeedBanner asOf={rec.as_of} days={staleDaysOf(rec.as_of)} />
+          <StaleFeedBanner asOf={rec.as_of} days={staleDaysOf(rec.as_of)} asOfSource={rec.as_of_source} />
         </motion.div>
       )}
 
