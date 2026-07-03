@@ -7,6 +7,7 @@ import {
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 
 import { Panel } from '@/components/ui/Panel';
+import { PageHeader } from '@/components/ui/SectionHeader';
 import { Chip } from '@/components/ui/Chip';
 import { Stat } from '@/components/ui/Stat';
 import { SkeletonRows, Skeleton } from '@/components/ui/Skeleton';
@@ -1037,6 +1038,14 @@ function MacroSection({ all }: { all: any }) {
 export function MarketsView({ all }: { all: any }) {
   return (
     <div className="space-y-3">
+      <div className="pb-3">
+        <PageHeader
+          eyebrow="Markets · Cross-asset context"
+          title="Spreads, positioning, cracks, macro"
+          desc="The desk's wider board — term structure and physical spreads, CFTC positioning,
+                refinery margins, and the macro tape. Sections load on first open."
+        />
+      </div>
       <LazySection id="spreads" title="Spreads & Curve" subtitle="calendar · term · physical" defaultOpen>
         <SpreadsAndCurveSection all={all} />
       </LazySection>

@@ -22,10 +22,24 @@ export function PageHeader({ eyebrow, title, desc, badges }: {
   eyebrow: string; title: string; desc?: ReactNode; badges?: ReactNode;
 }) {
   return (
-    <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3 border-b border-border/50 pb-4 animate-fade-in">
+    <header className="relative flex flex-wrap items-end justify-between gap-x-6 gap-y-3 pb-4 animate-fade-in">
+      {/* gold-fading hairline rule */}
+      <div
+        aria-hidden
+        className="absolute bottom-0 left-0 right-0 h-px pointer-events-none"
+        style={{ background: 'linear-gradient(90deg, var(--border-accent), var(--hairline) 45%, transparent 90%)' }}
+      />
       <div className="min-w-0">
-        <div className="text-[9px] font-mono uppercase tracking-[0.32em] text-gold/80">{eyebrow}</div>
-        <h1 className="font-display text-[27px] leading-none text-text-primary tracking-wide mt-0.5">{title}</h1>
+        <div className="flex items-center gap-2 text-[9px] font-mono uppercase tracking-[0.32em] text-gold/80">
+          <span aria-hidden className="inline-block w-4 h-px bg-gold/60" />
+          {eyebrow}
+        </div>
+        <h1
+          className="font-display font-semibold text-[30px] leading-none text-text-primary tracking-wide mt-1"
+          style={{ textShadow: '0 0 28px rgba(218,182,65,0.08)' }}
+        >
+          {title}
+        </h1>
         {desc && (
           <p className="text-[11px] font-mono text-text-tertiary leading-relaxed max-w-3xl mt-1.5">{desc}</p>
         )}

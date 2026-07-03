@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { PageHeader } from '@/components/ui/SectionHeader';
 import { Panel } from '@/components/ui/Panel';
 import { Chip } from '@/components/ui/Chip';
 import { Skeleton } from '@/components/ui/Skeleton';
@@ -163,6 +164,13 @@ export function ChartsView({ all, history, ohlcv }: { all: any; history: any; oh
 
   return (
     <div className="space-y-4">
+      <PageHeader
+        eyebrow="Charts · Price action"
+        title="The tape, drawn"
+        desc="Intraday candles with EMA/volume overlays, the forward curve against WTI, curve evolution,
+              seasonality, and a year of every crack and spread the desk quotes."
+      />
+
       {/* HERO — Candlestick + price */}
       <Panel
         title={asset === 'brent' ? 'Brent Crude · ICE' : 'WTI Crude · NYMEX'}
