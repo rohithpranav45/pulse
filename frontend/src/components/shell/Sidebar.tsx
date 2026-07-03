@@ -23,10 +23,18 @@ export const NAV_ITEMS: { key: ViewKey; label: string; icon: any; hint: string; 
   { key: 'charts',        label: 'Charts',           icon: CandlestickChart, hint: '2', sub: 'Price action' },
   { key: 'markets',       label: 'Markets',          icon: BarChart3,        hint: '3', sub: 'Spreads · fundamentals' },
   { key: 'paper',         label: 'Paper Book',       icon: Wallet,           hint: '4', sub: 'Live P&L' },
-  { key: 'regime',        label: 'Regime',           icon: Radar,            hint: '5', sub: 'Engine · A/B · drill' },
+  { key: 'regime',        label: 'Regime',           icon: Radar,            hint: '5', sub: 'Engine · gate · drill' },
   { key: 'inventory',     label: 'Inventory',        icon: Droplets,         hint: '6', sub: 'EIA release framework' },
   { key: 'signals',       label: 'Signal Log',       icon: ScrollText,       hint: '7', sub: 'Realised performance' },
   { key: 'news',          label: 'News Impact',      icon: Newspaper,        hint: '8', sub: 'Headline → % move' },
+];
+
+// Grouped rails — the sidebar reads as a desk workflow, not a flat list:
+// trade the market, analyse the engine, read the intel.
+const NAV_GROUPS: { label: string; keys: ViewKey[] }[] = [
+  { label: 'Trading',  keys: ['desk', 'charts', 'markets', 'paper'] },
+  { label: 'Engine',   keys: ['regime', 'inventory', 'signals'] },
+  { label: 'Intel',    keys: ['news'] },
 ];
 
 export function Sidebar({ active, onSelect }: { active: ViewKey; onSelect: (k: ViewKey) => void }) {
@@ -74,69 +82,88 @@ export function Sidebar({ active, onSelect }: { active: ViewKey; onSelect: (k: V
           <span className={clsx('text-[8.5px] font-mono tracking-[0.20em] text-text-tertiary uppercase', L.inline)}>live</span>
         </div>
       </div>
-      {NAV_ITEMS.map((item, i) => {
-        const Icon = item.icon;
-        const isActive = active === item.key;
-        return (
-          <motion.button
-            key={item.key}
-            onClick={() => onSelect(item.key)}
-            initial={{ opacity: 0, x: -8 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.28, delay: 0.04 + i * 0.025, ease: [0.16, 1, 0.3, 1] }}
-            whileHover={{ x: 2 }}
-            title={`${item.label} (${item.hint})`}
-            className={clsx(
-              'nav-item w-full text-left',
-              isActive && 'active',
-              collapsed ? 'justify-center' : 'justify-center lg:justify-start',
-            )}
-          >
-            <span
-              className={clsx(
-                'flex items-center justify-center w-7 h-7 rounded-md border transition-all flex-shrink-0',
-                isActive ? 'text-gold-bright' : 'text-text-tertiary',
-              )}
-              style={
-                isActive
-                  ? {
-                      background: 'rgb(var(--gold) / 0.14)',
-                      borderColor: 'rgb(var(--gold) / 0.42)',
-                      boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.04), 0 0 12px -4px var(--gold-glow)',
-                    }
-                  : {
-                      background: 'transparent',
-                      borderColor: 'var(--hairline-strong)',
-                    }
-              }
-            >
-              <Icon className="w-4 h-4" strokeWidth={2} />
-            </span>
-            <span className={clsx('flex-1 flex-col leading-tight gap-0.5 min-w-0', L.flex)}>
-              <span className="nav-label truncate">{item.label}</span>
-              {item.sub && (
-                <span className={clsx(
-                  'font-mono text-[8.5px] tracking-[0.14em] uppercase truncate',
-                  isActive ? 'text-gold/65' : 'text-text-muted',
-                )}>
-                  {item.sub}
+      {NAV_GROUPS.map((group, gi) => (
+        <div key={group.label} className={clsx('flex flex-col gap-0.5', gi > 0 && 'mt-3')}>
+          <div className={clsx('px-3 pb-1 text-[8px] font-mono tracking-[0.32em] text-text-muted/80 uppercase', L.block)}>
+            {group.label}
+          </div>
+          {gi > 0 && (
+            <div aria-hidden className={clsx('mx-2 mb-1 h-px', collapsed ? 'block' : 'block lg:hidden')} style={{ background: 'var(--hairline)' }} />
+          )}
+          {group.keys.map((key, i) => {
+            const item = NAV_ITEMS.find(n => n.key === key)!;
+            const Icon = item.icon;
+            const isActive = active === item.key;
+            return (
+              <motion.button
+                key={item.key}
+                onClick={() => onSelect(item.key)}
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.28, delay: 0.04 + (gi * 4 + i) * 0.025, ease: [0.16, 1, 0.3, 1] }}
+                whileHover={{ x: 2 }}
+                title={`${item.label} (${item.hint})`}
+                className={clsx(
+                  'nav-item w-full text-left',
+                  isActive && 'active',
+                  collapsed ? 'justify-center' : 'justify-center lg:justify-start',
+                )}
+              >
+                {isActive && (
+                  <motion.span
+                    aria-hidden
+                    layoutId="nav-active-pill"
+                    className="nav-pill"
+                    transition={{ type: 'spring', stiffness: 480, damping: 38 }}
+                  />
+                )}
+                <span
+                  className={clsx(
+                    'relative flex items-center justify-center w-7 h-7 rounded-md border transition-all flex-shrink-0',
+                    isActive ? 'text-gold-bright' : 'text-text-tertiary',
+                  )}
+                  style={
+                    isActive
+                      ? {
+                          background: 'rgb(var(--gold) / 0.14)',
+                          borderColor: 'rgb(var(--gold) / 0.42)',
+                          boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.04), 0 0 12px -4px var(--gold-glow)',
+                        }
+                      : {
+                          background: 'transparent',
+                          borderColor: 'var(--hairline-strong)',
+                        }
+                  }
+                >
+                  <Icon className="w-4 h-4" strokeWidth={2} />
                 </span>
-              )}
-            </span>
-            <kbd
-              className={clsx(
-                'text-[9px] font-mono px-1.5 py-0.5 rounded border tabular',
-                L.inlineBlock,
-                isActive
-                  ? 'text-gold-bright bg-gold/10 border-gold/30'
-                  : 'text-text-muted bg-bg-card/40 border-border/50',
-              )}
-            >
-              {item.hint}
-            </kbd>
-          </motion.button>
-        );
-      })}
+                <span className={clsx('relative flex-1 flex-col leading-tight gap-0.5 min-w-0', L.flex)}>
+                  <span className="nav-label truncate">{item.label}</span>
+                  {item.sub && (
+                    <span className={clsx(
+                      'font-mono text-[8.5px] tracking-[0.14em] uppercase truncate',
+                      isActive ? 'text-gold/65' : 'text-text-muted',
+                    )}>
+                      {item.sub}
+                    </span>
+                  )}
+                </span>
+                <kbd
+                  className={clsx(
+                    'relative text-[9px] font-mono px-1.5 py-0.5 rounded border tabular',
+                    L.inlineBlock,
+                    isActive
+                      ? 'text-gold-bright bg-gold/10 border-gold/30'
+                      : 'text-text-muted bg-bg-card/40 border-border/50',
+                  )}
+                >
+                  {item.hint}
+                </kbd>
+              </motion.button>
+            );
+          })}
+        </div>
+      ))}
       <div className="flex-1" />
       <div className={clsx('pt-3 mt-2', L.block, 'px-3')} style={{ borderTop: '1px solid var(--hairline)' }}>
         <div className="text-[9px] font-mono tracking-[0.24em] text-text-muted uppercase mb-2">Shortcuts</div>

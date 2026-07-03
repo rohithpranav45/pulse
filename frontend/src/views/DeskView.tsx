@@ -47,7 +47,9 @@ type Recommendation = {
   ranked?: RankedOpp[];
 };
 
-// ── Hero: today's regime pick ───────────────────────────────────────────────
+// ── Mission control hero — the first 5 seconds of the desk ─────────────────
+// Full-width cinematic band: the engine's directive in display type, a giant
+// glowing z-score, the edge, and the whole ranked book as a card rail below.
 
 function HeroPick({
   rec, lastSuccess, fetchError,
@@ -60,7 +62,7 @@ function HeroPick({
   if (!rec && !fetchError) {
     return (
       <Panel
-        title="Today's Pick · Regime Engine"
+        title="Mission Control · Regime Engine"
         accent="gold"
         source="signal_engine"
         staticMount
@@ -77,7 +79,7 @@ function HeroPick({
   if (!rec || !rec.available || !rec.top) {
     return (
       <Panel
-        title="Today's Pick · Regime Engine"
+        title="Mission Control · Regime Engine"
         accent="gold"
         source="signal_engine"
         staticMount
@@ -107,7 +109,7 @@ function HeroPick({
 
   return (
     <Panel
-      title="Today's Pick · Regime Engine"
+      title="Mission Control · Regime Engine"
       subtitle={rec.regime ? `Regime ${rec.regime}` : 'live'}
       accent={heroAccent}
       source="signal_engine"
@@ -118,10 +120,10 @@ function HeroPick({
       lastSuccess={lastSuccess}
       fetchError={fetchError}
     >
-      {/* Hero — big z, direction badge, edge */}
+      {/* Directive band */}
       <div
         className={clsx(
-          'relative rounded-xl p-5 mb-4 overflow-hidden border',
+          'relative rounded-xl px-6 py-6 mb-3 overflow-hidden border',
           isNeutral && 'hero-neut border-border/40',
           !isNeutral && top.direction === 'BUY' && 'hero-buy',
           !isNeutral && top.direction === 'SELL' && 'hero-sell',
@@ -131,7 +133,7 @@ function HeroPick({
             ? undefined
             : {
                 borderColor: `var(--${dirTone}-ring)`,
-                boxShadow: `0 0 40px -8px var(--${dirTone}-ring), inset 0 1px 0 rgba(255,255,255,0.03)`,
+                boxShadow: `0 0 56px -10px var(--${dirTone}-ring), inset 0 1px 0 rgba(255,255,255,0.03)`,
               }
         }
       >
@@ -142,47 +144,62 @@ function HeroPick({
         <span aria-hidden className="absolute bottom-2 right-2 w-2 h-2 border-b border-r" style={{ borderColor: 'var(--border-accent)' }} />
 
         {isNeutral ? (
-          <div className="text-center py-3">
-            <div className="text-[10px] font-mono uppercase tracking-[0.30em] text-text-muted mb-2">No-Trade Day</div>
-            <div className="font-display font-bold text-[22px] text-text-primary leading-tight">
+          <div className="text-center py-4">
+            <div className="text-[10px] font-mono uppercase tracking-[0.34em] text-text-muted mb-3">No-Trade Day</div>
+            <div className="font-display font-black text-[34px] text-text-primary leading-none tracking-wide">
               All spreads inside band
             </div>
-            <div className="text-[11px] font-mono text-text-tertiary mt-2">
-              Regime: <span className="text-gold">{rec.regime ?? '—'}</span>
+            <div className="text-[11px] font-mono text-text-tertiary mt-3">
+              Regime <span className="text-gold">{rec.regime ?? '—'}</span> · the engine holds fire until a z-gate clears
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-[1fr_auto_1fr] gap-6 items-center">
-            {/* LEFT: instrument + direction */}
-            <div className="flex flex-col gap-2">
-              <div className="text-[9.5px] font-mono uppercase tracking-[0.30em] text-text-muted">Spread</div>
-              <div className="font-display font-extrabold text-[22px] text-text-primary leading-tight tracking-wide truncate">
-                {top.label}
+          <div className="grid grid-cols-1 md:grid-cols-[1.25fr_auto_1fr] gap-6 items-center">
+            {/* LEFT: the directive in display type */}
+            <div className="flex flex-col gap-2 min-w-0">
+              <div className="text-[9.5px] font-mono uppercase tracking-[0.34em] text-text-muted">
+                Top conviction · live
               </div>
-              <div className="flex items-center gap-2 mt-1">
+              <div className="flex items-baseline gap-3 flex-wrap">
                 <span
                   className={clsx(
-                    'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md font-mono font-bold text-[11px] tracking-widest border',
+                    'font-display font-black text-[40px] leading-none tracking-wide',
+                    top.direction === 'BUY' ? 'text-bull' : 'text-bear',
+                  )}
+                  style={{ textShadow: `0 0 32px var(--${dirTone}-ring)` }}
+                >
+                  {top.direction === 'BUY' ? 'LONG' : 'SHORT'}
+                </span>
+                <span className="font-display font-extrabold text-[30px] leading-none text-text-primary tracking-wide truncate">
+                  {top.label}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 mt-1.5">
+                <span
+                  className={clsx(
+                    'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md font-mono font-bold text-[10px] tracking-widest border',
                     top.direction === 'BUY' ? 'bg-bull/15 text-bull border-bull/40' : 'bg-bear/15 text-bear border-bear/40',
                   )}
-                  style={{ boxShadow: `0 0 16px -4px var(--${dirTone}-ring)` }}
                 >
                   {top.direction === 'BUY' ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
-                  {top.direction === 'BUY' ? 'LONG' : 'SHORT'}
+                  {top.direction}
                 </span>
                 <span className="text-[10px] font-mono text-text-tertiary uppercase tracking-widest">
                   conf {(top.confidence * 100).toFixed(0)}%
                 </span>
+                {rec.regime && (
+                  <span className="chip chip-gold uppercase tracking-widest">{rec.regime}</span>
+                )}
               </div>
             </div>
 
             {/* MIDDLE: massive z-score */}
-            <div className="flex flex-col items-center px-4 border-x border-border/40">
+            <div className="flex flex-col items-center px-6 md:border-x border-border/40">
               <div className="text-[9.5px] font-mono uppercase tracking-[0.30em] text-text-muted mb-1">z-score</div>
               <div
                 className={clsx(
                   'font-display font-black tabular leading-none',
-                  Math.abs(top.z_score) >= 2 ? 'text-[56px]' : 'text-[48px]',
+                  Math.abs(top.z_score) >= 2 ? 'text-[76px]' : 'text-[64px]',
                 )}
                 style={{
                   background:
@@ -194,8 +211,8 @@ function HeroPick({
                   WebkitTextFillColor: 'transparent',
                   filter:
                     top.z_score >= 0
-                      ? 'drop-shadow(0 0 20px var(--bear-ring))'
-                      : 'drop-shadow(0 0 20px var(--bull-ring))',
+                      ? 'drop-shadow(0 0 24px var(--bear-ring))'
+                      : 'drop-shadow(0 0 24px var(--bull-ring))',
                 }}
               >
                 <AnimatedNumber value={top.z_score} format={n => `${n >= 0 ? '+' : ''}${n.toFixed(2)}`} />
@@ -204,12 +221,12 @@ function HeroPick({
             </div>
 
             {/* RIGHT: prices + edge */}
-            <div className="flex flex-col gap-2 items-end">
-              <div className="text-[9.5px] font-mono uppercase tracking-[0.30em] text-text-muted">Edge</div>
+            <div className="flex flex-col gap-2 items-start md:items-end">
+              <div className="text-[9.5px] font-mono uppercase tracking-[0.30em] text-text-muted">Edge to fair</div>
               <div className="flex items-baseline gap-2">
                 <span
                   className={clsx(
-                    'font-display font-extrabold text-[22px] tabular leading-tight',
+                    'font-display font-black text-[34px] tabular leading-none',
                     edge >= 0 ? 'text-bull' : 'text-bear',
                   )}
                 >
@@ -219,7 +236,7 @@ function HeroPick({
                   ({edgePct >= 0 ? '+' : ''}{edgePct.toFixed(1)}%)
                 </span>
               </div>
-              <div className="text-[10px] font-mono text-text-tertiary tabular mt-1 flex items-center gap-1.5">
+              <div className="text-[11px] font-mono text-text-tertiary tabular mt-1 flex items-center gap-1.5">
                 <span className="text-text-secondary">${top.current.toFixed(2)}</span>
                 <span className="text-gold">→</span>
                 <span className="text-gold">${top.fair_value.toFixed(2)}</span>
@@ -230,46 +247,52 @@ function HeroPick({
         )}
       </div>
 
-      {/* Mini ranking table */}
+      {/* Ranked book — card rail */}
       {ranked.length > 0 && (
-        <div>
-          <div className="grid grid-cols-[28px_1fr_70px_70px_60px_60px] gap-2 items-center text-[9px] font-mono uppercase tracking-widest text-text-muted border-b border-border pb-1 px-1">
-            <span>#</span>
-            <span>Spread</span>
-            <span className="text-right">Current</span>
-            <span className="text-right">Fair</span>
-            <span className="text-right">z</span>
-            <span className="text-right">Conf</span>
-          </div>
-          {ranked.map((o, i) => {
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+          {ranked.slice(0, 8).map((o, i) => {
             const Icon = o.direction === 'BUY' ? TrendingUp : o.direction === 'SELL' ? TrendingDown : Activity;
             const t = o.direction === 'BUY' ? 'text-bull' : o.direction === 'SELL' ? 'text-bear' : 'text-text-tertiary';
             return (
               <div
                 key={o.spread}
                 className={clsx(
-                  'grid grid-cols-[28px_1fr_70px_70px_60px_60px] gap-2 items-center py-1.5 px-1 text-[11px] font-mono tabular border-b border-border/30',
-                  i === 0 && 'bg-bg-card/40',
+                  'relative rounded-lg border px-3 py-2.5 transition-colors',
+                  i === 0
+                    ? 'border-gold/40 bg-gold/5'
+                    : 'border-border/50 bg-bg-card/30 hover:border-border-strong',
                 )}
               >
-                <span className={clsx('uppercase tracking-widest', i === 0 ? 'text-gold font-bold' : 'text-text-muted')}>
-                  #{i + 1}
-                </span>
-                <span className="flex items-center gap-2 min-w-0">
-                  <Icon className={clsx('w-3.5 h-3.5 flex-shrink-0', t)} />
-                  <span className="text-text-primary truncate">{o.label}</span>
-                </span>
-                <span className="text-right text-text-secondary">{o.current.toFixed(2)}</span>
-                <span className="text-right text-gold">{o.fair_value.toFixed(2)}</span>
-                <span className={clsx(
-                  'text-right font-semibold',
-                  o.z_score > 1.5 ? 'text-bear' : o.z_score < -1.5 ? 'text-bull' : 'text-neut',
-                )}>
-                  {o.z_score >= 0 ? '+' : ''}{o.z_score.toFixed(2)}
-                </span>
-                <span className="text-right text-text-tertiary">
-                  {(o.confidence * 100).toFixed(0)}%
-                </span>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className={clsx(
+                    'text-[8.5px] font-mono uppercase tracking-[0.22em]',
+                    i === 0 ? 'text-gold font-bold' : 'text-text-muted',
+                  )}>
+                    #{i + 1}{i === 0 ? ' · top' : ''}
+                  </span>
+                  <Icon className={clsx('w-3.5 h-3.5', t)} />
+                </div>
+                <div className="text-[11.5px] font-mono text-text-primary truncate mb-1">{o.label}</div>
+                <div className="flex items-baseline justify-between gap-2 text-[10.5px] font-mono tabular">
+                  <span className={clsx(
+                    'font-bold text-[15px]',
+                    o.z_score > 1.5 ? 'text-bear' : o.z_score < -1.5 ? 'text-bull' : 'text-neut',
+                  )}>
+                    {o.z_score >= 0 ? '+' : ''}{o.z_score.toFixed(2)}σ
+                  </span>
+                  <span className="text-text-tertiary">
+                    {o.current.toFixed(2)} <span className="text-gold">→</span> {o.fair_value.toFixed(2)}
+                  </span>
+                </div>
+                <div className="mt-1.5 h-[3px] rounded-full bg-bg-card overflow-hidden">
+                  <div
+                    className={clsx('h-full rounded-full', o.direction === 'BUY' ? 'bg-bull/70' : o.direction === 'SELL' ? 'bg-bear/70' : 'bg-neut/50')}
+                    style={{ width: `${Math.round((o.confidence ?? 0) * 100)}%` }}
+                  />
+                </div>
+                <div className="mt-1 text-[8.5px] font-mono uppercase tracking-[0.18em] text-text-muted">
+                  conf {(o.confidence * 100).toFixed(0)}%
+                </div>
               </div>
             );
           })}
@@ -732,15 +755,16 @@ export function DeskView({
         </motion.div>
       )}
 
-      {/* Main desk grid — trading flow (hero pick → positions → decomposition)
-          takes the wide left column; context (brief, risk, geo calc) stacks on
-          the right. Collapses to a single column below xl. */}
+      {/* Mission-control hero — the engine's directive, full width. */}
+      <motion.div variants={fadeUp}>
+        <HeroPick rec={rec ?? null} lastSuccess={recLastUpdated} fetchError={recError} />
+      </motion.div>
+
+      {/* Main desk grid — trading flow (positions → decomposition) takes the
+          wide left column; context (brief, risk, geo calc) stacks on the
+          right. Collapses to a single column below xl. */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 items-start">
         <div className="xl:col-span-2 space-y-4 min-w-0">
-          <motion.div variants={fadeUp}>
-            <HeroPick rec={rec ?? null} lastSuccess={recLastUpdated} fetchError={recError} />
-          </motion.div>
-
           <motion.div variants={fadeUp}>
             <OpenPositionsStrip
               positions={pos}

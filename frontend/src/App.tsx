@@ -173,6 +173,13 @@ export default function App() {
 
   return (
     <div className="h-screen w-screen flex flex-col bg-bg overflow-hidden">
+      {/* Ambient atmosphere — slow aurora drift + film grain, behind everything */}
+      <div aria-hidden className="aurora-layer">
+        <div className="aurora-blob aurora-a" />
+        <div className="aurora-blob aurora-b" />
+        <div className="aurora-blob aurora-c" />
+      </div>
+      <div aria-hidden className="grain-layer" />
       <TopBar
         ticker={liveTicker}
         refreshing={refreshing}
@@ -180,12 +187,13 @@ export default function App() {
       />
       <div className="flex flex-1 min-h-0">
         <Sidebar active={view} onSelect={setView} />
-        <main className="flex-1 overflow-y-auto overflow-x-hidden bg-grid-faint" style={{ backgroundSize: '32px 32px' }}>
-          {/* View header — chunky display heading w/ tab numeral, breadcrumb, hairline gold rule */}
+        <main className="flex-1 overflow-y-auto overflow-x-hidden bg-grid-faint relative z-10" style={{ backgroundSize: '32px 32px' }}>
+          {/* Workspace strip — slim sticky context bar; the tab's own PageHeader
+              carries the descriptive hero, so this stays out of the way. */}
           <div
-            className="relative px-7 pt-6 pb-5 flex items-end justify-between sticky top-0 z-10"
+            className="relative px-6 h-[46px] flex items-center justify-between sticky top-0 z-10"
             style={{
-              background: 'linear-gradient(180deg, rgb(var(--bg-default) / 0.94) 0%, rgb(var(--bg-default) / 0.82) 100%)',
+              background: 'linear-gradient(180deg, rgb(var(--bg-default) / 0.92) 0%, rgb(var(--bg-default) / 0.78) 100%)',
               backdropFilter: 'blur(20px) saturate(140%)',
               WebkitBackdropFilter: 'blur(20px) saturate(140%)',
             }}
@@ -195,76 +203,50 @@ export default function App() {
               className="absolute bottom-0 left-0 right-0 h-px pointer-events-none"
               style={{ background: 'linear-gradient(90deg, transparent, var(--border-accent) 12%, rgba(218,182,65,0.55) 50%, var(--border-accent) 88%, transparent)' }}
             />
-            <div className="flex items-end gap-5">
-              {/* Big numeric tab indicator */}
-              <motion.div
+            <div className="flex items-center gap-3 min-w-0">
+              <motion.span
                 key={`num-${view}`}
-                initial={{ opacity: 0, scale: 0.85 }}
+                initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-                className="relative flex items-center justify-center w-14 h-14 rounded-xl flex-shrink-0"
+                transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
+                className="flex items-center justify-center w-6 h-6 rounded-md flex-shrink-0 font-display font-black text-[13px] tabular text-gold-bright"
                 style={{
-                  background: 'linear-gradient(135deg, rgba(218,182,65,0.18) 0%, rgba(218,182,65,0.04) 100%)',
+                  background: 'linear-gradient(135deg, rgba(218,182,65,0.20) 0%, rgba(218,182,65,0.05) 100%)',
                   border: '1px solid var(--border-accent)',
-                  boxShadow: '0 8px 24px -10px var(--gold-glow), inset 0 1px 0 rgba(255,255,255,0.05)',
+                  boxShadow: '0 4px 12px -6px var(--gold-glow)',
                 }}
               >
-                <span
-                  className="font-display font-black text-[32px] leading-none tabular"
-                  style={{
-                    background: 'linear-gradient(180deg, rgb(var(--gold-bright)), rgb(var(--gold)))',
-                    WebkitBackgroundClip: 'text',
-                    backgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    filter: 'drop-shadow(0 0 8px var(--gold-glow))',
-                  }}
-                >
-                  {activeHint}
+                {activeHint}
+              </motion.span>
+              <motion.h1
+                key={activeLabel}
+                initial={{ opacity: 0, x: -4 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+                className="font-display font-bold text-[15px] leading-none tracking-[0.26em] uppercase text-text-primary truncate"
+              >
+                {activeLabel}
+              </motion.h1>
+              <span aria-hidden className="hidden sm:block w-px h-4 bg-border" />
+              <div className="hidden sm:flex items-center gap-2.5 text-[9px] font-mono text-text-muted uppercase tracking-[0.20em]">
+                <span className="flex items-center gap-1.5">
+                  <span className="live-dot" />
+                  {loading && !all ? 'initializing…' : `${Object.keys(all ?? {}).length} streams`}
                 </span>
-                {/* corner ticks */}
-                <span aria-hidden className="absolute top-1 left-1 w-1.5 h-1.5" style={{ borderTop: '1px solid var(--border-accent)', borderLeft: '1px solid var(--border-accent)' }} />
-                <span aria-hidden className="absolute bottom-1 right-1 w-1.5 h-1.5" style={{ borderBottom: '1px solid var(--border-accent)', borderRight: '1px solid var(--border-accent)' }} />
-              </motion.div>
-
-              <div className="flex flex-col gap-1.5">
-                {/* breadcrumb chip */}
-                <div className="flex items-center gap-2 text-[9.5px] font-mono uppercase tracking-[0.28em] text-text-muted">
-                  <span>PULSE</span>
-                  <span className="text-text-muted/50">/</span>
-                  <span className="text-text-tertiary">Workspace</span>
-                  <span className="text-text-muted/50">/</span>
-                  <span className="text-gold/80">{activeLabel}</span>
-                </div>
-                <motion.h1
-                  key={activeLabel}
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
-                  className="font-display font-black text-[30px] leading-none tracking-[0.22em] uppercase text-text-primary"
-                  style={{ textShadow: '0 0 24px rgba(218,182,65,0.10)' }}
-                >
-                  {activeLabel}
-                </motion.h1>
-                <div className="flex items-center gap-3 text-[10px] font-mono text-text-muted uppercase tracking-[0.22em]">
-                  <span className="flex items-center gap-1.5">
-                    <span className="live-dot" />
-                    {loading && !all ? 'initializing data layer…' : `${Object.keys(all ?? {}).length} streams active`}
-                  </span>
-                  <span className="text-text-muted/40">·</span>
-                  <span>{lastUpdated ? `t-sync ${new Date(lastUpdated).toLocaleTimeString('en-US', { hour12: false })}` : 'awaiting sync'}</span>
-                </div>
+                <span className="text-text-muted/40">·</span>
+                <span className="tabular">{lastUpdated ? `sync ${new Date(lastUpdated).toLocaleTimeString('en-US', { hour12: false })}` : 'awaiting sync'}</span>
               </div>
             </div>
-            <div className="flex items-center gap-3 text-[9.5px] font-mono text-text-tertiary tabular tracking-[0.24em] uppercase pb-1.5">
+            <div className="flex items-center gap-2.5 text-[9px] font-mono text-text-tertiary tabular tracking-[0.22em] uppercase">
               <button
                 onClick={() => setPaletteOpen(true)}
-                className="flex items-center gap-2 px-2 py-1 rounded-md border border-border/40 bg-bg-card/40 hover:border-gold/40 hover:text-text-primary transition-colors group"
+                className="flex items-center gap-1.5 px-2 py-1 rounded-md border border-border/40 bg-bg-card/40 hover:border-gold/40 hover:text-text-primary transition-colors group"
                 title="Open command palette (Ctrl/Cmd+K)"
               >
                 <kbd className="text-[9px] text-text-secondary group-hover:text-gold-bright transition-colors">⌘K</kbd>
-                <span>command</span>
+                <span className="hidden md:inline">command</span>
               </button>
-              <div className="flex items-center gap-2">
+              <div className="hidden md:flex items-center gap-1.5">
                 <kbd className="px-1.5 py-0.5 rounded border border-border/40 bg-bg-card/40 text-text-secondary text-[9px]">?</kbd>
                 <span>shortcuts</span>
               </div>

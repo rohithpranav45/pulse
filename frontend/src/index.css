@@ -254,10 +254,11 @@
     100% { box-shadow: 0 0 0 0 rgba(16, 217, 151, 0); }
   }
 
-  /* Sidebar nav items — flat, with a confident gold rail + soft halo on active */
+  /* Sidebar nav items — the active background is a shared framer-motion
+     layout pill (slides between items), so .active only handles color. */
   .nav-item {
     @apply flex items-center gap-3 px-3 py-2.5 rounded-md text-text-tertiary cursor-pointer relative;
-    transition: color 180ms ease, background 220ms ease, transform 200ms ease;
+    transition: color 180ms ease, transform 200ms ease;
   }
   .nav-item:hover {
     color: rgb(var(--text-primary));
@@ -265,8 +266,15 @@
   }
   .nav-item.active {
     color: rgb(var(--gold-bright));
+    background: transparent;
+  }
+  .nav-pill {
+    position: absolute;
+    inset: 0;
+    border-radius: 6px;
     background: var(--nav-active-bg);
     box-shadow: inset 3px 0 0 rgb(var(--gold)), var(--nav-active-glow);
+    pointer-events: none;
   }
   .nav-icon { @apply w-4 h-4 flex-shrink-0; }
   .nav-label { @apply font-display font-semibold uppercase; font-size: 11px; letter-spacing: 0.18em; }
@@ -400,6 +408,65 @@
     background: linear-gradient(180deg, rgba(255,255,255,0.035) 0%, transparent 50%);
     pointer-events: none;
   }
+
+  /* ── Ambient atmosphere ────────────────────────────────────────────────
+     Aurora: slow-drifting blurred color fields behind the whole app.
+     Grain: a static film-noise overlay that kills flat-gradient banding.
+     Both are fixed, pointer-events:none, and freeze under reduced-motion. */
+  .aurora-layer {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .aurora-blob {
+    position: absolute;
+    border-radius: 9999px;
+    filter: blur(90px);
+    will-change: transform;
+  }
+  .aurora-a {
+    width: 58vw; height: 58vw; left: -14vw; top: -24vw;
+    background: radial-gradient(circle at 42% 42%, rgba(92, 158, 255, 0.14), transparent 64%);
+    animation: auroraDriftA 52s ease-in-out infinite alternate;
+  }
+  .aurora-b {
+    width: 50vw; height: 50vw; right: -16vw; bottom: -22vw;
+    background: radial-gradient(circle at 58% 58%, rgba(218, 182, 65, 0.11), transparent 64%);
+    animation: auroraDriftB 64s ease-in-out infinite alternate;
+  }
+  .aurora-c {
+    width: 36vw; height: 36vw; left: 36vw; top: 26vh;
+    background: radial-gradient(circle at 50% 50%, rgba(56, 217, 244, 0.065), transparent 64%);
+    animation: auroraDriftC 78s ease-in-out infinite alternate;
+  }
+  :root[data-theme='light'] .aurora-a { background: radial-gradient(circle at 42% 42%, rgba(148, 108, 8, 0.075), transparent 64%); }
+  :root[data-theme='light'] .aurora-b { background: radial-gradient(circle at 58% 58%, rgba(196, 110, 8, 0.06), transparent 64%); }
+  :root[data-theme='light'] .aurora-c { background: radial-gradient(circle at 50% 50%, rgba(35, 88, 200, 0.045), transparent 64%); }
+  @keyframes auroraDriftA {
+    from { transform: translate3d(0, 0, 0) scale(1); }
+    to   { transform: translate3d(9vw, 8vh, 0) scale(1.14); }
+  }
+  @keyframes auroraDriftB {
+    from { transform: translate3d(0, 0, 0) scale(1.08); }
+    to   { transform: translate3d(-8vw, -7vh, 0) scale(0.94); }
+  }
+  @keyframes auroraDriftC {
+    from { transform: translate3d(0, 0, 0) scale(0.96); }
+    to   { transform: translate3d(-11vw, 9vh, 0) scale(1.1); }
+  }
+  .grain-layer {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0.05;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
+    background-size: 180px 180px;
+  }
+  :root[data-theme='light'] .grain-layer { opacity: 0.03; }
 
   /* Number/value flash microstate — used in tickers/positions. */
   @keyframes valueFlashUp {
