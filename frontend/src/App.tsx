@@ -330,12 +330,20 @@ function HelpOverlay({ open, onClose }: { open: boolean; onClose: () => void }) 
     <div className="fixed inset-0 z-[300] flex items-center justify-center" onClick={onClose}>
       <div className="absolute inset-0 bg-bg/80 backdrop-blur-sm" />
       <div
-        className="relative bg-bg-surface border border-border rounded-lg shadow-2xl p-6 w-[420px] max-w-[calc(100vw-32px)]"
+        className="relative bg-bg-surface border border-border rounded-xl shadow-2xl p-6 w-[420px] max-w-[calc(100vw-32px)] overflow-hidden"
         onClick={e => e.stopPropagation()}
         role="dialog"
         aria-label="Keyboard shortcuts"
       >
-        <div className="text-[10px] font-mono uppercase tracking-widest text-text-tertiary mb-1">Help</div>
+        <div
+          aria-hidden
+          className="absolute inset-x-0 top-0 h-px pointer-events-none"
+          style={{ background: 'linear-gradient(90deg, transparent 4%, rgba(218,182,65,0.75) 50%, transparent 96%)' }}
+        />
+        <div className="flex items-center gap-2 text-[9px] font-mono uppercase tracking-[0.32em] text-gold/80 mb-1">
+          <span aria-hidden className="inline-block w-4 h-px bg-gold/60" />
+          Help
+        </div>
         <h3 className="font-display font-bold tracking-wider text-lg uppercase text-text-primary mb-4">
           Keyboard shortcuts
         </h3>
