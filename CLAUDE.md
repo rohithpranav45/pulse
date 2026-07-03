@@ -7,7 +7,20 @@ spread engine), and serves a React dashboard with a paper-trading book.
 - **Stack:** Flask 3 · React 18 + Vite + Tailwind · SQLite (cache + paper book) ·
   DuckDB/Parquet over a 3.5 GB `/Data` desk feed · sklearn + XGBoost/LightGBM/CatBoost
 - **Run (local):** `python start.py` from the repo root → http://127.0.0.1:5000
-- **Last updated:** 2026-07-03 (**Settle-tail ON operationally — `start.py` now defaults
+- **Last updated:** 2026-07-03 (**Ultimate dashboard glow-up — full visual + structural redesign, 3
+  committed waves** [branch `phase4-live-feature-overlay`, see §1 entry]. Wave 1: ambient **aurora
+  atmosphere** (3 slow-drifting blurred colour fields + film-grain overlay; reduced-motion-safe; light-theme
+  variants); the fat ~120px sticky view header replaced by a **46px workspace strip** (views own their hero);
+  sidebar regrouped into **Trading / Engine / Intel rails** with a framer-motion `layoutId` pill that slides
+  between items; **DESK rebuilt as mission control** — the regime pick promoted out of the 2/3 column to a
+  full-width band (40px display-type LONG/SHORT directive, 76px glowing z-score, edge-to-fair, ranked book
+  as a conf-bar card rail). Wave 2: **every tab framed** by the shared upgraded PageHeader; **REGIME rebuilt
+  as a numbered decision chain** (00 risk gates → 01 signal → 02 book → 03 evidence, paired 2-col grids —
+  was a flat 6-panel stack); Inventory hero w/ segmented series toggle; Charts/Markets/SignalLog framed.
+  Wave 3: panel hover lift, empty states with personality, help-overlay restyle. All honesty surfaces
+  intact (TAIL·ESTIMATE chip, stale banner, fetch/source chips, gate badges); palette/hotkeys 1-8/ETag/
+  code-split preserved, boot chunk **524 kB**; `tsc` + build clean, **294 tests green**.) Prior:
+  (**Settle-tail ON operationally — `start.py` now defaults
   `PULSE_SETTLE_TAIL=1` into the desk app process's env; deliberately NOT in `.env` (training/walk-forward
   CLI runs load `.env` transitively via `features.py → external_history` and must stay on the frozen
   lake — verified: CLI `tail_enabled()=False`, tape ends 05-26)** [branch `phase4-live-feature-overlay`,
@@ -756,6 +769,49 @@ regime_conditioning,release_reaction}.py`, `/api/regime/inventory[?series=][/rea
 - **Tests:** +4 (`test_assess_series_all_three` ×3, `test_release_reaction_computes_horizon_moves`). The reaction
   panel anchors today's prediction on the **API −0.765M as a proxy** for the EIA actual — re-anchor on the real
   printed EIA number for an exact grade.
+
+### ✅ Ultimate dashboard glow-up — full visual + structural redesign (2026-07-03)
+Branch `phase4-live-feature-overlay`, 3 committed waves (`38066ec` · `84b9697` · `459062d`) after a
+checkpoint commit (`d1d2ccc`) that landed the prior session's uncommitted settle-tail-ON work. Frontend-only —
+zero backend change; **294 pytest green**, `tsc --noEmit` + `vite build` clean, boot chunk **524 kB** (within
+the ≤~550 kB budget), ETag/304 polling + code-splitting + Cmd/Ctrl+K palette + hotkeys 1-8 + theme
+persistence all preserved.
+- **Wave 1 — identity + shell + DESK (`38066ec`).** (1) **Ambient atmosphere**: an `aurora-layer` (three
+  slow-drifting, heavily blurred colour fields on 52-78s alternate loops) + a `grain-layer` (inline-SVG
+  feTurbulence film noise, `mix-blend-mode: overlay`) sit behind the whole app; both freeze under
+  `prefers-reduced-motion` and have dedicated light-theme variants; `main` gained `relative z-10` so content
+  stacks above. (2) The **~120px sticky view header** (14×14 numeral tile + 30px title + breadcrumb) was
+  replaced by a **46px workspace strip** — 6×6 numeral chip, 15px title, streams/sync inline, ⌘K + `?`
+  right — because most tabs now carry their own descriptive `PageHeader` (the old design double-headed every
+  tab). (3) **Sidebar**: NAV_ITEMS unchanged (App depends on it) but rendered as three grouped rails —
+  **Trading** (desk/charts/markets/paper) · **Engine** (regime/inventory/signals) · **Intel** (news) — with
+  tiny group labels (hidden in rail mode) and the active background lifted out of CSS into a shared
+  framer-motion **`layoutId="nav-active-pill"`** span (`.nav-pill`) that springs between items; `.nav-item.active`
+  now only colours text. (4) **DESK mission control**: `HeroPick` (renamed "Mission Control · Regime Engine",
+  still a `feature` Panel so LiveFetchChip/SourceTag/dataTimestamp survive) moved out of the 2/3 column to
+  **full width** — directive band with a 40px display-type **LONG/SHORT** + 30px spread label + regime chip,
+  a **76px** glowing z-score (64px under |z|<2), edge-to-fair block, and the ranked list rebuilt from a table
+  into a **card rail** (per-spread cards: z, current→fair, confidence bar, #1 gold-ringed). NEUTRAL day gets
+  a proper "All spreads inside band / engine holds fire" hero. Grid below unchanged (positions +
+  decomposition | brief + risk + geo).
+- **Wave 2 — every tab framed (`84b9697`).** Shared `PageHeader` upgraded (gold dash eyebrow, 30px
+  display title, gold-fading hairline rule) and now fronts **all 8 tabs**. **REGIME** rebuilt from a flat
+  6-panel stack into a numbered **decision chain**: *00 Risk gates* (ShockMonitor ‖ AutoDesk, 2-col) → *01
+  The signal* (RegimePickCard) → *02 The book* (DecorrelatedBook ‖ PerSpreadGate, 2-col) → *03 The evidence*
+  (Calibration) — each under a toned `SectionHeader`. **INVENTORY**: hero header ("The Wednesday number,
+  decoded") with the Crude/Gasoline/Distillate toggle restyled as a segmented control in the header; the
+  bare "Live inventory dashboard" divider promoted to a `SectionHeader`. **CHARTS** + **MARKETS** framed;
+  **SIGNAL LOG**'s "Diagnostics" divider promoted to a labelled section header.
+- **Wave 3 — delight (`459062d`).** `.panel:hover` lifts 1px (suppressed under reduced-motion); DESK
+  flat-book empty state gets an icon + "Flat book — nothing at risk" voice (and points at mission control /
+  auto-desk); morning-brief empty state similarly; help overlay restyled to the new language (gold dash
+  eyebrow + top accent rule).
+- **Honesty surfaces untouched by design:** TAIL·ESTIMATE chip (RegimePickCard), DESK stale-feed banner
+  (tail-aware copy intact), per-panel LiveFetchChip/⚠ ERR + SourceTag provenance, gate/baseline/⊘ SPREAD OFF
+  badges — all restyled contexts only, none removed or hidden.
+- **Verified:** `tsc` clean · build clean ×3 waves · served bundle smoke-checked on :5000 (new hash + aurora
+  CSS live, `/api/regime/recommendation` 200, `/api/all` ETag present — re-fetch 200s during market hours are
+  the documented genuine-data-movement case) · pytest 294.
 
 ### ✅ Settle-tail ON operationally — desk process runs the extended tape (2026-07-03)
 Branch `phase4-live-feature-overlay`. The 07-02 sprint shipped the tail behind an opt-in flag; this session

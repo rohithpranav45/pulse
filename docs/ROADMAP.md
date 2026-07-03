@@ -54,6 +54,21 @@ valid for any VPS/Oracle host.
 
 ---
 
+## ✅ SHIPPED — Ultimate dashboard glow-up: full visual + structural redesign (2026-07-03)
+
+Frontend-only, 3 committed waves (detail: `CLAUDE.md` §1). Wave 1: aurora + film-grain atmosphere,
+46px workspace strip (replaces the double-header), Trading/Engine/Intel sidebar rails with a sliding
+`layoutId` active pill, DESK mission-control hero (full-width directive band + 76px z + ranked card
+rail). Wave 2: every tab framed by the upgraded shared PageHeader; REGIME as a numbered decision chain
+(risk gates → signal → book → evidence); Inventory hero w/ segmented series toggle. Wave 3: panel hover
+lift, empty-state voice, help-overlay restyle. Honesty surfaces + palette/hotkeys/ETag/code-split all
+preserved; boot chunk 524 kB; 294 tests green. **Follow-ups (cut-line, none blocking):**
+(1) richer data-density tooltips (hover cards on ranked-book cards / KPI tiles);
+(2) a compact ticker-tape sparkline on hover;
+(3) HF Space redeploy still frozen pending the mentor strategy verdict (unchanged).
+
+---
+
 ## ✅ SHIPPED — Settle-tail: daily settle tape extended past the frozen lake (2026-07-02)
 
 The /Data daily settles froze 2026-05-26; `backend/research/settle_tail.py` (opt-in
