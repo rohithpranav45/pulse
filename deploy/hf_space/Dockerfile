@@ -43,11 +43,17 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends libgomp1 curl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+# PULSE_SETTLE_TAIL=1 extends the daily settle tape past the frozen lake (05-26)
+# with the committed frozen OHLCV snapshot, so the regime `as_of` shows the recent
+# session (06-26) instead of stale May. Safe here: only the app process reads this
+# env (no CLI training runs on the Space), and the deployment has no live I:\ share
+# so research.frozen_feed auto-falls-back to the committed snapshot for every feed.
 ENV PYTHONUNBUFFERED=1 \
     PYTHONIOENCODING=utf-8 \
     PYTHONDONTWRITEBYTECODE=1 \
     HOST=0.0.0.0 \
     PORT=7860 \
+    PULSE_SETTLE_TAIL=1 \
     HF_HOME=/app/.cache/huggingface
 
 WORKDIR /app
