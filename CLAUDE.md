@@ -202,6 +202,35 @@ spread engine), and serves a React dashboard with a paper-trading book.
 > — Phase 8 per-spread gate + GARCH risk-layer study + A/B backtest-verdict panel (all merged to `main`
 > = `e6b15c4`). Read it for the detailed continuation context + the open next-steps.
 
+### ✅ FINAL — no-desk deployment freeze (2026-07-03, merged to `main` = `c77dada`)
+End-of-internship deliverable: the public dashboard now works **perfectly without the office `I:\` share**
+and always shows populated, recent data. The three live surfaces that read the desk recorder (15-min bars →
+regime live overlay; 1-min bars → inventory reaction; hourly OHLCV → settle-tail/geo) are **frozen into the
+repo** and served via an automatic desk→frozen fallback.
+- **`backend/data/frozen_feed/`** (committed, ~22 MB): checkpointed standalone `bars_15min_20260701.db`
+  (data through **07-03**) + `bars_1min_20260701.db`, and the CL/HO/LGO/LCO OHLCV tails (RBOB's 39 MB
+  2019-26 history excluded — it only feeds the offline geo `rbob_crack` node). `FROZEN_AS_OF = 2026-07-01`.
+- **`backend/research/frozen_feed.py` — `resolve_dir(env, desk_default, subdir, require=…)`**: env override →
+  live desk share (if it holds feed files) → committed frozen snapshot. On the desk the live recorder always
+  wins (bit-for-bit unchanged); on the deployment (no `I:\`) every feed falls back to the frozen snapshot.
+  Wired into `live_feed.resolve_feed_dir`, `release_reaction._feed_dir`, `products_feed.ohlcv_dir`.
+- **`live_engine`** `live_feed` block now carries honest **`frozen` / `frozen_as_of`** flags (the existing >4d
+  stale banner + `TAIL·ESTIMATE` chip already flag the aging as-of).
+- **HF Dockerfile** sets **`PULSE_SETTLE_TAIL=1`** → the settle tape extends off the frozen OHLCV so the regime
+  `as_of` shows the recent **06-26** session, not the stale 05-26 lake. Deploy builds from `main`, which now
+  ships the frozen snapshot in the clone.
+- **Verified no-desk** (feeds pointed at the frozen dir): `/api/regime/live` (live=True, as_of 06-26, feed
+  07-03), `/api/regime/recommendation` (as_of 06-26, `ohlcv_tail ESTIMATE`), `/api/regime/inventory/reaction`
+  (wk 06-26, populated moves) all serve data. **294 tests green.**
+- **Same session:** the **latest EIA release (wk-ending 06-26)** is now surfaced with the **real consensus**
+  (`latest_release` advances to the freshest EIA-API week, seasonal-proxy consensus labelled when the scrape
+  lags; staged real crude consensus −2.900M vs −3.775M actual → surprise **−875 MBBL / z −0.18**, a mild
+  bullish beat that's noise in the LOW-stocks/backwardation regime → framework correctly NEUTRAL). The
+  inventory-reaction route no longer blocks on a live EIA pull (first-hit **25 s → 2.4 s**).
+- **Deploy step remaining (manual):** HF does not auto-rebuild on push — trigger **Settings → Factory rebuild**
+  on the Space (deploy/HF_DEPLOY.md §6) to ship `main` = `c77dada`. `phase4-live-feature-overlay` is merged to
+  `main` via the GitHub merge API; both branches pushed.
+
 ### ✅ Shipped
 - **Phase 1 — dashboard** (PR #2): 32 live data streams, health monitoring, source provenance,
   directional Brent signal engine, Groq morning brief, paper-trading sandbox, pattern analogs.
