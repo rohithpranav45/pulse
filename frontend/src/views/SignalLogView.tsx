@@ -1,4 +1,4 @@
-import { PageHeader } from '@/components/ui/SectionHeader';
+import { PageHeader, SectionHeader } from '@/components/ui/SectionHeader';
 import { SignalLogPanel } from '@/components/panels/SignalLogPanel';
 import { IntradayReplayPanel } from '@/components/panels/IntradayReplayPanel';
 
@@ -30,9 +30,12 @@ export function SignalLogView() {
 
       <SignalLogPanel />
 
-      <div className="pt-1 text-[10px] font-mono uppercase tracking-[0.22em] text-text-muted">
-        Diagnostics
-      </div>
+      <SectionHeader
+        accent="blue"
+        eyebrow="Diagnostics"
+        title="Intraday engine replay"
+        desc="Sanity replay of the engine over the recorder's real 15-min tape — a diagnostic, not a backtest."
+      />
       <IntradayReplayPanel />
     </div>
   );

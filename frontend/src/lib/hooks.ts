@@ -11,8 +11,10 @@ export function usePolling<T>(
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const mounted = useRef(true);
   const tick = useRef<number | null>(null);
+  const lastFetch = useRef<number>(0);
 
   const refetch = useCallback(async () => {
+    lastFetch.current = Date.now();
     try {
       const result = await fn();
       if (!mounted.current) return;
@@ -31,10 +33,24 @@ export function usePolling<T>(
   useEffect(() => {
     mounted.current = true;
     refetch();
-    tick.current = window.setInterval(refetch, intervalMs);
+    // Skip polls while the tab is hidden (saves backend load on a dashboard
+    // that's often left open in a background tab)…
+    tick.current = window.setInterval(() => {
+      if (!document.hidden) refetch();
+    }, intervalMs);
+    // …and catch up immediately when the user comes back, if the data has
+    // gone stale past its own polling cadence.
+    const onVisible = () => {
+      if (document.hidden) return;
+      if (Date.now() - lastFetch.current >= intervalMs) refetch();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
     return () => {
       mounted.current = false;
       if (tick.current) window.clearInterval(tick.current);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refetch, intervalMs]);
@@ -81,9 +97,20 @@ export function useLocalStorage<T>(key: string, initial: T): [T, (v: T) => void]
       return initial;
     }
   });
+  // Keep every hook instance for the same key in sync (e.g. the theme is
+  // toggled from both the TopBar button and the command palette).
+  useEffect(() => {
+    const onSync = (e: Event) => {
+      const d = (e as CustomEvent).detail;
+      if (d?.key === key) setV(d.value as T);
+    };
+    window.addEventListener('pulse-ls', onSync);
+    return () => window.removeEventListener('pulse-ls', onSync);
+  }, [key]);
   const set = (val: T) => {
     setV(val);
     try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
+    window.dispatchEvent(new CustomEvent('pulse-ls', { detail: { key, value: val } }));
   };
   return [v, set];
 }
