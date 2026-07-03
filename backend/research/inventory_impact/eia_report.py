@@ -175,29 +175,68 @@ def latest_release(series: str = "crude_ex_spr", refresh: bool = False) -> dict 
         refresh_report()
     c = _load_consensus_csv(series)
     c = c[c["actual"].notna()]
-    if c.empty:
-        return None
-    we = c.index.max()
-    row = c.loc[we]
-    consensus = float(row["consensus"])
-    actual, actual_source = float(row["actual"]), "consensus_csv_scrape"
-    # prefer the AUTHORITATIVE actual from the live EIA API for this week when present
+
+    # The live EIA v2 API is the authoritative feed for the ACTUAL and typically
+    # LEADS the scraped consensus CSV by 1+ weeks (the CSV backfill lags the weekly
+    # print). Grade the freshest week EITHER source carries an actual for — so the
+    # most recent release surfaces the moment the API publishes it, even before the
+    # consensus scrape catches up.
+    api_chg = None
     try:
         wf = weekly_frame()
         if series in wf:
-            chg = wf[series].diff()
-            if we in chg.index and pd.notna(chg.loc[we]):
-                actual, actual_source = float(chg.loc[we]), "eia_api (live)"
+            api_chg = wf[series].diff().dropna()
     except Exception:
-        pass
+        api_chg = None
+
+    weeks = []
+    if not c.empty:
+        weeks.append(c.index.max())
+    if api_chg is not None and not api_chg.empty:
+        weeks.append(api_chg.index.max())
+    if not weeks:
+        return None
+    we = max(weeks)
+
+    # ACTUAL: prefer the authoritative live API change for this week; else the CSV
+    # scrape (which equals the EIA print — used only while the API lags the week).
+    actual = actual_source = None
+    if api_chg is not None and we in api_chg.index and pd.notna(api_chg.loc[we]):
+        actual, actual_source = float(api_chg.loc[we]), "eia_api (live)"
+    elif we in c.index and pd.notna(c.loc[we, "actual"]):
+        actual, actual_source = float(c.loc[we, "actual"]), "consensus_csv_scrape"
+    if actual is None:
+        return None
+
+    # CONSENSUS: the real analyst consensus (CSV) when it carries this week; else the
+    # seasonal-proxy expectation (labelled), so a just-printed week the scrape hasn't
+    # reached is still gradeable — the same fallback surprise_series() uses.
+    consensus = consensus_source = None
+    if we in c.index and pd.notna(c.loc[we, "consensus"]):
+        consensus, consensus_source = float(c.loc[we, "consensus"]), "consensus"
+    elif api_chg is not None:
+        seas = _seasonal_expected_change(api_chg)
+        if we in seas.index and pd.notna(seas.loc[we]):
+            consensus, consensus_source = float(seas.loc[we]), "seasonal_fallback"
+    if consensus is None:
+        return None
+
+    # RELEASE DATE: the CSV's if present, else the holiday-aware scheduled Wednesday.
+    if we in c.index and pd.notna(c.loc[we, "release_date"]):
+        release_date = str(pd.Timestamp(c.loc[we, "release_date"]).date())
+    else:
+        from research.inventory_impact.release_calendar import release_datetime
+        release_date = str(release_datetime(we).date())
+
     return {
         "series": series,
         "week_ending": str(we.date()),
-        "release_date": str(pd.Timestamp(row["release_date"]).date()),
+        "release_date": release_date,
         "actual_mbbl": round(actual, 0),
         "consensus_mbbl": round(consensus, 0),
         "surprise_mbbl": round(actual - consensus, 0),
         "actual_source": actual_source,
+        "consensus_source": consensus_source,
     }
 
 

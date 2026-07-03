@@ -135,7 +135,15 @@ def main():
         bufsize=1,
         encoding="utf-8",
         errors="replace",
-        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+        env={
+            **os.environ,
+            "PYTHONIOENCODING": "utf-8",
+            # Settle-tail ON for the desk dashboard process only (rows flagged
+            # "ohlcv_tail (ESTIMATE)"). Deliberately NOT in .env: training /
+            # walk-forward CLI runs load .env transitively and must stay on the
+            # frozen lake. Override with PULSE_SETTLE_TAIL=0 to launch without.
+            "PULSE_SETTLE_TAIL": os.environ.get("PULSE_SETTLE_TAIL", "1"),
+        },
     )
 
     print(DIM("  [3/4] Waiting for API health check..."))

@@ -120,6 +120,13 @@ type Recommendation = {
   gated_summary?: GatedSummary | null;
   recommendation_source?: 'regime' | 'baseline' | null;
   as_of?: string;
+  // Settle-tail provenance (PULSE_SETTLE_TAIL=1): "lake" when the feature tape
+  // ends on a real lake settle, else "ohlcv_tail (ESTIMATE)" — the tape was
+  // extended past the frozen lake by the desk hourly OHLCV feed.
+  as_of_source?: string;
+  settle_tail?: Record<string, {
+    source?: string; lake_end?: string; tail_end?: string; n_tail_rows?: number;
+  }> | null;
   n_eligible?: number;
   n_universe?: number;
   excluded_spreads?: string[];
@@ -426,6 +433,23 @@ export function RegimePickCard() {
               <Chip tone="neut">{`EXIT TP ${Math.round(rec.tuned_rule.tp_frac * 100)}%·fair · ${rec.tuned_rule.sl_mult}σ · ${rec.tuned_rule.max_hold_days}d`}</Chip>
             </span>
           )}
+          {/* Settle-tail provenance (PULSE_SETTLE_TAIL=1) — the feature tape's
+              last row is an hourly-OHLCV tail row, not a lake settle. Honest
+              ESTIMATE flag: daily settle = last hourly bar (session-end proxy). */}
+          {rec.as_of_source && rec.as_of_source !== 'lake' && (() => {
+            const bt = rec.settle_tail?.brent;
+            const tip =
+              `Settle tape extended past the frozen lake${bt?.lake_end ? ` (last real settle ${bt.lake_end})` : ''}` +
+              `${bt?.tail_end ? ` to ${bt.tail_end}` : ''} by the desk hourly OHLCV feed — the as-of row is a ` +
+              `session-end ESTIMATE (last hourly bar per UTC day), not an exchange settle. Lake rows are never ` +
+              `overwritten and models stay trained on the lake; the tail only freshens live features/z-scores. ` +
+              `Source: ${rec.as_of_source} (PULSE_SETTLE_TAIL=1).`;
+            return (
+              <span title={tip}>
+                <Chip tone="neut">TAIL · ESTIMATE</Chip>
+              </span>
+            );
+          })()}
           <Chip tone={chipTone as any}>{regimeLabel}</Chip>
           {gated && summary && (
             <span className="text-[10px] font-mono text-text-tertiary tabular" title={summary.method}>

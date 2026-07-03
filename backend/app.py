@@ -1634,13 +1634,17 @@ def regime_inventory_reaction_route():
         series = (request.args.get("series") or "crude_ex_spr").lower()
         if series not in ("crude_ex_spr", "gasoline", "distillate"):
             series = "crude_ex_spr"
-        # Re-anchor the live grade on the ACTUAL EIA number pulled LIVE from the EIA
-        # v2 API (authoritative) + the real consensus, when the caller supplies
-        # nothing — not the static scrape or the API/industry proxy. refresh=True
-        # triggers a throttled live pull so we grade against the real printed number
-        # the moment it's out. e.g. 24-Jun crude actual -6.088M vs consensus -3.900M.
+        # Re-anchor the live grade on the ACTUAL EIA number the EIA v2 API prints
+        # (authoritative) + the real consensus, when the caller supplies nothing —
+        # not the static scrape or the API/industry proxy. e.g. 24-Jun crude actual
+        # -6.088M vs consensus -3.900M. The cached report is kept current by the
+        # `_eia_report_refresh` scheduler job (force pull ~2 min after boot, then
+        # every TTL_EIA_REPORT, throttled to 6h) — so we do NOT do a blocking live
+        # pull on the request path (that first-hit network call cost ~25s of latency
+        # and tripped the panel's timeout). Pass ?refresh=1 to force an on-demand
+        # throttled pull (e.g. to grade a just-released number before the next tick).
         do_refresh = request.args.get("refresh") in ("1", "true", "yes")
-        lr = eia_report.latest_release(series, refresh=(do_refresh or (actual is None and consensus is None)))
+        lr = eia_report.latest_release(series, refresh=do_refresh)
         anchored_on = "supplied" if (actual is not None or consensus is not None) else None
         if actual is None and consensus is None and lr:
             actual, consensus = lr["actual_mbbl"], lr["consensus_mbbl"]
@@ -2517,9 +2521,18 @@ def ask_stats_route():
 
 @app.route("/api/all")
 def all_data():
-    """Assemble all data from individual caches in one response."""
+    """Assemble all data from individual caches in one response.
+
+    Sends an ETag computed over the payload (excluding the per-request
+    timestamp) so the dashboard's 60s poll costs a 304 with no body whenever
+    nothing actually changed between polls. `Cache-Control: no-cache` makes
+    browsers revalidate (send If-None-Match) instead of trusting a stale copy.
+    """
+    import hashlib
+    import json as _json
+
     fv = _fetch_fair_value()
-    return jsonify({
+    payload = {
         "prices":       {"data": _fetch_prices(),       "stale": False},
         "curve":        {"data": _fetch_curve()},
         "fair_value":   {"brent": fv.get("brent", {}),
@@ -2549,8 +2562,39 @@ def all_data():
         "gdelt_tone":     {"data": _fetch_gdelt_tone()},
         "marketaux":      {"data": _fetch_marketaux()},
         "analogs":        {"data": _fetch_analogs()},
-        "timestamp":      _now(),
-    })
+    }
+
+    # Hash with per-section "timestamp" keys stripped — several fetchers stamp
+    # now() on every call (notably failing/stale ones), which would defeat the
+    # ETag even though the actual data is unchanged.
+    def _strip_ts(o):
+        if isinstance(o, dict):
+            return {k: _strip_ts(v) for k, v in o.items() if k != "timestamp"}
+        if isinstance(o, list):
+            return [_strip_ts(v) for v in o]
+        return o
+
+    try:
+        digest = hashlib.md5(
+            _json.dumps(_strip_ts(payload), sort_keys=True, default=str).encode("utf-8")
+        ).hexdigest()
+    except Exception:
+        digest = None
+
+    if digest is not None:
+        inm = request.headers.get("If-None-Match", "")
+        if digest in inm:
+            resp = app.make_response(("", 304))
+            resp.set_etag(digest)
+            resp.headers["Cache-Control"] = "no-cache"
+            return resp
+
+    payload["timestamp"] = _now()
+    resp = jsonify(payload)
+    if digest is not None:
+        resp.set_etag(digest)
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
 
 
 # ─────────────────────────────────────────────────────────────────────────────

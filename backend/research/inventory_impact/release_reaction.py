@@ -41,8 +41,12 @@ HORIZONS = (5, 15, 30, 60)
 
 
 def _feed_dir() -> str:
-    return os.getenv("PULSE_INVENTORY_1MIN_DIR",
-                     r"I:\Public\Summer Interns Energy\DB\extra")
+    # PULSE_INVENTORY_1MIN_DIR override → office share (if it holds 1-min dbs) →
+    # the committed frozen snapshot, so the reaction panel always has a feed.
+    from research.frozen_feed import resolve_dir
+    return str(resolve_dir("PULSE_INVENTORY_1MIN_DIR",
+                           r"I:\Public\Summer Interns Energy\DB\extra",
+                           "DB/extra", require=("bars_1min_*.db",)))
 
 
 def _latest_db(feed_dir: str) -> str | None:

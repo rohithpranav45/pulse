@@ -1,8 +1,11 @@
 # PULSE — Roadmap & Backlog
 
 **The *future* of the project.** Companion to `CLAUDE.md` (the *present* — current state)
-and `docs/PHASE_HISTORY.md` (the *past* — how we got here). Last updated 2026-06-22
-(Phase 8 per-spread gate shipped + deployed live; the Phase 2.8.x model backlog is closed).
+and `docs/PHASE_HISTORY.md` (the *past* — how we got here). Last updated 2026-07-03
+(settle-tail turned ON operationally: `start.py` defaults `PULSE_SETTLE_TAIL=1` for the desk dashboard
+process only — deliberately NOT in `.env`, so training/walk-forward CLI runs stay on the frozen lake;
+full live session validated on the extended tape + ESTIMATE provenance chip on the REGIME pick card;
+prior 2026-07-02 — settle-tail shipped; 2026-06-22 — Phase 8 per-spread gate deployed live).
 
 This file exists so nothing slips through the cracks again. It captures **every** task
 we planned, deferred, or owe someone — with a timeline and a copy-paste prompt per task.
@@ -48,6 +51,43 @@ Startup-folder launcher) never landed a free ARM instance after 400+ tries; HF s
 loop can be stopped (remove the Startup-folder `.vbs`) — keep only if you still want a persistent VM
 later. The Docker/Caddy artifacts (`Dockerfile`, `docker-compose.yml`, `deploy/README.md`) remain
 valid for any VPS/Oracle host.
+
+---
+
+## ✅ SHIPPED — Ultimate dashboard glow-up: full visual + structural redesign (2026-07-03)
+
+Frontend-only, 3 committed waves (detail: `CLAUDE.md` §1). Wave 1: aurora + film-grain atmosphere,
+46px workspace strip (replaces the double-header), Trading/Engine/Intel sidebar rails with a sliding
+`layoutId` active pill, DESK mission-control hero (full-width directive band + 76px z + ranked card
+rail). Wave 2: every tab framed by the upgraded shared PageHeader; REGIME as a numbered decision chain
+(risk gates → signal → book → evidence); Inventory hero w/ segmented series toggle. Wave 3: panel hover
+lift, empty-state voice, help-overlay restyle. Honesty surfaces + palette/hotkeys/ETag/code-split all
+preserved; boot chunk 524 kB; 294 tests green. **Follow-ups (cut-line, none blocking):**
+(1) richer data-density tooltips (hover cards on ranked-book cards / KPI tiles);
+(2) a compact ticker-tape sparkline on hover;
+(3) HF Space redeploy still frozen pending the mentor strategy verdict (unchanged).
+
+---
+
+## ✅ SHIPPED — Settle-tail: daily settle tape extended past the frozen lake (2026-07-02)
+
+The /Data daily settles froze 2026-05-26; `backend/research/settle_tail.py` (opt-in
+`PULSE_SETTLE_TAIL=1`, default OFF = lake bit-for-bit) extends the tape the regime engine reads with the
+desk hourly OHLCV feed's post-lake tail (LCO=Brent, CL=WTI; extend-only, weekend-safe, rows flagged
+`ohlcv_tail (ESTIMATE)`, never persisted). Feature matrix advances 05-26 → feed latest; provenance on
+`as_of_source` / `live_feed.feature_overlay` / `/api/regime/live`. Overlap-validated (Brent m1_m2 proxy
+error ≈ 0.36× daily vol; WTI ≈ 0.84× vs the synth lake — flagged). Training still ends at the lake — keep
+the flag OFF for training/walk-forward. Detail: `CLAUDE.md` §1. **Follow-ups:** (1) ✅ **DONE 2026-07-03**
+— `start.py` now defaults `PULSE_SETTLE_TAIL=1` into the desk app process's env (overridable with
+`PULSE_SETTLE_TAIL=0`); deliberately NOT in `.env` because `features.py → external_history` calls
+`load_dotenv()`, which would silently flip training/walk-forward CLI runs onto the tail. Full live
+session validated on the extended tape (signal log extends on today's bars, auto-desk sane, live-feed
+stress read engaged, ESTIMATE chip on the REGIME pick card); (2) the real WTI daily-settlement file
+(T1.3 ask) would arbitrate the two WTI estimates; (3) a session-close (21:00/22:00 UTC) cut instead of
+the midnight-UTC grouping would tighten the proxy — shared with the geo `products_feed`, do it there if
+ever needed; (4) the desk OHLCV export itself lags (files written Mon 06-29 but last bar Fri 06-26) —
+ask for a refreshed/scheduled export so the tail tracks the market week; until then the DESK stale-feed
+banner correctly reports the tape's true age.
 
 ---
 

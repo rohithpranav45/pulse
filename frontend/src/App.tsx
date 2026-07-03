@@ -1,23 +1,43 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
+import {
+  RefreshCw, Printer, Maximize2, Keyboard, Sun, Moon, MessageSquareText, Compass,
+} from 'lucide-react';
 import { TopBar } from '@/components/shell/TopBar';
 import { Sidebar, NAV_ITEMS, ViewKey } from '@/components/shell/Sidebar';
 import { StatusBar } from '@/components/shell/StatusBar';
+import { CommandPalette, PaletteAction } from '@/components/shell/CommandPalette';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
-import { usePolling, useLocalStorage } from '@/lib/hooks';
+import { usePolling, useLocalStorage, useTheme } from '@/lib/hooks';
 import { api } from '@/lib/api';
 import { DeskView } from '@/views/DeskView';
-import { ChartsView } from '@/views/ChartsView';
-import { MarketsView } from '@/views/MarketsView';
-import { PaperView } from '@/views/PaperView';
-import { RegimeView } from '@/views/RegimeView';
-import { InventoryView } from '@/views/InventoryView';
-import { SignalLogView } from '@/views/SignalLogView';
-import { NewsView } from '@/views/NewsView';
 import { ChatDock } from '@/components/chat/ChatDock';
-import { OnboardingTour } from '@/components/onboarding/OnboardingTour';
+import { OnboardingTour, resetOnboarding } from '@/components/onboarding/OnboardingTour';
 import { DailySheet } from '@/components/panels/DailySheet';
 import { ToastStack } from '@/components/alerts/ToastStack';
+
+// DESK stays eagerly bundled (first paint); every other view is code-split so
+// the heavy chart/table dependencies load on demand instead of on boot.
+const ChartsView    = lazy(() => import('@/views/ChartsView').then(m => ({ default: m.ChartsView })));
+const MarketsView   = lazy(() => import('@/views/MarketsView').then(m => ({ default: m.MarketsView })));
+const PaperView     = lazy(() => import('@/views/PaperView').then(m => ({ default: m.PaperView })));
+const RegimeView    = lazy(() => import('@/views/RegimeView').then(m => ({ default: m.RegimeView })));
+const InventoryView = lazy(() => import('@/views/InventoryView').then(m => ({ default: m.InventoryView })));
+const SignalLogView = lazy(() => import('@/views/SignalLogView').then(m => ({ default: m.SignalLogView })));
+const NewsView      = lazy(() => import('@/views/NewsView').then(m => ({ default: m.NewsView })));
+
+/** Skeleton shown for the ~100ms a lazy view chunk takes to arrive. */
+function ViewLoading() {
+  return (
+    <div className="space-y-4">
+      {[160, 280, 200].map((h, i) => (
+        <div key={i} className="panel overflow-hidden" style={{ height: h }}>
+          <div className="skeleton w-full h-full opacity-60" />
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export default function App() {
   const [view, setView] = useLocalStorage<ViewKey>('pulse.view', 'desk');
@@ -52,10 +72,13 @@ export default function App() {
   }, []);
 
   const [helpOpen, setHelpOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [theme, toggleTheme] = useTheme();
 
   // Keyboard shortcuts. Bare 1..8/R/F/P only fire outside form inputs; the
-  // modifier variant (Cmd/Ctrl+1..8) fires anywhere, so tab nav still works
-  // while typing in the ChatDock or a paper-trade entry field.
+  // modifier variants (Cmd/Ctrl+1..8, Cmd/Ctrl+K) fire anywhere, so tab nav
+  // and the palette still work while typing in the ChatDock or a paper-trade
+  // entry field.
   useEffect(() => {
     const map: Record<string, ViewKey> = {
       '1':'desk','2':'charts','3':'markets',
@@ -67,12 +90,22 @@ export default function App() {
       const k = e.key;
       const mod = e.metaKey || e.ctrlKey;
 
-      // Cmd/Ctrl+1..7 — global, works in inputs too.
+      // Cmd/Ctrl+K — command palette, global, works in inputs too.
+      if (mod && (k === 'k' || k === 'K')) {
+        e.preventDefault();
+        setPaletteOpen(v => !v);
+        return;
+      }
+
+      // Cmd/Ctrl+1..8 — global, works in inputs too.
       if (mod && map[k]) {
         e.preventDefault();
         setView(map[k]);
         return;
       }
+
+      // While the palette is open it owns the keyboard.
+      if (paletteOpen) return;
 
       // ? toggles the help overlay (Shift+/ produces '?'); Esc closes it.
       if (!inInput && k === '?') { e.preventDefault(); setHelpOpen(v => !v); return; }
@@ -86,7 +119,51 @@ export default function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [setView, refetch, helpOpen]);
+  }, [setView, refetch, helpOpen, paletteOpen]);
+
+  // Command palette actions — navigation (with live icons from NAV_ITEMS) +
+  // every global action that today only lives on a hotkey or a TopBar icon.
+  const paletteActions = useMemo<PaletteAction[]>(() => [
+    ...NAV_ITEMS.map(n => ({
+      id: `nav-${n.key}`,
+      label: n.label,
+      group: 'Navigate',
+      sub: n.sub,
+      hint: n.hint,
+      icon: n.icon,
+      run: () => setView(n.key),
+    })),
+    {
+      id: 'act-refresh', label: 'Refresh all data', group: 'Actions', hint: 'R', icon: RefreshCw,
+      run: () => { setRefreshing(true); refetch().finally(() => setTimeout(() => setRefreshing(false), 600)); },
+    },
+    {
+      id: 'act-theme',
+      label: theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme',
+      group: 'Actions', icon: theme === 'dark' ? Sun : Moon,
+      run: toggleTheme,
+    },
+    {
+      id: 'act-chat', label: 'Ask PULSE (RAG chat)', group: 'Actions', hint: '/', icon: MessageSquareText,
+      run: () => window.dispatchEvent(new CustomEvent('pulse-open-chat')),
+    },
+    {
+      id: 'act-print', label: 'Print daily briefing sheet', group: 'Actions', hint: 'P', icon: Printer,
+      run: () => window.print(),
+    },
+    {
+      id: 'act-fullscreen', label: 'Toggle fullscreen', group: 'Actions', hint: 'F', icon: Maximize2,
+      run: () => document.documentElement.requestFullscreen?.(),
+    },
+    {
+      id: 'act-help', label: 'Keyboard shortcuts', group: 'Actions', hint: '?', icon: Keyboard,
+      run: () => setHelpOpen(true),
+    },
+    {
+      id: 'act-tour', label: 'Restart onboarding tour', group: 'Actions', icon: Compass,
+      run: () => resetOnboarding(),
+    },
+  ], [theme, toggleTheme, refetch, setView]);
 
   const liveTicker = prices ?? all?.prices ?? null;
   const merged = { ...(all ?? {}), prices: liveTicker ?? all?.prices ?? {} };
@@ -96,6 +173,13 @@ export default function App() {
 
   return (
     <div className="h-screen w-screen flex flex-col bg-bg overflow-hidden">
+      {/* Ambient atmosphere — slow aurora drift + film grain, behind everything */}
+      <div aria-hidden className="aurora-layer">
+        <div className="aurora-blob aurora-a" />
+        <div className="aurora-blob aurora-b" />
+        <div className="aurora-blob aurora-c" />
+      </div>
+      <div aria-hidden className="grain-layer" />
       <TopBar
         ticker={liveTicker}
         refreshing={refreshing}
@@ -103,12 +187,13 @@ export default function App() {
       />
       <div className="flex flex-1 min-h-0">
         <Sidebar active={view} onSelect={setView} />
-        <main className="flex-1 overflow-y-auto overflow-x-hidden bg-grid-faint" style={{ backgroundSize: '32px 32px' }}>
-          {/* View header — chunky display heading w/ tab numeral, breadcrumb, hairline gold rule */}
+        <main className="flex-1 overflow-y-auto overflow-x-hidden bg-grid-faint relative z-10" style={{ backgroundSize: '32px 32px' }}>
+          {/* Workspace strip — slim sticky context bar; the tab's own PageHeader
+              carries the descriptive hero, so this stays out of the way. */}
           <div
-            className="relative px-7 pt-6 pb-5 flex items-end justify-between sticky top-0 z-10"
+            className="relative px-6 h-[46px] flex items-center justify-between sticky top-0 z-10"
             style={{
-              background: 'linear-gradient(180deg, rgb(var(--bg-default) / 0.94) 0%, rgb(var(--bg-default) / 0.82) 100%)',
+              background: 'linear-gradient(180deg, rgb(var(--bg-default) / 0.92) 0%, rgb(var(--bg-default) / 0.78) 100%)',
               backdropFilter: 'blur(20px) saturate(140%)',
               WebkitBackdropFilter: 'blur(20px) saturate(140%)',
             }}
@@ -118,69 +203,53 @@ export default function App() {
               className="absolute bottom-0 left-0 right-0 h-px pointer-events-none"
               style={{ background: 'linear-gradient(90deg, transparent, var(--border-accent) 12%, rgba(218,182,65,0.55) 50%, var(--border-accent) 88%, transparent)' }}
             />
-            <div className="flex items-end gap-5">
-              {/* Big numeric tab indicator */}
-              <motion.div
+            <div className="flex items-center gap-3 min-w-0">
+              <motion.span
                 key={`num-${view}`}
-                initial={{ opacity: 0, scale: 0.85 }}
+                initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-                className="relative flex items-center justify-center w-14 h-14 rounded-xl flex-shrink-0"
+                transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
+                className="flex items-center justify-center w-6 h-6 rounded-md flex-shrink-0 font-display font-black text-[13px] tabular text-gold-bright"
                 style={{
-                  background: 'linear-gradient(135deg, rgba(218,182,65,0.18) 0%, rgba(218,182,65,0.04) 100%)',
+                  background: 'linear-gradient(135deg, rgba(218,182,65,0.20) 0%, rgba(218,182,65,0.05) 100%)',
                   border: '1px solid var(--border-accent)',
-                  boxShadow: '0 8px 24px -10px var(--gold-glow), inset 0 1px 0 rgba(255,255,255,0.05)',
+                  boxShadow: '0 4px 12px -6px var(--gold-glow)',
                 }}
               >
-                <span
-                  className="font-display font-black text-[32px] leading-none tabular"
-                  style={{
-                    background: 'linear-gradient(180deg, rgb(var(--gold-bright)), rgb(var(--gold)))',
-                    WebkitBackgroundClip: 'text',
-                    backgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    filter: 'drop-shadow(0 0 8px var(--gold-glow))',
-                  }}
-                >
-                  {activeHint}
+                {activeHint}
+              </motion.span>
+              <motion.h1
+                key={activeLabel}
+                initial={{ opacity: 0, x: -4 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+                className="font-display font-bold text-[15px] leading-none tracking-[0.26em] uppercase text-text-primary truncate"
+              >
+                {activeLabel}
+              </motion.h1>
+              <span aria-hidden className="hidden sm:block w-px h-4 bg-border" />
+              <div className="hidden sm:flex items-center gap-2.5 text-[9px] font-mono text-text-muted uppercase tracking-[0.20em]">
+                <span className="flex items-center gap-1.5">
+                  <span className="live-dot" />
+                  {loading && !all ? 'initializing…' : `${Object.keys(all ?? {}).length} streams`}
                 </span>
-                {/* corner ticks */}
-                <span aria-hidden className="absolute top-1 left-1 w-1.5 h-1.5" style={{ borderTop: '1px solid var(--border-accent)', borderLeft: '1px solid var(--border-accent)' }} />
-                <span aria-hidden className="absolute bottom-1 right-1 w-1.5 h-1.5" style={{ borderBottom: '1px solid var(--border-accent)', borderRight: '1px solid var(--border-accent)' }} />
-              </motion.div>
-
-              <div className="flex flex-col gap-1.5">
-                {/* breadcrumb chip */}
-                <div className="flex items-center gap-2 text-[9.5px] font-mono uppercase tracking-[0.28em] text-text-muted">
-                  <span>PULSE</span>
-                  <span className="text-text-muted/50">/</span>
-                  <span className="text-text-tertiary">Workspace</span>
-                  <span className="text-text-muted/50">/</span>
-                  <span className="text-gold/80">{activeLabel}</span>
-                </div>
-                <motion.h1
-                  key={activeLabel}
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
-                  className="font-display font-black text-[30px] leading-none tracking-[0.22em] uppercase text-text-primary"
-                  style={{ textShadow: '0 0 24px rgba(218,182,65,0.10)' }}
-                >
-                  {activeLabel}
-                </motion.h1>
-                <div className="flex items-center gap-3 text-[10px] font-mono text-text-muted uppercase tracking-[0.22em]">
-                  <span className="flex items-center gap-1.5">
-                    <span className="live-dot" />
-                    {loading && !all ? 'initializing data layer…' : `${Object.keys(all ?? {}).length} streams active`}
-                  </span>
-                  <span className="text-text-muted/40">·</span>
-                  <span>{lastUpdated ? `t-sync ${new Date(lastUpdated).toLocaleTimeString('en-US', { hour12: false })}` : 'awaiting sync'}</span>
-                </div>
+                <span className="text-text-muted/40">·</span>
+                <span className="tabular">{lastUpdated ? `sync ${new Date(lastUpdated).toLocaleTimeString('en-US', { hour12: false })}` : 'awaiting sync'}</span>
               </div>
             </div>
-            <div className="flex items-center gap-2 text-[9.5px] font-mono text-text-tertiary tabular tracking-[0.24em] uppercase pb-1.5">
-              <kbd className="px-1.5 py-0.5 rounded border border-border/40 bg-bg-card/40 text-text-secondary text-[9px]">?</kbd>
-              <span>shortcuts</span>
+            <div className="flex items-center gap-2.5 text-[9px] font-mono text-text-tertiary tabular tracking-[0.22em] uppercase">
+              <button
+                onClick={() => setPaletteOpen(true)}
+                className="flex items-center gap-1.5 px-2 py-1 rounded-md border border-border/40 bg-bg-card/40 hover:border-gold/40 hover:text-text-primary transition-colors group"
+                title="Open command palette (Ctrl/Cmd+K)"
+              >
+                <kbd className="text-[9px] text-text-secondary group-hover:text-gold-bright transition-colors">⌘K</kbd>
+                <span className="hidden md:inline">command</span>
+              </button>
+              <div className="hidden md:flex items-center gap-1.5">
+                <kbd className="px-1.5 py-0.5 rounded border border-border/40 bg-bg-card/40 text-text-secondary text-[9px]">?</kbd>
+                <span>shortcuts</span>
+              </div>
             </div>
           </div>
 
@@ -200,14 +269,16 @@ export default function App() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
               >
-                {view === 'desk'          && <DeskView all={merged} tradeIdea={tradeIdea} onNavigate={setView} />}
-                {view === 'charts'        && <ChartsView all={merged} history={history} ohlcv={ohlcv} />}
-                {view === 'markets'       && <MarketsView all={merged} />}
-                {view === 'paper'         && <PaperView tradeIdea={tradeIdea} />}
-                {view === 'regime'        && <RegimeView />}
-                {view === 'inventory'     && <InventoryView all={merged} />}
-                {view === 'signals'       && <SignalLogView />}
-                {view === 'news'          && <NewsView />}
+                <Suspense fallback={<ViewLoading />}>
+                  {view === 'desk'          && <DeskView all={merged} history={history} tradeIdea={tradeIdea} onNavigate={setView} />}
+                  {view === 'charts'        && <ChartsView all={merged} history={history} ohlcv={ohlcv} />}
+                  {view === 'markets'       && <MarketsView all={merged} />}
+                  {view === 'paper'         && <PaperView tradeIdea={tradeIdea} />}
+                  {view === 'regime'        && <RegimeView />}
+                  {view === 'inventory'     && <InventoryView all={merged} />}
+                  {view === 'signals'       && <SignalLogView />}
+                  {view === 'news'          && <NewsView />}
+                </Suspense>
               </motion.div>
             </ErrorBoundary>
           </div>
@@ -232,6 +303,9 @@ export default function App() {
         news={merged?.news}
       />
 
+      {/* Command palette — Cmd/Ctrl+K anywhere */}
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} actions={paletteActions} />
+
       <HelpOverlay open={helpOpen} onClose={() => setHelpOpen(false)} />
     </div>
   );
@@ -242,6 +316,7 @@ function HelpOverlay({ open, onClose }: { open: boolean; onClose: () => void }) 
   const isMac = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform);
   const mod = isMac ? '⌘' : 'Ctrl';
   const rows: { keys: string; desc: string }[] = [
+    { keys: `${mod}+K`,      desc: 'Command palette — jump anywhere, run anything' },
     { keys: '1 – 8',         desc: 'Switch tab (outside text inputs)' },
     { keys: `${mod}+1 – 8`,  desc: 'Switch tab (works inside inputs too)' },
     { keys: '/',             desc: 'Open Ask PULSE chat' },
@@ -255,12 +330,20 @@ function HelpOverlay({ open, onClose }: { open: boolean; onClose: () => void }) 
     <div className="fixed inset-0 z-[300] flex items-center justify-center" onClick={onClose}>
       <div className="absolute inset-0 bg-bg/80 backdrop-blur-sm" />
       <div
-        className="relative bg-bg-surface border border-border rounded-lg shadow-2xl p-6 w-[420px] max-w-[calc(100vw-32px)]"
+        className="relative bg-bg-surface border border-border rounded-xl shadow-2xl p-6 w-[420px] max-w-[calc(100vw-32px)] overflow-hidden"
         onClick={e => e.stopPropagation()}
         role="dialog"
         aria-label="Keyboard shortcuts"
       >
-        <div className="text-[10px] font-mono uppercase tracking-widest text-text-tertiary mb-1">Help</div>
+        <div
+          aria-hidden
+          className="absolute inset-x-0 top-0 h-px pointer-events-none"
+          style={{ background: 'linear-gradient(90deg, transparent 4%, rgba(218,182,65,0.75) 50%, transparent 96%)' }}
+        />
+        <div className="flex items-center gap-2 text-[9px] font-mono uppercase tracking-[0.32em] text-gold/80 mb-1">
+          <span aria-hidden className="inline-block w-4 h-px bg-gold/60" />
+          Help
+        </div>
         <h3 className="font-display font-bold tracking-wider text-lg uppercase text-text-primary mb-4">
           Keyboard shortcuts
         </h3>

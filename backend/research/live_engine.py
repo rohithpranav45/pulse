@@ -93,9 +93,16 @@ def get_live_recommendation(*, include_wti: bool = False) -> dict:
         rec["top"] = rec["ranked"][0] if rec["ranked"] else None
         rec["n_eligible"] = len(rec["ranked"])
 
+    # Honest provenance: is this snapshot the live desk recorder, or the committed
+    # frozen feed the deployment falls back to when it can't see the I:\ share?
+    from research.frozen_feed import is_frozen, FROZEN_AS_OF
+    _frozen = is_frozen(snap_co.get("source_file") or "")
+
     rec["live_feed"] = {
         "as_of":        snap_co.get("as_of"),
         "source_file":  snap_co.get("source_file"),
+        "frozen":       _frozen,
+        "frozen_as_of": FROZEN_AS_OF if _frozen else None,
         "curve_m1_m12": live_curve,
         "spreads":      live_actuals,
         "products":     ["CO"] + (["CL"] if (include_wti and snap_cl and snap_cl.get("available")) else []),
@@ -106,6 +113,12 @@ def get_live_recommendation(*, include_wti: bool = False) -> dict:
             "overlaid":      sorted(rec.get("overlaid_features", [])),
             "n_overlaid":    len(rec.get("overlaid_features", [])),
             "carried_stale": CARRIED_STALE_COLS,
+            # Opt-in OHLCV settle tail (PULSE_SETTLE_TAIL=1): how far the daily
+            # tape itself was extended past the frozen lake — tail rows are
+            # session-end ESTIMATEs, and slow features are carried from the
+            # tape's last row (far fewer stale days when the tail is on).
+            "as_of_source":  rec.get("as_of_source", "lake"),
+            "settle_tail":   rec.get("settle_tail"),
         },
     }
     rec["live"] = True

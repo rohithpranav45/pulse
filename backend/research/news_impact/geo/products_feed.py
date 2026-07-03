@@ -55,7 +55,10 @@ _DEFAULT_DIR = r"I:\Public\Summer Interns Energy\OHLCV"
 
 
 def ohlcv_dir() -> Path:
-    return Path(os.getenv("PULSE_OHLCV_DIR", _DEFAULT_DIR))
+    # PULSE_OHLCV_DIR override → office share (if it holds product subdirs) → the
+    # committed frozen snapshot (CL/HO/LGO/LCO tails; RBOB history is desk-only).
+    from research.frozen_feed import resolve_dir
+    return resolve_dir("PULSE_OHLCV_DIR", _DEFAULT_DIR, "OHLCV", require=("CL",))
 
 
 OHLCV_DIR = ohlcv_dir()

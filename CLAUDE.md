@@ -7,7 +7,51 @@ spread engine), and serves a React dashboard with a paper-trading book.
 - **Stack:** Flask 3 · React 18 + Vite + Tailwind · SQLite (cache + paper book) ·
   DuckDB/Parquet over a 3.5 GB `/Data` desk feed · sklearn + XGBoost/LightGBM/CatBoost
 - **Run (local):** `python start.py` from the repo root → http://127.0.0.1:5000
-- **Last updated:** 2026-07-01 (**PAPER + SIGNAL LOG — restructure + bug-fixes** [branch
+- **Last updated:** 2026-07-03 (**Ultimate dashboard glow-up — full visual + structural redesign, 3
+  committed waves** [branch `phase4-live-feature-overlay`, see §1 entry]. Wave 1: ambient **aurora
+  atmosphere** (3 slow-drifting blurred colour fields + film-grain overlay; reduced-motion-safe; light-theme
+  variants); the fat ~120px sticky view header replaced by a **46px workspace strip** (views own their hero);
+  sidebar regrouped into **Trading / Engine / Intel rails** with a framer-motion `layoutId` pill that slides
+  between items; **DESK rebuilt as mission control** — the regime pick promoted out of the 2/3 column to a
+  full-width band (40px display-type LONG/SHORT directive, 76px glowing z-score, edge-to-fair, ranked book
+  as a conf-bar card rail). Wave 2: **every tab framed** by the shared upgraded PageHeader; **REGIME rebuilt
+  as a numbered decision chain** (00 risk gates → 01 signal → 02 book → 03 evidence, paired 2-col grids —
+  was a flat 6-panel stack); Inventory hero w/ segmented series toggle; Charts/Markets/SignalLog framed.
+  Wave 3: panel hover lift, empty states with personality, help-overlay restyle. All honesty surfaces
+  intact (TAIL·ESTIMATE chip, stale banner, fetch/source chips, gate badges); palette/hotkeys 1-8/ETag/
+  code-split preserved, boot chunk **524 kB**; `tsc` + build clean, **294 tests green**.) Prior:
+  (**Settle-tail ON operationally — `start.py` now defaults
+  `PULSE_SETTLE_TAIL=1` into the desk app process's env; deliberately NOT in `.env` (training/walk-forward
+  CLI runs load `.env` transitively via `features.py → external_history` and must stay on the frozen
+  lake — verified: CLI `tail_enabled()=False`, tape ends 05-26)** [branch `phase4-live-feature-overlay`,
+  see §1 entry]. Full live session validated on the extended tape: rec `as_of` **06-26** ·
+  `as_of_source="ohlcv_tail (ESTIMATE)"`; signal log EXTENDS on today's live bars (open wti_m1_m2 session
+  `last_seen 2026-07-03`, 25 bars); auto-desk dry-run sane (market open, breaker off, hold wti_m1_m2);
+  **live-feed stress read ENGAGED** (`source=live_feed`, CALM, P(stress) 0.22 — the §5 latched-breaker
+  caveat is resolved). New **`TAIL · ESTIMATE` provenance chip** on the REGIME pick card + tail-aware
+  stale-banner copy. Honest limit: the OHLCV export itself is stale (last bar Fri 06-26, files written
+  Mon 06-29) → the DESK >4d banner still shows at 7d lag, correctly. Same day: **A/B panel removed from
+  the REGIME tab** (user call — `ABComparePanel.tsx` deleted; backend A/B harness + `/api/regime/ab`
+  intact). 294 tests green.) Prior:
+  **Settle-tail — the regime engine's daily settle tape extends past the
+  frozen lake (2026-05-26 → feed latest) via the desk hourly OHLCV feed, OPT-IN `PULSE_SETTLE_TAIL=1`**
+  [branch `phase4-live-feature-overlay`, see §1 entry]. New `backend/research/settle_tail.py` (extend-only,
+  weekend-safe, lake rows never overwritten) wired into `data_lake.get_brent_settlements`/`get_wti_settlements`;
+  flag off (default) = bit-for-bit the lake. Verified live: feature-matrix last row **05-26 → 06-26**, live
+  z-scores in-distribution (max |z| 1.02 vs caps 6.3-10); tail rows flagged **`ohlcv_tail (ESTIMATE)`** on
+  `as_of_source` + `live_feed.feature_overlay` + `/api/regime/live`. Overlap validation (lake∩feed): Brent
+  m1_m2 mean|Δ| ≈ 0.36× its daily vol (usable), WTI ≈ 0.84× vs the synth lake (noisier — flagged). Training
+  untouched: pkls still end at the lake; run training/walk-forward with the flag off. +10 hermetic tests →
+  **294 pass**.) Prior: **UI glow-up — command palette + desk grid + code-split + live polish**
+  [branch `phase4-live-feature-overlay`, see §1 entry]. **Cmd/Ctrl+K command palette** (fuzzy nav across the
+  8 tabs + every global action); **DESK rebuilt** as a 2/3+1/3 grid with KPI sparklines, number-roll values,
+  and an honest **stale-feed banner** when the engine's `as_of` lags >4 days; **views code-split** via
+  React.lazy (boot JS **1,325 → 522 kB**, chart libs load on demand); **collapsible + responsive sidebar**
+  (manual toggle persisted; auto icon-rail below `lg`); ticker tape flashes on real ticks; `usePolling`
+  pauses in hidden tabs + catches up on focus; **`/api/all` sends an ETag** (timestamp-stripped hash) →
+  the 60s poll costs a **304** when nothing changed; `tsc` fully clean (baseUrl deprecation fixed); stale
+  "Seven workspaces" tour copy + undefined `.panel--feature` CSS fixed.) Prior: **PAPER + SIGNAL LOG —
+  restructure + bug-fixes** [branch
   `phase4-live-feature-overlay`, see §1 entry]. Fixed the **paper win-rate bug** (`wins/total_trades` counted
   break-even *scratches* in the denominator → 43.8%; now `wins/decisive` = **70.6%**, consistent with the 166W/69L
   breakdown; `scratches`/`decisive` + `total_pnl_pct`/`max_drawdown_pct`/`avg_holding_days` — previously computed but
@@ -725,6 +769,162 @@ regime_conditioning,release_reaction}.py`, `/api/regime/inventory[?series=][/rea
 - **Tests:** +4 (`test_assess_series_all_three` ×3, `test_release_reaction_computes_horizon_moves`). The reaction
   panel anchors today's prediction on the **API −0.765M as a proxy** for the EIA actual — re-anchor on the real
   printed EIA number for an exact grade.
+
+### ✅ Ultimate dashboard glow-up — full visual + structural redesign (2026-07-03)
+Branch `phase4-live-feature-overlay`, 3 committed waves (`38066ec` · `84b9697` · `459062d`) after a
+checkpoint commit (`d1d2ccc`) that landed the prior session's uncommitted settle-tail-ON work. Frontend-only —
+zero backend change; **294 pytest green**, `tsc --noEmit` + `vite build` clean, boot chunk **524 kB** (within
+the ≤~550 kB budget), ETag/304 polling + code-splitting + Cmd/Ctrl+K palette + hotkeys 1-8 + theme
+persistence all preserved.
+- **Wave 1 — identity + shell + DESK (`38066ec`).** (1) **Ambient atmosphere**: an `aurora-layer` (three
+  slow-drifting, heavily blurred colour fields on 52-78s alternate loops) + a `grain-layer` (inline-SVG
+  feTurbulence film noise, `mix-blend-mode: overlay`) sit behind the whole app; both freeze under
+  `prefers-reduced-motion` and have dedicated light-theme variants; `main` gained `relative z-10` so content
+  stacks above. (2) The **~120px sticky view header** (14×14 numeral tile + 30px title + breadcrumb) was
+  replaced by a **46px workspace strip** — 6×6 numeral chip, 15px title, streams/sync inline, ⌘K + `?`
+  right — because most tabs now carry their own descriptive `PageHeader` (the old design double-headed every
+  tab). (3) **Sidebar**: NAV_ITEMS unchanged (App depends on it) but rendered as three grouped rails —
+  **Trading** (desk/charts/markets/paper) · **Engine** (regime/inventory/signals) · **Intel** (news) — with
+  tiny group labels (hidden in rail mode) and the active background lifted out of CSS into a shared
+  framer-motion **`layoutId="nav-active-pill"`** span (`.nav-pill`) that springs between items; `.nav-item.active`
+  now only colours text. (4) **DESK mission control**: `HeroPick` (renamed "Mission Control · Regime Engine",
+  still a `feature` Panel so LiveFetchChip/SourceTag/dataTimestamp survive) moved out of the 2/3 column to
+  **full width** — directive band with a 40px display-type **LONG/SHORT** + 30px spread label + regime chip,
+  a **76px** glowing z-score (64px under |z|<2), edge-to-fair block, and the ranked list rebuilt from a table
+  into a **card rail** (per-spread cards: z, current→fair, confidence bar, #1 gold-ringed). NEUTRAL day gets
+  a proper "All spreads inside band / engine holds fire" hero. Grid below unchanged (positions +
+  decomposition | brief + risk + geo).
+- **Wave 2 — every tab framed (`84b9697`).** Shared `PageHeader` upgraded (gold dash eyebrow, 30px
+  display title, gold-fading hairline rule) and now fronts **all 8 tabs**. **REGIME** rebuilt from a flat
+  6-panel stack into a numbered **decision chain**: *00 Risk gates* (ShockMonitor ‖ AutoDesk, 2-col) → *01
+  The signal* (RegimePickCard) → *02 The book* (DecorrelatedBook ‖ PerSpreadGate, 2-col) → *03 The evidence*
+  (Calibration) — each under a toned `SectionHeader`. **INVENTORY**: hero header ("The Wednesday number,
+  decoded") with the Crude/Gasoline/Distillate toggle restyled as a segmented control in the header; the
+  bare "Live inventory dashboard" divider promoted to a `SectionHeader`. **CHARTS** + **MARKETS** framed;
+  **SIGNAL LOG**'s "Diagnostics" divider promoted to a labelled section header.
+- **Wave 3 — delight (`459062d`).** `.panel:hover` lifts 1px (suppressed under reduced-motion); DESK
+  flat-book empty state gets an icon + "Flat book — nothing at risk" voice (and points at mission control /
+  auto-desk); morning-brief empty state similarly; help overlay restyled to the new language (gold dash
+  eyebrow + top accent rule).
+- **Honesty surfaces untouched by design:** TAIL·ESTIMATE chip (RegimePickCard), DESK stale-feed banner
+  (tail-aware copy intact), per-panel LiveFetchChip/⚠ ERR + SourceTag provenance, gate/baseline/⊘ SPREAD OFF
+  badges — all restyled contexts only, none removed or hidden.
+- **Verified:** `tsc` clean · build clean ×3 waves · served bundle smoke-checked on :5000 (new hash + aurora
+  CSS live, `/api/regime/recommendation` 200, `/api/all` ETag present — re-fetch 200s during market hours are
+  the documented genuine-data-movement case) · pytest 294.
+
+### ✅ Settle-tail ON operationally — desk process runs the extended tape (2026-07-03)
+Branch `phase4-live-feature-overlay`. The 07-02 sprint shipped the tail behind an opt-in flag; this session
+turns it on for the desk and validates a full live session on the estimate rows.
+- **Flag scoped to the desk launcher, not `.env`.** `start.py` now injects
+  `PULSE_SETTLE_TAIL=1` into the app subprocess env (override: launch with `PULSE_SETTLE_TAIL=0`).
+  It was first added to `.env` and then **deliberately pulled back out**: `features.build_features` imports
+  `research.external_history`, whose module-level `load_dotenv()` would put a `.env` flag into *every*
+  research CLI process — training/walk-forward would silently run on the tail. Verified both sides of the
+  invariant: server rec `as_of_source="ohlcv_tail (ESTIMATE)"`; a CLI process that loads `.env` +
+  `data_lake` reads `tail_enabled()=False`, Brent tape ends **2026-05-26**, `settle_tail_meta()={}`.
+- **Live session validated (07-03, desk):** rec `as_of` **2026-06-26**, tail meta served (Brent +23 rows
+  05-27→06-26, WTI +25, overlap stats attached). `/api/regime/live`: `live=true`, 15-min feed bar current
+  (02:15 UTC, ~15 min old), z in-distribution (max |z| ≈ 1.2 vs adaptive caps 6.3-10). **Signal log
+  advances on the estimate tape:** generate → `extended: 1` on today's bar; the open `wti_m1_m2 SELL`
+  session shows `last_seen 2026-07-03 02:15`, `bar_count 25` (session dedup extending, not duplicating).
+  **Auto-desk dry-run sane:** market_open=true, breaker_active=false, entries allowed, selected
+  `[wti_m1_m2]`, plan = hold (1 auto position, no spurious actions). **Live-feed stress read ENGAGED:**
+  `source="live_feed"`, as_of 2026-07-03, CALM, P(stress) 0.217 — the recorder has accumulated enough
+  daily closes, so the old daily-settle STRESS latch (§5 / Phase-3 caveat) is gone.
+- **Frontend provenance surfaces.** `RegimePickCard` gains a **`TAIL · ESTIMATE`** chip (amber, next to
+  the regime chip) whenever `rec.as_of_source != "lake"`, tooltip citing lake_end → tail_end + the
+  session-end-proxy caveat; `Recommendation` type gains `as_of_source`/`settle_tail`. `DeskView`'s
+  stale-feed banner is now **tail-aware**: when the as-of row is a tail row it says the OHLCV export
+  hasn't captured anything newer (the old copy claimed "live desk feed not visible from this host" —
+  false on the desk). `tsc` + `vite build` clean.
+- **Honest limits (reported, not fudged):** (1) the **stale banner does NOT clear** — the OHLCV export's
+  last bar is Fri **06-26** (files written Mon 06-29 contain nothing newer), so `as_of` genuinely lags
+  7 days and the >4d banner correctly stays up; it will clear once the desk refreshes the OHLCV export
+  (ROADMAP follow-up 4). (2) `gate: off` on ranked rows — the desk `.env` has never set
+  `PULSE_GATED_BLEND` (the HF Space sets it as a Space var); pre-existing, untouched this sprint.
+- **Tests: 294 pass** (no code-path changes beyond start.py env + frontend). Estimate rows behaved —
+  flag left ON.
+- **A/B panel removed from the REGIME tab (user call, same day).** `ABComparePanel.tsx` deleted +
+  unwired from `RegimeView` — the user judged it not working/not earning its place. Backend untouched:
+  the A/B harness, `/api/regime/ab` (+ `backtest_verdict`), and the live A/B book all keep running
+  (they're the forward validation; the pooled-vs-gated question is already answered in the walk-forward —
+  tied, baseline headline). `api.regimeAB*` helpers left in `api.ts` as the endpoint catalog. RegimeView
+  chunk 67.3 → 54.6 kB; `tsc`/build clean.
+
+### ✅ Settle-tail — daily settle tape extended past the frozen lake (2026-07-02)
+Branch `phase4-live-feature-overlay`. The standing "next" from geo Sprints 6-7: the /Data daily settle
+tape froze **2026-05-26**, so every regime-engine feature row after it simply didn't exist (the Phase-4
+live overlay fixes only TODAY's fast features; slow features + the tape date stayed carried from 05-26).
+The desk hourly OHLCV feed (`products_feed`; **LCO = Brent, CL = WTI**, c1..c12, 2026-04-30 →) now
+optionally EXTENDS the settle tape the engine reads, via the same extend-only pattern as the geo panel.
+- **New `backend/research/settle_tail.py`.** `extend_with_feed(lake, feed)` appends feed rows dated
+  **strictly after** the lake's last settle (lake rows never overwritten; tail reindexed to the lake's
+  columns so Brent c13..c31 stay NaN — the engine only needs c1/c2/c3/c6/c12; **weekend UTC-date rows
+  dropped** — the feed's midnight-UTC grouping yields Sat/Sun rows that are just the first thin hours of
+  Monday's session, and the lake calendar never has them). `extend_settlements` loads the feed + attaches
+  the measured lake↔feed `overlap` stats to the meta; `overlap_stats` is the pure validator. Provenance
+  constant `TAIL_SOURCE = "ohlcv_tail (ESTIMATE)"` (daily settle = last hourly bar per UTC date — a
+  session-end proxy, same synthesis class as the lake's own synth WTI). Standalone overlap report:
+  `python -m backend.research.settle_tail`.
+- **OPT-IN wiring (`PULSE_SETTLE_TAIL=1`, default OFF).** `data_lake.get_brent_settlements` /
+  `get_wti_settlements` extend after load when the flag is set; flag off returns the lake **bit-for-bit**
+  (separate cache keys per flag state so toggling the env var never serves the wrong variant; the tail is
+  **never persisted** back to the lake parquets). `data_lake.settle_tail_meta()` exposes per-tape
+  provenance. Everything downstream (`features.build_features`, `spread_universe.build_spread_series`,
+  live_ranker/live_engine/signal_log) inherits automatically.
+- **Verified live (07-02 desk):** feature-matrix last row **2026-05-26 → 2026-06-26** (+23 Brent / +25 WTI
+  weekday tail rows); `realised_vol_20d`/`brent_ret_5d` now computed over June (war spike + unwind) instead
+  of carried from May; regime reads NEUTRAL/LOW/STRESSED on the June-26 row. Live rec (flag on, WTI incl.):
+  all z-scores **in-distribution** — max |z| = 1.02 (wti_m1_m2 SELL) vs adaptive caps 6.27-10.0, no
+  blow-up. `as_of_source: "ohlcv_tail (ESTIMATE)"` surfaced on `get_recommendation` + the
+  `live_feed.feature_overlay` block + `/api/regime/live` (loose-jsonify, flows through).
+- **Overlap validation (lake∩feed, the honest read).** Same-date alignment confirmed correct for both
+  (±1-day shifts are 3-4× worse — no off-by-one). **Brent:** m1_m2 mean|Δ| $0.14 ≈ **0.36×** its daily
+  vol, c1 $0.83 ≈ 0.47× — genuine 19:30→22:00-UTC session-end drift in a high-vol month (day-change corr
+  **0.91**); usable, flagged. **WTI:** c1 $1.83 ≈ 0.91×, m1_m2 ≈ **0.84×**, change-corr only **0.52** —
+  the UTC-midnight cut lands inside CME's *next* session AND the lake WTI is itself synth (two estimates
+  disagreeing; gotcha 11's real-settlement file would arbitrate). Kept, with both estimate flags visible in
+  the meta. Note the flat-price proxy error matters least on the live path: the Phase-4 overlay replaces
+  the fast flat features with the 15-min feed anyway — the tail's real job is advancing the tape date,
+  regime, vol/return windows, and the rolling-z baseline history.
+- **Training untouched (by design).** Model pkls are unchanged (trained ≤ 2026-03-31 on the lake); the
+  tail feeds **inference** (feature freshness + z-scores) only. Run training / the walk-forward with the
+  flag off (the default) — the §5 gate/exit/A-B invariants were re-verified bit-for-bit with flag off.
+- **Tests:** +10 hermetic (`tests/test_settle_tail.py` — extend-only + lake-wins-on-overlap, column
+  alignment, weekend exclusion, no-lake/no-feed/no-new-rows no-ops, ESTIMATE provenance, overlap stats on
+  a known offset + no-overlap None, data_lake flag-off bit-for-bit, flag-on meta, per-flag cache isolation;
+  synthetic frames, no `I:\`/`/Data`). **294 pass** (was 284).
+
+### ✅ UI glow-up — command palette + desk grid + code-split + live polish (2026-07-02)
+Branch `phase4-live-feature-overlay` (2 commits). Full-dashboard polish pass — audit first, then two waves.
+- **Cmd/Ctrl+K command palette** (`components/shell/CommandPalette.tsx`): fuzzy search over the 8 workspaces
+  + every global action (refresh, theme, Ask-PULSE chat via a `pulse-open-chat` custom event, print,
+  fullscreen, shortcuts, tour). Arrow-key nav, group headings, window-level Esc. Surfaced as a `⌘K command`
+  chip in the view header, in the help overlay, and the sidebar shortcut list.
+- **DESK rebuilt for wide screens**: KPI strip on top, then a 2/3 column (HeroPick → OpenPositions →
+  PriceDecomposition) beside a 1/3 column (MorningBrief → RiskPanel → GeoRiskCalculator); IndicatorDrill
+  full-width below. KPI tiles gained **30-session sparklines** (Brent close, BRT–WTI arb, computed from
+  `/api/history` candles) + **number-roll** values (`components/ui/AnimatedNumber.tsx`, rAF ease-out tween,
+  snaps on first paint, respects reduced-motion — also on the hero z-score + edge). A **stale-feed banner**
+  shows when `rec.as_of` lags >4 days (the HF Space always runs on baked settles — say so honestly).
+- **Perf**: all views except DESK are code-split via `React.lazy` — boot JS **1,325 → 522 kB** (164 kB gzip;
+  recharts/lightweight-charts now load with their tabs). `usePolling` skips polls while `document.hidden`
+  and refetches on focus when stale; `useLocalStorage` instances sync via a `pulse-ls` custom event (theme
+  toggled from palette + TopBar can't diverge). **`/api/all` sends an ETag** — MD5 over the payload with all
+  `timestamp` keys recursively stripped (failing fetchers stamp `now()` per call, e.g. gdelt_tone under
+  429, which would defeat it) + `Cache-Control: no-cache`; verified 304/0-bytes via test client (200s during
+  market hours are genuine data movement).
+- **Chrome**: sidebar is now collapsible (persisted `pulse.sidebar.collapsed`) + an automatic icon rail below
+  `lg`; Tailwind classes kept literal (JIT can't see interpolated names). Ticker cells flash green/red on
+  real price ticks (the `flash-up/dn` keyframes existed but were never wired). TopBar clocks hide below
+  `xl`, market chip below `md`; StatusBar items shed progressively.
+- **Fixes found by the audit**: `.panel--feature` was referenced by Panel.tsx but never defined in CSS (accent
+  vars now actually style feature panels); onboarding tour said "Seven workspaces / press 1–7" (stale since
+  the News tab); tsconfig `baseUrl` deprecation removed → **`tsc` fully clean for the first time** (the
+  TS5101 note in older entries is obsolete); version strings unified to v2.2.
+- **Verified**: `tsc` clean · `vite build` clean · served bundle smoke-checked on :5000 · ETag 304 verified
+  hermetically. No backend behaviour change beyond the additive ETag headers.
 
 ### ✅ PAPER + SIGNAL LOG — restructure + bug-fixes (2026-07-01)
 Branch `phase4-live-feature-overlay` (not merged to main). Audited both tabs for bugs, fixed them at the source, and
@@ -1544,6 +1744,7 @@ open 80/443 (security list + iptables), `docker compose up -d --build`, hand ove
 | GARCH conditional-vol forecast accuracy (standalone) | `python -m backend.research.garch_vol` |
 | Portfolio vol-target sizing (standalone) | `python -m backend.research.vol_target` |
 | Live snapshot from feed (Phase 3.1) | `python -m backend.research.live_feed` (set `PULSE_LIVE_FEED_DIR`) |
+| Settle-tail overlap validation report | `python -m backend.research.settle_tail` (tail itself: `PULSE_SETTLE_TAIL=1`) |
 | Live recommendation on current market | `python -m backend.research.live_engine` |
 | Generate + list live signals | `python -m backend.research.signal_log` · `--update --list` |
 | Auto-desk dry-run (plan only) | `python -m backend.research.auto_desk` (`--live` to execute · `--wti`) |
@@ -1589,6 +1790,7 @@ pulse/
 | `live_ranker.py` | classify → predict → rank; **applies the tuned exit rule** (TP/SL/time-stop). Phase 3.1: additive `live_actuals`/`live_curve_m1m12` overrides |
 | `live_feed.py` | Phase 3.1 — reads the live 15-min bar share, builds real spreads + curve by expiry ordering. Phase 4: `recent_daily_frame` resamples to a daily c1/c12 frame for the live stress read |
 | `live_features.py` | Phase 4 (06-18) — overlays today's fast features (price/curve/lags/calendar) onto the stale daily row so the model scores on the live market; slow features carried-stale + reported |
+| `settle_tail.py` | Settle-tail (07-02) — opt-in `PULSE_SETTLE_TAIL=1` extend-only tail of the daily settle tape past the frozen lake from the hourly OHLCV feed (LCO=Brent, CL=WTI); rows flagged `ohlcv_tail (ESTIMATE)`; overlap validator + standalone report |
 | `live_engine.py` | Phase 3.1 — overlays the live snapshot onto the ranker → "what would it trade now" |
 | `signal_log.py` | Phase 3.1 — persists every live opportunity + subsequent-performance MTM (`signal_log` table) |
 | `gated_select.py` | Phase 2 (06-19) — greedy signed-P&L-corr filter → the decorrelated `portfolio` block |
@@ -1619,7 +1821,12 @@ risk/structure · paper trading (`/api/paper/*`) · **regime engine** (`/api/reg
 `MARKETAUX_KEY`, `APIFY_API_TOKEN`, `AISSTREAM_API_KEY`, `SENTRY_DSN`/`VITE_SENTRY_DSN`,
 `BETTER_STACK_TOKEN`. Optional regime flags: `PULSE_REGIME_MODE=pooled`, `PULSE_GATED_BLEND=1`,
 `PULSE_GATED_SIZE=full|half|kelly`, `PULSE_AB_TEST_DISABLED=1`, `PULSE_PERSPREAD_GATE=0` (Phase 8 — revert
-the per-spread gate to the uniform Phase 2.6 global gate; default on).
+the per-spread gate to the uniform Phase 2.6 global gate; default on), `PULSE_SETTLE_TAIL=1` (extend the daily settle
+tape past the frozen lake with the hourly-OHLCV tail, rows flagged `ohlcv_tail (ESTIMATE)`; default OFF =
+lake bit-for-bit. **Operationally ON for the desk dashboard**: `start.py` defaults it into the app
+subprocess env since 2026-07-03 — override with `PULSE_SETTLE_TAIL=0`. Do **NOT** put it in `.env`:
+research CLI runs load `.env` transitively via `external_history`'s `load_dotenv()`, and
+training/walk-forward must stay on the frozen lake).
 
 **/Data lake.** Brent C1-C31 daily settlements (real); WTI C1-C6 (synth from 1-min mids → flagged
 ESTIMATE via `data_lake.get_wti_settlements()`); 1-min mids (Brent/WTI/HO/Gasoil); spread/OHLCV xlsx.
