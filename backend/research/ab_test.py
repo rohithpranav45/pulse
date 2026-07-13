@@ -75,18 +75,10 @@ MIN_N_CLOSED  = 30        # per arm
 P_VALUE_LT    = 0.05      # Welch's t-test threshold to declare winner
 MAX_DAYS      = 14        # hard timeout for the A/B run
 
-# Mirror Phase 2.8.6 cost table from walkforward.py — kept in sync per
-# gotchas 26 + 37 pattern (cost is a reporting layer, not a model param,
-# but the two MUST agree or paper headline diverges from methodology PDF).
-COST_PER_SPREAD_RT = {
-    "brent_m1_m2":   0.030,
-    "brent_m3_m6":   0.040,
-    "brent_fly_123": 0.050,
-    "wti_m1_m2":     0.030,
-    "wti_m3_m6":     0.040,
-    "wti_fly_123":   0.050,
-}
-COST_DEFAULT_RT = 0.040
+# Audit fix (2026-07-14): the cost table now lives in research.costs (single
+# source shared with walkforward + live_ranker) — the two sides can no longer
+# drift; the invariant mirror test holds by construction.
+from research.costs import COST_PER_SPREAD_RT, COST_DEFAULT_RT  # noqa: F401
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -275,7 +267,11 @@ def _arm_metrics(trades: list[dict]) -> dict:
     wins  = sum(1 for x in net if x > 0)
 
     def _sharpe(seq):
-        if len(seq) < 2:
+        # Audit fix (2026-07-14): a Sharpe on a handful of trades is noise
+        # dressed as a statistic (the pooled arm once displayed −30.8 on n=2).
+        # Suppressed below 10 closed trades — the UI shows the accumulating
+        # counts instead.
+        if len(seq) < 10:
             return None
         m = sum(seq) / len(seq)
         v = sum((x - m) ** 2 for x in seq) / (len(seq) - 1)

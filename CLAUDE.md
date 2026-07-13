@@ -7,7 +7,15 @@ spread engine), and serves a React dashboard with a paper-trading book.
 - **Stack:** Flask 3 · React 18 + Vite + Tailwind · SQLite (cache + paper book) ·
   DuckDB/Parquet over a 3.5 GB `/Data` desk feed · sklearn + XGBoost/LightGBM/CatBoost
 - **Run (local):** `python start.py` from the repo root → http://127.0.0.1:5000
-- **Last updated:** 2026-07-03 (**Ultimate dashboard glow-up — full visual + structural redesign, 3
+- **Last updated:** 2026-07-14 (**Post-internship audit fixes** [branch `audit-fixes`, see §1 entry]:
+  thread-local DuckDB cursors + locked/validated data_lake caches (kills the boot-race `KeyError 'c6'`
+  that took the regime engine down for a whole process), paper-book quarantine + live-book-only
+  performance headline (10 trades −$4.26, not the +$110k walkforward-replay mirage), cost-aware live
+  entry gate (TP capture must clear 2× RT cost; `research/costs.py` single source), pooled confidence
+  floored at OOS R², news measured-beta gate demands hit≥50% + right sign, inventory endpoint cached
+  (0.12 s, was >120 s hang), stale-data stamps on the DESK hero + Signal Log, `PULSE_GATED_BLEND=1`
+  default in start.py. 293 pytest + 1 skip, build + tsc clean.) Prior: 2026-07-03 (**Ultimate dashboard
+  glow-up — full visual + structural redesign, 3
   committed waves** [branch `phase4-live-feature-overlay`, see §1 entry]. Wave 1: ambient **aurora
   atmosphere** (3 slow-drifting blurred colour fields + film-grain overlay; reduced-motion-safe; light-theme
   variants); the fat ~120px sticky view header replaced by a **46px workspace strip** (views own their hero);
@@ -1680,6 +1688,54 @@ move**, the same conditional-reaction thesis as the inventory framework but the 
   (`test_holiday_shifts_release_to_thursday`) is **pre-existing & unrelated** (a Memorial-Day-2026 holidays
   calendar assertion in `inventory_impact`, untouched by this sprint). Frontend `npm run build` ✓ +
   `tsc --noEmit` ✓ (clean).
+
+### ✅ Post-internship audit fixes (2026-07-14, branch `audit-fixes`)
+A full trader-grade audit (2026-07-13) found, and this sprint fixed — every defect reproduced live first:
+- **Thread-safety (the big one).** `data_lake.duckdb_conn()` now hands out **thread-local cursors**
+  (was: one shared connection executed concurrently by warm-up + ~40 scheduler jobs + request threads —
+  a boot race corrupted a frame, cached it forever, and the regime engine died with `KeyError 'c6'`
+  until restart, silently zeroing the A/B tick). Module `_cache` is lock-guarded and settle frames are
+  **column-validated before caching** (`_BRENT_REQUIRED`/`_WTI_REQUIRED` — fail loud, never poison).
+  12-thread hammer test clean. `safe_fetch` now logs full tracebacks (a bare `'c6'` cost the diagnosis).
+- **Paper book truthfulness.** The same corruption class had written ~$98 leg entries on 2026 trades.
+  New `paper_trading.quarantine_corrupt_trades()` (run once: **14 trades' legs flagged `suspect`**,
+  dropped from API payloads, kept for audit; trade-level P&L was live-feed-priced and stays valid).
+  `get_performance` **defaults to the LIVE book** — the old headline (+$110,179, best +$16.8k) was 374
+  *walkforward-replay* rows at 4–22k bbl drowning the real paper book (**10 trades, −$4.26**);
+  `include_backtest=True` restores the replay view. Equity curve now `ORDER BY closed_at` (was id-order
+  → time-travelling curve + wrong max-DD); `realised_pct` is None for spreads (was ÷$0.03 → "+300%" on
+  a $0.09 win); `list_positions` no longer calls `mark_to_market()` on the GET path (write-on-read
+  collided with the 60 s MTM job → `database is locked` 500s on the PAPER tab) and batch-fetches legs
+  in one query (0.8 s, was 90 s+ under boot contention). `current_leg_prices` refuses a latest row >30%
+  off the 10-session median. A/B arm stats exclude quarantined rows + suppress Sharpe under n<10
+  closed (was "−30.8" on n=2).
+- **Live entry economics.** New `research/costs.py` = single source for `COST_PER_SPREAD_RT`
+  (walkforward + ab_test import it — the mirror invariant now holds by construction). `live_ranker`
+  gained a **cost-aware entry gate** (live-only layer, like TP/SL — walk-forward gate untouched per
+  gotcha 7): entry refused when expected TP capture (0.5×|dev|) < 2× RT cost — the 07-13 hero pick
+  (WTI M1-M2, TP $0.03 vs $0.03 RT = zero net on a win) is exactly what it blocks; every ranked row
+  carries a `cost_gate` block. **Confidence floor fixed:** the pooled path substituted IN-SAMPLE R²
+  whenever OOS R² ≤ 0 — the cells with *no* OOS power were the ones getting propped to 29% conf; now
+  floored at OOS like the global path. Stale "{Lasso, Huber}" method copy now generated from
+  `GATED_WINNERS`.
+- **News-impact measured gate hardened** (`impact._measured_ok`): basis=measured now also requires
+  aligned hit-rate ≥ 50% **and** positive beta (lexicon-consistent) — GEOPOLITICAL (t=+3.0 but 18% hit,
+  an outlier-driven war-day cluster) is correctly demoted to prior with the rejection reason shown on
+  the factor table.
+- **Endpoints/UI honesty.** `/api/regime/inventory` extracted to `_inventory_payload`, cached 15 min +
+  warmed by `_eia_report_refresh` (was a >120 s request-path hang → permanent Inventory-tab skeletons;
+  now 0.12 s). Expired price-cache serves propagate `stale:true` to per-asset flags (a 10-day-old
+  payload used to render every asset fresh). DESK hero shows **"⚠ ND-OLD DATA — NOT LIVE"** + "as of
+  <date>" when engine data >4 d old; Signal Log's unconditional pulsing "Live feed" badge replaced by
+  a real **"⚠ FEED STALE — latest bar <ts> (Nd old)"** computed from actual bar age. `start.py` now
+  defaults **`PULSE_GATED_BLEND=1`** so the local dashboard serves the validated gated config (it was
+  running the raw ungated engine — the variant the 2.8.8 walk-forward showed underperforms — and the
+  signal log recorded picks the production gate would never fire).
+- **Tests:** RBOB smoke guard fixed (`pf.available("RBOB")` — skips off-desk); settle-tail fixtures
+  gained c3 (the validator demands what the engine dereferences). **293 pass + 1 skip**, `npm run
+  build` + `tsc --noEmit` clean; fresh-boot verification: regime available first try (gated=True,
+  per-spread {wti_m1_m2, wti_fly_123}), `/api/paper/positions` 200 in 0.8 s, inventory 0.12 s, the
+  live cost gate blocking the sub-cost WTI entries.
 
 ### 🔄 In progress — **Phase 3.1: live analysis engine + signal log** (mentor directive, 2026-06-15)
 Mentor asked everyone past the historical-validation phase to **run the framework on live market

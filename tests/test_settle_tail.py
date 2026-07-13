@@ -27,9 +27,11 @@ if _BACKEND not in sys.path:
 from research import settle_tail as st  # noqa: E402
 
 
-def _lake(end="2026-05-26", days=30, cols=("c1", "c2", "c6", "c12", "c31")):
+def _lake(end="2026-05-26", days=30, cols=("c1", "c2", "c3", "c6", "c12", "c31")):
+    # c3 included since the audit-fix frame validation (data_lake._BRENT_REQUIRED)
+    # refuses to cache a settle frame missing any column the engine dereferences.
     idx = pd.bdate_range(end=end, periods=days)
-    base = {"c1": 65.0, "c2": 64.6, "c6": 63.8, "c12": 62.9, "c31": 61.0}
+    base = {"c1": 65.0, "c2": 64.6, "c3": 64.2, "c6": 63.8, "c12": 62.9, "c31": 61.0}
     data = {c: base[c] + np.linspace(0, 1.0, days) for c in cols}
     return pd.DataFrame(data, index=idx)
 

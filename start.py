@@ -143,6 +143,12 @@ def main():
             # walk-forward CLI runs load .env transitively and must stay on the
             # frozen lake. Override with PULSE_SETTLE_TAIL=0 to launch without.
             "PULSE_SETTLE_TAIL": os.environ.get("PULSE_SETTLE_TAIL", "1"),
+            # Audit fix (2026-07-14): the dashboard serves the VALIDATED config.
+            # Without this, local launches ran the raw ungated pooled engine —
+            # the exact variant the 2.8.8 walk-forward showed underperforms —
+            # and the signal log recorded picks the production gate would never
+            # fire. Mirrors the HF Space var. Override with PULSE_GATED_BLEND=0.
+            "PULSE_GATED_BLEND": os.environ.get("PULSE_GATED_BLEND", "1"),
         },
     )
 
