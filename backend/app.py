@@ -176,7 +176,10 @@ def safe_fetch(func, fallback=None):
     try:
         return func()
     except Exception as exc:
-        log.error("%s failed: %s", name, exc)
+        # Audit fix (2026-07-14): log the full traceback. A bare str(exc) turned
+        # the boot-race KeyError into an inscrutable "…failed: 'c6'" while the
+        # regime engine was down for the life of the process.
+        log.error("%s failed: %s", name, exc, exc_info=True)
         try:
             from observability import capture_exception
             capture_exception(exc, fetcher=name)
@@ -523,6 +526,15 @@ def _now() -> str:
 def _fetch_prices():
     cached = get_cached("prices", TTL_PRICES)
     if cached is not None:
+        # Audit fix (2026-07-14): db/cache serves EXPIRED entries with a
+        # top-level {"stale": True} merged in — but the per-asset stale flags
+        # inside were frozen at write time, so a 10-day-old payload rendered
+        # every asset as fresh. Propagate the expiry to each asset dict.
+        if isinstance(cached, dict) and cached.get("stale"):
+            cached = {
+                k: ({**v, "stale": True} if isinstance(v, dict) and "price" in v else v)
+                for k, v in cached.items()
+            }
         return cached
     data = safe_fetch(_prices, {})
     set_cache("prices", data)
@@ -1068,6 +1080,16 @@ def _eia_report_refresh():
                      s.get("latest_week"), s.get("n_weeks"))
     except Exception as exc:
         log.warning("EIA report live refresh failed: %s", exc)
+    # Audit fix (2026-07-14): warm the /api/regime/inventory cache off the
+    # request path (the compute is >120 s cold — the Inventory tab used to hang
+    # a request thread and skeleton forever waiting for it).
+    try:
+        data = _inventory_payload("crude_ex_spr")
+        if data.get("available"):
+            set_cache("regime_inventory::crude_ex_spr", data)
+            log.info("inventory framework cache warmed")
+    except Exception as exc:
+        log.warning("inventory cache warm failed: %s", exc)
 
 _scheduler.add_job(_eia_report_refresh, "interval", seconds=TTL_EIA_REPORT,
                    next_run_time=_NOW + timedelta(minutes=2), id="_eia_report_refresh")
@@ -1494,113 +1516,138 @@ def regime_inventory_route():
     Read-only research; reads cached parquet panels (no model is hit). Regenerate
     with `python -m backend.research.inventory_impact`.
     """
-    def _inv():
-        import math
-        from research.inventory_impact import eia_report, framework, regime_conditioning
-        from research.inventory_impact.release_calendar import release_datetime
+    actual = request.args.get("actual", type=float)
+    consensus = request.args.get("consensus", type=float)
+    series = (request.args.get("series") or "crude_ex_spr").lower()
+    if series not in ("crude_ex_spr", "gasoline", "distillate"):
+        series = "crude_ex_spr"
 
-        actual = request.args.get("actual", type=float)
-        consensus = request.args.get("consensus", type=float)
-        series = (request.args.get("series") or "crude_ex_spr").lower()
-        if series not in ("crude_ex_spr", "gasoline", "distillate"):
-            series = "crude_ex_spr"
-        call = framework.assess_series(series, actual_change=actual, consensus=consensus)
-        panel = regime_conditioning.build_daily_panel("seasonal", series=series)
-        cond = regime_conditioning.conditional_table(panel, "ret")
-        # WTI "when it mattered" — US crude inventories are a US signal, so WTI is the
-        # more directly affected benchmark. Crude-only (the WTI study is crude-specific).
-        cond_wti = (regime_conditioning.conditional_table(panel, "ret_wti").to_dict("records")
-                    if series == "crude_ex_spr" else None)
-        wti_compare = (regime_conditioning.wti_sharpness_compare(panel)
-                       if series == "crude_ex_spr" else None)
-        # graded: did the REAL consensus surprise sharpen the regime betas vs the
-        # seasonal proxy? (the framework now defaults to real consensus)
-        consensus_sharpening = regime_conditioning.consensus_sharpening_compare(series)
-        # measured directional track record + the selective-confidence policy
-        from research.inventory_impact import accuracy as _accuracy
-        accuracy_summary = _accuracy.accuracy_summary(series)
+    # Audit fix (2026-07-14): this compute rebuilds daily panels + conditional
+    # tables + the accuracy backtest — measured >120 s cold, which left the
+    # Inventory tab in a permanent skeleton state. Results only change when a
+    # new EIA week lands (or explicit ?actual/?consensus overrides are scored),
+    # so the default view is cached 15 min per series and warmed off the
+    # request path by `_eia_report_refresh`.
+    cacheable = actual is None and consensus is None
+    cache_key = f"regime_inventory::{series}"
+    if cacheable:
+        cached = get_cached(cache_key, 900)
+        if cached is not None:
+            return jsonify({"data": cached, "timestamp": _now()})
 
-        def _f(v):
-            try:
-                v = float(v)
-                return None if math.isnan(v) else v
-            except (TypeError, ValueError):
-                return None
+    data = safe_fetch(lambda: _inventory_payload(series, actual, consensus),
+                      {"available": False})
+    if cacheable and data.get("available"):
+        try:
+            set_cache(cache_key, data)
+        except Exception:
+            pass
+    return jsonify({"data": data, "timestamp": _now()})
 
-        # recent releases — surprise history (+ quality for crude), newest first
-        sp = eia_report.surprise_series(series, "consensus")  # surprise vs REAL consensus
-        dec = eia_report.decomposition() if series == "crude_ex_spr" else None
-        recent = []
-        for we in sp.dropna(subset=["surprise"]).index[-12:][::-1]:
-            rel = release_datetime(we).tz_convert("America/New_York")
-            q = (dec.loc[we, "quality_of_draw"] if (dec is not None and we in dec.index) else None)
-            recent.append({
-                "week_ending":   str(we.date()),
-                "release_date":  str(rel.date()),
-                "actual_change": _f(sp.loc[we, "actual_change"]),
-                "expected":      _f(sp.loc[we, "expected_change"]),
-                "expected_source": str(sp.loc[we].get("expected_source", "seasonal")),
-                "surprise":      _f(sp.loc[we, "surprise"]),
-                "surprise_z":    _f(sp.loc[we, "surprise_z"]),
-                "bullish":       bool(sp.loc[we, "bullish"]),
-                "quality":       _f(q),
-            })
 
-        # latest report snapshot — levels + weekly change for the headline lines
-        wf = eia_report.weekly_frame()
-        last = wf.iloc[-1]
-        lines = [
-            ("Crude (ex-SPR)", "crude_ex_spr", "MMbbl"),
-            ("Cushing",        "cushing",      "MMbbl"),
-            ("Gasoline",       "gasoline",     "MMbbl"),
-            ("Distillate",     "distillate",   "MMbbl"),
-            ("Refinery util",  "refinery_util", "%"),
-            ("Crude exports",  "exports",      "Mb/d"),
-            ("Crude imports",  "imports",      "Mb/d"),
-            ("Implied demand", "products_supplied", "Mb/d"),
-        ]
-        report = []
-        for label, col, unit in lines:
-            if col not in wf:
-                continue
-            chg = wf[col].diff().iloc[-1]
-            report.append({
-                "label": label, "unit": unit,
-                "level": _f(last.get(col)),
-                "change": _f(chg),
-            })
-        latest_report = {
-            "week_ending": str(wf.index[-1].date()),
-            "release_date": str(release_datetime(wf.index[-1]).tz_convert("America/New_York").date()),
-            "adjustment": _f(last.get("adjustment")),
-            "lines": report,
-        }
+def _inventory_payload(series: str = "crude_ex_spr",
+                       actual: float | None = None,
+                       consensus: float | None = None) -> dict:
+    """The /api/regime/inventory payload builder — callable off the request
+    path (scheduler cache warm) as well as from the route."""
+    import math
+    from research.inventory_impact import eia_report, framework, regime_conditioning
+    from research.inventory_impact.release_calendar import release_datetime
 
-        return {
-            "available": True,
-            "series": series,
-            "series_label": call.get("series_label", series),
-            "series_options": ["crude_ex_spr", "gasoline", "distillate"],
-            "call": call,
-            "next_release": framework.next_release_context(),
-            # spread attribution is the crude→WTI event study; only meaningful for crude
-            "spread_betas": framework.spread_attribution_betas() if series == "crude_ex_spr" else None,
-            "when_it_mattered": cond.to_dict("records"),
-            "when_it_mattered_wti": cond_wti,
-            "wti_compare": wti_compare,
-            "consensus_sharpening": consensus_sharpening,
-            "accuracy": accuracy_summary,
-            "surprise_method": "consensus",
-            "recent_releases": recent,
-            "latest_report": latest_report,
-            "n_releases": int(len(panel)),
-            "span": [str(panel.index.min().date()), str(panel.index.max().date())],
-            "charts": ["when_it_mattered", "era_scatter", "quality", "decay_placebo"],
-            "source": "backend/research/inventory_impact",
-        }
+    call = framework.assess_series(series, actual_change=actual, consensus=consensus)
+    panel = regime_conditioning.build_daily_panel("seasonal", series=series)
+    cond = regime_conditioning.conditional_table(panel, "ret")
+    # WTI "when it mattered" — US crude inventories are a US signal, so WTI is the
+    # more directly affected benchmark. Crude-only (the WTI study is crude-specific).
+    cond_wti = (regime_conditioning.conditional_table(panel, "ret_wti").to_dict("records")
+                if series == "crude_ex_spr" else None)
+    wti_compare = (regime_conditioning.wti_sharpness_compare(panel)
+                   if series == "crude_ex_spr" else None)
+    # graded: did the REAL consensus surprise sharpen the regime betas vs the
+    # seasonal proxy? (the framework now defaults to real consensus)
+    consensus_sharpening = regime_conditioning.consensus_sharpening_compare(series)
+    # measured directional track record + the selective-confidence policy
+    from research.inventory_impact import accuracy as _accuracy
+    accuracy_summary = _accuracy.accuracy_summary(series)
 
-    return jsonify({"data": safe_fetch(_inv, {"available": False}),
-                    "timestamp": _now()})
+    def _f(v):
+        try:
+            v = float(v)
+            return None if math.isnan(v) else v
+        except (TypeError, ValueError):
+            return None
+
+    # recent releases — surprise history (+ quality for crude), newest first
+    sp = eia_report.surprise_series(series, "consensus")  # surprise vs REAL consensus
+    dec = eia_report.decomposition() if series == "crude_ex_spr" else None
+    recent = []
+    for we in sp.dropna(subset=["surprise"]).index[-12:][::-1]:
+        rel = release_datetime(we).tz_convert("America/New_York")
+        q = (dec.loc[we, "quality_of_draw"] if (dec is not None and we in dec.index) else None)
+        recent.append({
+            "week_ending":   str(we.date()),
+            "release_date":  str(rel.date()),
+            "actual_change": _f(sp.loc[we, "actual_change"]),
+            "expected":      _f(sp.loc[we, "expected_change"]),
+            "expected_source": str(sp.loc[we].get("expected_source", "seasonal")),
+            "surprise":      _f(sp.loc[we, "surprise"]),
+            "surprise_z":    _f(sp.loc[we, "surprise_z"]),
+            "bullish":       bool(sp.loc[we, "bullish"]),
+            "quality":       _f(q),
+        })
+
+    # latest report snapshot — levels + weekly change for the headline lines
+    wf = eia_report.weekly_frame()
+    last = wf.iloc[-1]
+    lines = [
+        ("Crude (ex-SPR)", "crude_ex_spr", "MMbbl"),
+        ("Cushing",        "cushing",      "MMbbl"),
+        ("Gasoline",       "gasoline",     "MMbbl"),
+        ("Distillate",     "distillate",   "MMbbl"),
+        ("Refinery util",  "refinery_util", "%"),
+        ("Crude exports",  "exports",      "Mb/d"),
+        ("Crude imports",  "imports",      "Mb/d"),
+        ("Implied demand", "products_supplied", "Mb/d"),
+    ]
+    report = []
+    for label, col, unit in lines:
+        if col not in wf:
+            continue
+        chg = wf[col].diff().iloc[-1]
+        report.append({
+            "label": label, "unit": unit,
+            "level": _f(last.get(col)),
+            "change": _f(chg),
+        })
+    latest_report = {
+        "week_ending": str(wf.index[-1].date()),
+        "release_date": str(release_datetime(wf.index[-1]).tz_convert("America/New_York").date()),
+        "adjustment": _f(last.get("adjustment")),
+        "lines": report,
+    }
+
+    return {
+        "available": True,
+        "series": series,
+        "series_label": call.get("series_label", series),
+        "series_options": ["crude_ex_spr", "gasoline", "distillate"],
+        "call": call,
+        "next_release": framework.next_release_context(),
+        # spread attribution is the crude→WTI event study; only meaningful for crude
+        "spread_betas": framework.spread_attribution_betas() if series == "crude_ex_spr" else None,
+        "when_it_mattered": cond.to_dict("records"),
+        "when_it_mattered_wti": cond_wti,
+        "wti_compare": wti_compare,
+        "consensus_sharpening": consensus_sharpening,
+        "accuracy": accuracy_summary,
+        "surprise_method": "consensus",
+        "recent_releases": recent,
+        "latest_report": latest_report,
+        "n_releases": int(len(panel)),
+        "span": [str(panel.index.min().date()), str(panel.index.max().date())],
+        "charts": ["when_it_mattered", "era_scatter", "quality", "decay_placebo"],
+        "source": "backend/research/inventory_impact",
+    }
 
 
 @app.route("/api/regime/inventory/chart/<name>")

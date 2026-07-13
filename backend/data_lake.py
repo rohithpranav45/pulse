@@ -87,29 +87,27 @@ def parquet_path(key: str) -> Path:
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# DuckDB connection — process-wide, lazy
+# DuckDB connection — process-wide root, THREAD-LOCAL cursors
 # ═════════════════════════════════════════════════════════════════════════════
+# Audit fix (2026-07-14): a single shared connection executed concurrently from
+# the warm-up thread, ~40 APScheduler jobs and Flask request threads is NOT safe
+# — interleaved `.execute()` calls can cross results/fail, and the corrupted
+# frame then lands in `_cache` and is served for the life of the process (the
+# boot-race `KeyError: 'c6'` that killed the regime engine + A/B tick). Each
+# thread now gets its own cursor (`root.cursor()` = an independent connection
+# to the same in-memory catalog, views included).
 _DUCK_LOCK = threading.Lock()
 _DUCK: Optional["duckdb.DuckDBPyConnection"] = None  # type: ignore
+_DUCK_GEN = 0                       # bumped on reset so stale TLS cursors rebuild
+_DUCK_TLS = threading.local()
 
 
-def duckdb_conn():
-    """
-    Return a process-wide DuckDB connection with every available parquet file
-    pre-registered as a view named after the source key. Examples:
-
-        con = duckdb_conn()
-        con.execute("SELECT MAX(timestamp) FROM brent_1min").fetchone()
-        con.execute("SELECT * FROM brent_settlements_c1_to_c31 LIMIT 5").df()
-
-    Views are only created for keys whose parquet file currently exists; the
-    connection is lazily (re)built the first time it's requested and reused
-    thereafter. Use `reset_duckdb()` after a re-conversion to pick up changes.
-    """
-    global _DUCK
+def _duckdb_root():
+    """The lazily-built root connection. Never handed to callers directly."""
+    global _DUCK, _DUCK_GEN
     with _DUCK_LOCK:
         if _DUCK is not None:
-            return _DUCK
+            return _DUCK, _DUCK_GEN
         try:
             import duckdb
         except ImportError as exc:
@@ -129,7 +127,30 @@ def duckdb_conn():
                     f"SELECT * FROM read_parquet('{pq.as_posix()}')"
                 )
         _DUCK = con
-        return _DUCK
+        _DUCK_GEN += 1
+        return _DUCK, _DUCK_GEN
+
+
+def duckdb_conn():
+    """
+    Return a THREAD-LOCAL DuckDB cursor with every available parquet file
+    pre-registered as a view named after the source key. Examples:
+
+        con = duckdb_conn()
+        con.execute("SELECT MAX(timestamp) FROM brent_1min").fetchone()
+        con.execute("SELECT * FROM brent_settlements_c1_to_c31 LIMIT 5").df()
+
+    Safe to call from any thread — each thread gets its own cursor over the
+    shared root connection, so concurrent `.execute()` calls never interleave
+    on one cursor. Use `reset_duckdb()` after a re-conversion to pick up
+    changes (existing thread cursors are rebuilt transparently).
+    """
+    root, gen = _duckdb_root()
+    tls = _DUCK_TLS
+    if getattr(tls, "gen", None) != gen or getattr(tls, "cur", None) is None:
+        tls.cur = root.cursor()
+        tls.gen = gen
+    return tls.cur
 
 
 def reset_duckdb() -> None:
@@ -140,12 +161,39 @@ def reset_duckdb() -> None:
             try: _DUCK.close()
             except Exception: pass
         _DUCK = None
+        # _DUCK_GEN bumps on next rebuild; thread-local cursors detect the new
+        # generation and re-cursor themselves.
 
 
 # ═════════════════════════════════════════════════════════════════════════════
 # Daily / weekly files — DuckDB-backed with pandas fallback
 # ═════════════════════════════════════════════════════════════════════════════
+# Audit fix (2026-07-14): `if key not in _cache: _cache[key] = load()` was
+# unsynchronized across threads. A lock serialises the load-and-store so two
+# threads can't race a half-built/garbage frame into the cache; frames are
+# validated (`_validate_frame`) BEFORE caching so a corrupted read fails loudly
+# instead of poisoning the process.
 _cache: dict = {}
+_CACHE_LOCK = threading.RLock()
+
+
+def _validate_frame(df: Optional[pd.DataFrame], required: tuple[str, ...],
+                    name: str) -> Optional[pd.DataFrame]:
+    """
+    Guard a frame before it enters `_cache`. None passes through (absent file
+    is a legitimate state); a frame missing required columns raises — better a
+    loud failure on one request than a silently-poisoned cache for the life of
+    the process.
+    """
+    if df is None:
+        return None
+    missing = [c for c in required if c not in df.columns]
+    if missing:
+        raise RuntimeError(
+            f"data_lake: {name} frame is missing expected columns {missing} "
+            f"(got {list(df.columns)[:8]}…) — refusing to cache a corrupt frame"
+        )
+    return df
 
 
 def _parquet_or_none(key: str) -> Optional[pd.DataFrame]:
@@ -311,34 +359,45 @@ def _settle_tail_enabled() -> bool:
         return False
 
 
+# Columns the regime engine's features/spread universe actually dereference —
+# a frame passing this check cannot reproduce the boot-race `KeyError: 'c6'`.
+_BRENT_REQUIRED = ("c1", "c2", "c3", "c6", "c12")
+_WTI_REQUIRED   = ("c1", "c2", "c3", "c6")
+
+
 def get_brent_settlements() -> Optional[pd.DataFrame]:
     # cache key includes the tail flag so toggling the env var never serves the
     # other variant from a warm cache
     key = "settlements__tail" if _settle_tail_enabled() else "settlements"
-    if key not in _cache:
-        df = _load_settlements_c1_to_c31()
-        if key.endswith("__tail"):
-            df = _maybe_extend_tail(df, "brent")
-        _cache[key] = df
-    return _cache[key]
+    with _CACHE_LOCK:
+        if key not in _cache:
+            df = _load_settlements_c1_to_c31()
+            if key.endswith("__tail"):
+                df = _maybe_extend_tail(df, "brent")
+            _cache[key] = _validate_frame(df, _BRENT_REQUIRED, "brent settlements")
+        return _cache[key]
 
 
 def get_c12_15y() -> Optional[pd.DataFrame]:
-    if "c12_15y" not in _cache:
-        _cache["c12_15y"] = _load_close_c12_15y()
-    return _cache["c12_15y"]
+    with _CACHE_LOCK:
+        if "c12_15y" not in _cache:
+            _cache["c12_15y"] = _validate_frame(
+                _load_close_c12_15y(), ("close",), "brent c12 15y")
+        return _cache["c12_15y"]
 
 
 def get_spread_15y() -> Optional[pd.DataFrame]:
-    if "spread_15y" not in _cache:
-        _cache["spread_15y"] = _load_c1_c12_spread_15y()
-    return _cache["spread_15y"]
+    with _CACHE_LOCK:
+        if "spread_15y" not in _cache:
+            _cache["spread_15y"] = _load_c1_c12_spread_15y()
+        return _cache["spread_15y"]
 
 
 def get_brent_ohlcv_multi() -> Optional[pd.DataFrame]:
-    if "ohlcv_multi" not in _cache:
-        _cache["ohlcv_multi"] = _load_brent_daily_ohlcv_multi()
-    return _cache["ohlcv_multi"]
+    with _CACHE_LOCK:
+        if "ohlcv_multi" not in _cache:
+            _cache["ohlcv_multi"] = _load_brent_daily_ohlcv_multi()
+        return _cache["ohlcv_multi"]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -431,14 +490,15 @@ def get_wti_settlements() -> Optional[pd.DataFrame]:
     Mentor file is the source of truth once she provides it.
     """
     key = "wti_settlements__tail" if _settle_tail_enabled() else "wti_settlements"
-    if key not in _cache:
-        df = _load_wti_settlements()
-        if key.endswith("__tail"):
-            # the lake WTI is itself synth (gotcha 11); the tail is a SECOND
-            # estimate source (hourly CL feed) — both flags stay visible in meta
-            df = _maybe_extend_tail(df, "wti")
-        _cache[key] = df
-    return _cache[key]
+    with _CACHE_LOCK:
+        if key not in _cache:
+            df = _load_wti_settlements()
+            if key.endswith("__tail"):
+                # the lake WTI is itself synth (gotcha 11); the tail is a SECOND
+                # estimate source (hourly CL feed) — both flags stay visible in meta
+                df = _maybe_extend_tail(df, "wti")
+            _cache[key] = _validate_frame(df, _WTI_REQUIRED, "wti settlements")
+        return _cache[key]
 
 
 # ═════════════════════════════════════════════════════════════════════════════

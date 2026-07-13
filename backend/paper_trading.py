@@ -129,6 +129,19 @@ def _ensure_table() -> None:
     except sqlite3.OperationalError:
         pass
     c.execute("CREATE INDEX IF NOT EXISTS idx_paper_ab_mode ON paper_trades(ab_mode)")
+    # Audit fix (2026-07-14): rows whose stored prices were written by a
+    # poisoned data frame (see data_lake thread-safety fix) are QUARANTINED —
+    # kept visible in position lists (flagged) but excluded from every
+    # aggregate so one corrupt boot can't fabricate the book's headline P&L.
+    # 0 = clean, 1 = quarantined; `quarantine_reason` says why.
+    try:
+        c.execute("ALTER TABLE paper_trades ADD COLUMN quarantined INTEGER NOT NULL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        c.execute("ALTER TABLE paper_trades ADD COLUMN quarantine_reason TEXT DEFAULT NULL")
+    except sqlite3.OperationalError:
+        pass
     # Phase 2 Sprint 2b: per-leg book for spread/butterfly positions.
     # Parent paper_trades row still records the synthetic-spread entry/MTM/PnL
     # so all existing analytics (Sharpe, equity curve, etc.) keep working.
@@ -150,6 +163,13 @@ def _ensure_table() -> None:
         )
     """)
     c.execute("CREATE INDEX IF NOT EXISTS idx_paper_legs_trade ON paper_legs(trade_id)")
+    # Audit fix (2026-07-14): legs written from a poisoned frame are flagged
+    # SUSPECT (kept for audit, excluded from API payloads). The parent trade's
+    # spread-level P&L is priced independently (live feed) and stays valid.
+    try:
+        c.execute("ALTER TABLE paper_legs ADD COLUMN suspect INTEGER NOT NULL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
     c.commit()
     c.close()
 
@@ -263,6 +283,22 @@ def _pnl(direction: str, entry: float, exit_px: float, size: float) -> float:
     return round((entry - exit_px) * size, 4)
 
 
+def _realised_pct(asset: str, entry: float, size: float, realised: float) -> Optional[float]:
+    """
+    % return on the position, or None when the denominator is meaningless.
+
+    Audit fix (2026-07-14): a SPREAD's entry level can be pennies (or zero), so
+    `realised / entry` is unbounded — the book was printing "+300.00%" on a
+    $0.09 win. Percent return is only quoted for outright assets with a real
+    price denominator; spread/fly rows return None and the UI shows $ P&L.
+    """
+    if _leg_defs_for(asset):          # spread / butterfly → no meaningful %
+        return None
+    if not entry or abs(entry) * (size or 0) < 1.0:
+        return None
+    return round((realised / (abs(entry) * size)) * 100, 4)
+
+
 def _row_to_dict(r: sqlite3.Row, *, with_legs: bool = True) -> dict:
     d = dict(r)
     # Inflate metadata blob
@@ -278,7 +314,8 @@ def _row_to_dict(r: sqlite3.Row, *, with_legs: bool = True) -> dict:
 def _fetch_legs(trade_id: int) -> list[dict]:
     c = _conn()
     rows = c.execute(
-        "SELECT * FROM paper_legs WHERE trade_id=? ORDER BY id ASC", (trade_id,)
+        "SELECT * FROM paper_legs WHERE trade_id=? AND suspect=0 ORDER BY id ASC",
+        (trade_id,)
     ).fetchall()
     c.close()
     return [dict(r) for r in rows]
@@ -392,7 +429,7 @@ def close_trade(trade_id: int, *, reason: str = "manual") -> dict:
 
     exit_px = _live_price(row["asset"]) or row["mtm_price"] or row["entry_price"]
     realised = _pnl(row["direction"], row["entry_price"], exit_px, row["size"])
-    realised_pct = round((realised / (row["entry_price"] * row["size"])) * 100, 4) if row["entry_price"] else 0.0
+    realised_pct = _realised_pct(row["asset"], row["entry_price"], row["size"], realised)
 
     c.execute("""
         UPDATE paper_trades
@@ -490,14 +527,18 @@ def mark_to_market() -> dict:
 
 
 def list_positions(status: str = "all", limit: int = 200) -> list[dict]:
-    """Return positions, newest first. Marks open positions to market first.
+    """Return positions, newest first — served from the last MTM state.
+
+    Audit fix (2026-07-14): this GET path no longer calls `mark_to_market()`.
+    The 60 s `_paper_mtm` scheduler job owns the sweep; a read endpoint doing
+    writes collided with it ("database is locked" → HTTP 500 on the PAPER tab
+    at boot). Marks are therefore at most one sweep interval stale, and each
+    row carries `mtm_at` so the UI can show exactly how stale.
 
     For status='all' we return **every** OPEN position plus the newest `limit`
     CLOSED trades — so a large closed history can never truncate the open book out
     of the response (the old single `LIMIT` mixed both and could drop open rows once
     >limit newer closed trades existed)."""
-    if status == "all" or status == "open":
-        mark_to_market()
     c = _conn()
     if status == "open":
         rows = c.execute("SELECT * FROM paper_trades WHERE status='OPEN' ORDER BY id DESC").fetchall()
@@ -509,8 +550,25 @@ def list_positions(status: str = "all", limit: int = 200) -> list[dict]:
         closed_rows = c.execute("SELECT * FROM paper_trades WHERE status='CLOSED' ORDER BY id DESC LIMIT ?",
                                 (limit,)).fetchall()
         rows = list(open_rows) + list(closed_rows)
+    # Audit fix (2026-07-14): batch the legs in ONE query on the same connection
+    # — the old per-trade `_fetch_legs` opened a fresh SQLite connection per row
+    # (hundreds of opens per request under WAL contention with the MTM job).
+    ids = [int(r["id"]) for r in rows]
+    legs_by_trade: dict[int, list[dict]] = {i: [] for i in ids}
+    if ids:
+        ph = ",".join("?" * len(ids))
+        for leg in c.execute(
+            f"SELECT * FROM paper_legs WHERE trade_id IN ({ph}) AND suspect=0 "
+            "ORDER BY trade_id ASC, id ASC", ids
+        ).fetchall():
+            legs_by_trade[int(leg["trade_id"])].append(dict(leg))
     c.close()
-    return [_row_to_dict(r) for r in rows]
+    out = []
+    for r in rows:
+        d = _row_to_dict(r, with_legs=False)
+        d["legs"] = legs_by_trade.get(int(d["id"]), [])
+        out.append(d)
+    return out
 
 
 def open_position_exists(asset: str, direction: str, ab_mode: str) -> bool:
@@ -535,7 +593,7 @@ def list_ab_trades(ab_mode: str | None = None, status: str = "all") -> list[dict
     OPEN / CLOSED / all.
     """
     c = _conn()
-    clauses = []
+    clauses = ["quarantined=0"]   # audit 2026-07-14: corrupt rows never reach arm stats
     args: list = []
     if ab_mode is None:
         clauses.append("ab_mode IS NOT NULL")
@@ -598,9 +656,108 @@ def _max_drawdown(equity_curve: list[float]) -> float:
     return round(max_dd, 4)
 
 
-def get_performance(window: str = "all") -> dict:
+def quarantine_corrupt_trades(*, dry_run: bool = False) -> dict:
+    """
+    Audit maintenance (2026-07-14): flag trades whose STORED prices are provably
+    corrupt (written by a poisoned data frame — see data_lake thread-safety fix).
+
+    Two independent checks with different blast radii:
+      A. Trade-level: a spread/fly asset with |realised|/size > $50/bbl — the
+         whole trade is garbage → quarantined=1 (excluded from aggregates).
+      B. Leg-level: a leg's entry_price >15% away from that contract's settle
+         AS OF the open date (~$98 legs on a $65 tape). The SPREAD-level entry
+         is priced independently off the live feed and is typically fine, so
+         only the LEGS are flagged suspect=1 (dropped from API payloads, kept
+         in the table for audit); the trade's P&L stays in the aggregates.
+
+    Idempotent; `dry_run=True` reports without writing.
+    """
+    from research.spread_universe import LEG_DEFS, _load_settlements, _product
+
+    frames: dict = {}
+    def _settle_asof(asset: str, contract: str, opened_at: str) -> Optional[float]:
+        product = _product(asset)
+        if product not in frames:
+            try:
+                frames[product] = _load_settlements(product)
+            except Exception:
+                frames[product] = None
+        df = frames[product]
+        if df is None or df.empty or contract not in df.columns:
+            return None
+        try:
+            open_dt = datetime.fromisoformat(opened_at.replace("Z", "+00:00"))
+            sub = df.loc[df.index <= open_dt.strftime("%Y-%m-%d"), contract].dropna()
+            return float(sub.iloc[-1]) if len(sub) else None
+        except Exception:
+            return None
+
+    c = _conn()
+    trades = c.execute(
+        "SELECT * FROM paper_trades WHERE quarantined=0"
+    ).fetchall()
+    flagged: list[dict] = []          # check A — whole trade quarantined
+    leg_flagged: list[dict] = []      # check B — legs flagged suspect
+    for t in trades:
+        asset = t["asset"]
+        if asset not in LEG_DEFS:
+            continue
+        # A — impossible spread P&L → quarantine the trade
+        if t["realised"] is not None and (t["size"] or 0) > 0 \
+                and abs(t["realised"]) / t["size"] > 50.0:
+            flagged.append({"id": t["id"], "asset": asset, "status": t["status"],
+                            "realised": t["realised"],
+                            "reason": (f"impossible spread pnl {t['realised']:+.2f} "
+                                       f"on size {t['size']:g} (>|$50|/bbl)")})
+            continue
+        # B — leg entry far from the settle on the open date → flag ALL legs of
+        # the trade suspect (a corrupt sibling read poisons the whole leg set)
+        legs = c.execute(
+            "SELECT * FROM paper_legs WHERE trade_id=? AND suspect=0", (t["id"],)
+        ).fetchall()
+        for leg in legs:
+            ref = _settle_asof(asset, leg["contract"], t["opened_at"] or "")
+            if ref is None or ref <= 0:
+                continue
+            dev = abs(leg["entry_price"] - ref) / ref
+            if dev > 0.15:
+                leg_flagged.append({
+                    "id": t["id"], "asset": asset, "status": t["status"],
+                    "reason": (f"leg {leg['contract']} entry {leg['entry_price']:.2f} "
+                               f"vs settle {ref:.2f} on open date ({dev:.0%} off)")})
+                break
+    if not dry_run:
+        for f in flagged:
+            c.execute(
+                "UPDATE paper_trades SET quarantined=1, quarantine_reason=? WHERE id=?",
+                (f["reason"], f["id"]))
+        for f in leg_flagged:
+            c.execute("UPDATE paper_legs SET suspect=1 WHERE trade_id=?", (f["id"],))
+        c.commit()
+    c.close()
+    for f in flagged:
+        log.warning("quarantine%s: trade #%d (%s, %s) — %s",
+                    " (dry-run)" if dry_run else "", f["id"], f["asset"],
+                    f["status"], f["reason"])
+    for f in leg_flagged:
+        log.warning("suspect legs%s: trade #%d (%s, %s) — %s",
+                    " (dry-run)" if dry_run else "", f["id"], f["asset"],
+                    f["status"], f["reason"])
+    return {"checked": len(trades), "quarantined": len(flagged),
+            "legs_suspect": len(leg_flagged), "trades": flagged,
+            "leg_trades": leg_flagged, "dry_run": dry_run}
+
+
+def get_performance(window: str = "all", *, include_backtest: bool = False) -> dict:
     """
     Aggregate stats over closed trades.
+
+    Audit fix (2026-07-14): the headline is the LIVE paper book. 374 of the 384
+    closed rows were `source='walkforward'` — backtest tapes replayed into the
+    same table at 4k–22k bbl notionals — and they drowned the actual paper
+    trades (10 rows, net −$4) under a "+$110k, best trade +$16.7k" banner.
+    Backtest replays are excluded unless `include_backtest=True`; they remain
+    visible in list_positions and the walk-forward report is their honest home.
 
     Returns
     -------
@@ -614,13 +771,19 @@ def get_performance(window: str = "all") -> dict:
       equity_curve  : [{trade_id, closed_at, cum_pnl}, ...]
     }
     """
+    # Audit fixes (2026-07-14): quarantined rows (corrupt stored prices) are
+    # excluded from every aggregate; the equity curve is ordered by CLOSE TIME
+    # (the old ORDER BY id accumulated cum_pnl in open order but plotted it
+    # against closed_at — the curve literally went backwards in time, and max-DD
+    # was computed over that non-chronological sequence).
     c = _conn()
-    rows = c.execute("""
+    src_filter = "" if include_backtest else " AND COALESCE(source,'') != 'walkforward'"
+    rows = c.execute(f"""
         SELECT id, asset, direction, entry_price, exit_price, realised, realised_pct,
                opened_at, closed_at, close_reason
           FROM paper_trades
-         WHERE status='CLOSED' AND realised IS NOT NULL
-         ORDER BY id ASC
+         WHERE status='CLOSED' AND realised IS NOT NULL AND quarantined=0{src_filter}
+         ORDER BY closed_at ASC, id ASC
     """).fetchall()
     c.close()
 

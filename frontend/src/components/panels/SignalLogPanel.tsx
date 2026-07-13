@@ -179,11 +179,27 @@ export function SignalLogPanel() {
               <span className="text-[11px] font-mono text-text-secondary">
                 {data.n ?? signals.length} signal(s) · {data.n_open ?? 0} open
               </span>
-              {signals[0]?.feed_as_of && (
-                <span className="text-[10px] text-text-tertiary font-mono">
-                  latest feed @ {signals[0].feed_as_of}
-                </span>
-              )}
+              {signals[0]?.feed_as_of && (() => {
+                // Audit fix (2026-07-14): say STALE FEED loudly when the latest
+                // bar is old — a pulsing "live" chip over a frozen tape was the
+                // dashboard's worst lie.
+                const t = Date.parse(signals[0].feed_as_of.replace(' ', 'T'));
+                const ageH = Number.isFinite(t) ? (Date.now() - t) / 3_600_000 : 0;
+                const stale = ageH > 2;
+                return stale ? (
+                  <span
+                    className="text-[10px] font-mono px-2 py-0.5 rounded border"
+                    style={{ background: 'var(--neut-soft)', color: 'var(--neut, #eab308)', borderColor: 'var(--neut-ring)' }}
+                    title={`Latest feed bar is ${(ageH / 24).toFixed(1)} days old — signals below were computed on that tape, not today's market.`}
+                  >
+                    ⚠ FEED STALE — latest bar {signals[0].feed_as_of} ({(ageH / 24).toFixed(1)}d old)
+                  </span>
+                ) : (
+                  <span className="text-[10px] text-text-tertiary font-mono">
+                    latest feed @ {signals[0].feed_as_of}
+                  </span>
+                );
+              })()}
             </div>
             {actMsg && <div className="text-[10px] text-text-tertiary truncate max-w-[55%]">{actMsg}</div>}
           </div>
