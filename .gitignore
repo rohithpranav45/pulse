@@ -62,3 +62,7 @@ backend/data/research/news_impact/geo_live_events.json
 
 # Never commit dependencies
 node_modules/
+
+# Fetched data caches — regenerated on demand, never committed
+backend/cache/
+backend/data/cache/
