@@ -122,7 +122,10 @@ def test_registry_grades_rbob_crack():
 
 
 def test_real_feed_smoke_if_present():
-    if not pf.available():
-        pytest.skip("OHLCV products feed not visible")
+    # Audit fix (2026-07-14): guard on RBOB specifically — the frozen snapshot
+    # ships CL/HO/LCO/LGO but RBOB's history is desk-only, so the generic
+    # available() guard passed off-desk while the RBOB assert failed.
+    if not pf.available("RBOB"):
+        pytest.skip("RBOB OHLCV feed not visible (desk-only history)")
     rb = pf.daily_curve("RBOB", 1)
     assert rb is not None and rb["c1"].dropna().gt(0).all()

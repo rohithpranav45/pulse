@@ -20,8 +20,11 @@ The mentor wants ONE recommendation per day — ranker picks among all 6.
 
 from __future__ import annotations
 
+import logging
 import os, sys
 import pandas as pd
+
+log = logging.getLogger("pulse.research.spread_universe")
 
 _BACKEND = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if _BACKEND not in sys.path:
@@ -78,17 +81,35 @@ def _load_settlements(product: str) -> pd.DataFrame | None:
 
 
 def current_leg_prices(spread: str) -> dict[str, float]:
-    """Latest outright settlements for each contract referenced by `spread`."""
+    """Latest outright settlements for each contract referenced by `spread`.
+
+    Audit fix (2026-07-14): the latest row is cross-checked against the trailing
+    10-session median per contract. A poisoned frame once wrote ~$98 leg entries
+    into the paper book while WTI traded ~$65 — a >30% jump vs the recent median
+    on a daily settle tape is data corruption, not a market move, so we refuse
+    to serve leg prices (the trade opens leg-less) rather than book garbage.
+    """
     if spread not in LEG_DEFS:
         return {}
     df = _load_settlements(_product(spread))
     if df is None or df.empty:
         return {}
     latest = df.iloc[-1]
+    recent = df.tail(11).iloc[:-1]          # up to 10 sessions before the latest
     out: dict[str, float] = {}
     for contract, _ in LEG_DEFS[spread]:
-        if contract in latest.index:
-            out[contract] = float(latest[contract])
+        if contract not in latest.index:
+            continue
+        px = float(latest[contract])
+        if len(recent) >= 3 and contract in recent.columns:
+            med = float(recent[contract].dropna().median())
+            if med > 0 and abs(px - med) / med > 0.30:
+                log.warning(
+                    "current_leg_prices(%s): latest %s=%.2f deviates >30%% from "
+                    "10-session median %.2f — refusing leg prices (corrupt frame?)",
+                    spread, contract, px, med)
+                return {}
+        out[contract] = px
     return out
 
 

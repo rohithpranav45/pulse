@@ -107,10 +107,19 @@ function HeroPick({
   const edge = top.fair_value - top.current; // signed: positive → underpriced
   const edgePct = top.current !== 0 ? (edge / Math.abs(top.current)) * 100 : 0;
 
+  // Audit fix (2026-07-14): "LIVE" is earned by data age, not poll recency.
+  // A SELL chip on 17-day-old data is an artifact, not a signal — past the
+  // cutoff the hero is stamped STALE and the directive band is muted.
+  const staleDays = staleDaysOf(rec.as_of);
+  const isStale = staleDays > 4;
+
   return (
     <Panel
       title="Mission Control · Regime Engine"
-      subtitle={rec.regime ? `Regime ${rec.regime}` : 'live'}
+      subtitle={
+        (rec.regime ? `Regime ${rec.regime}` : 'live') +
+        (isStale ? ` · STALE ${staleDays}d` : '')
+      }
       accent={heroAccent}
       source="signal_engine"
       dataTimestamp={rec.as_of}
@@ -158,7 +167,7 @@ function HeroPick({
             {/* LEFT: the directive in display type */}
             <div className="flex flex-col gap-2 min-w-0">
               <div className="text-[9.5px] font-mono uppercase tracking-[0.34em] text-text-muted">
-                Top conviction · live
+                {isStale ? `Top conviction · as of ${rec.as_of}` : 'Top conviction · live'}
               </div>
               <div className="flex items-baseline gap-3 flex-wrap">
                 <span
@@ -189,6 +198,15 @@ function HeroPick({
                 </span>
                 {rec.regime && (
                   <span className="chip chip-gold uppercase tracking-widest">{rec.regime}</span>
+                )}
+                {isStale && (
+                  <span
+                    className="inline-flex items-center px-2.5 py-1 rounded-md font-mono font-bold text-[10px] tracking-widest border"
+                    style={{ background: 'var(--neut-soft)', color: 'var(--neut, #eab308)', borderColor: 'var(--neut-ring)' }}
+                    title={`Signal computed on ${rec.as_of} data — ${staleDays} days old. Not a live trading signal.`}
+                  >
+                    ⚠ {staleDays}D-OLD DATA — NOT LIVE
+                  </span>
                 )}
               </div>
             </div>

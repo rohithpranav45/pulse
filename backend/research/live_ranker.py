@@ -86,6 +86,26 @@ TUNED_SL_MULT          = 2.5    # stop at entry ± 2.5 × sigma (resid_std / rol
 TUNED_MAX_HOLD_DAYS    = 30     # time-stop in trading days (enforced live by paper_trading.mark_to_market)
 TUNED_EXCLUDED_SPREADS = {"brent_m3_m6", "wti_m3_m6"}  # PF<1 under TP/SL — dropped from the tradeable universe
 
+
+def _cost_gate(spread: str, actual: float, p50: float) -> tuple[bool, float, float]:
+    """
+    Audit fix (2026-07-14) — cost-aware ENTRY economics (live-only layer, part
+    of the tuned-exit rule like TP/SL; the walk-forward gate predicate is
+    deliberately untouched, see gotcha 7).
+
+    The tuned exit takes profit at TP_FRAC × (p50 − entry), so the expected
+    capture on a TP hit is 0.5 × |deviation|. If that capture doesn't clear
+    MIN_EDGE_COST_MULT × the spread's round-trip cost, the trade pays the
+    broker to run stop-loss risk for free (2026-07-13 hero pick: WTI M1-M2
+    TP $0.03 vs RT cost $0.03 — zero net on a win). Such entries are refused.
+
+    Returns (passes, expected_capture, min_edge).
+    """
+    from research.costs import min_edge_for
+    capture  = TUNED_TP_FRAC * abs(float(p50) - float(actual))
+    min_edge = min_edge_for(spread)
+    return capture >= min_edge, round(capture, 4), round(min_edge, 4)
+
 # Phase 2.7 — sizing on the regime leg of the gated blend. Mirrors
 # backend.research.walkforward.SIZING_*.
 SIZING_MODES         = ("full", "half", "kelly")
@@ -531,6 +551,10 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
                 else:
                     direction = "NEUTRAL"; target = stop = None
 
+                cost_ok, cost_capture, cost_min = _cost_gate(spread, actual, p50)
+                if direction != "NEUTRAL" and not cost_ok:
+                    direction = "NEUTRAL"; target = stop = None
+
                 degraded = bool(health.get("degraded"))
                 if not health["ok"]:
                     direction  = "NEUTRAL"
@@ -570,6 +594,8 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
                     "regime":          regime,
                     "model_health":    health,
                     "model_health_degraded": degraded,
+                    "cost_gate":       {"passed": cost_ok, "expected_capture": cost_capture,
+                                        "min_edge": cost_min},
                 }
 
         # ── Legacy per-cell pooled/composite candidate (skipped when in global)
@@ -596,7 +622,12 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
 
             z_score = deviation / resid_std if resid_std > 0 else 0.0
             inside_band = (p10 <= actual <= p90)
-            used_r2 = r2_oos if (r2_oos is not None and r2_oos > 0) else max(r2_in, 0.0)
+            # Audit fix (2026-07-14): confidence is floored at OOS R² like the
+            # global path. The old fallback substituted IN-SAMPLE R² whenever
+            # OOS R² was ≤ 0 — the exact cells with NO out-of-sample predictive
+            # power were the ones getting their confidence propped up (a cell
+            # with all-negative CV R² was serving a 29%-confidence hero pick).
+            used_r2 = max(r2_oos or 0.0, 0.0)
             confidence = (
                 min(abs(z_score), 3.0) / 3.0
                 * min(used_r2, 1.0)
@@ -630,6 +661,11 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
                 target    = round(actual + TUNED_TP_FRAC * (p50 - actual), 3)  # halfway to fair
                 stop      = round(actual - TUNED_SL_MULT * resid_std, 3)
             else:
+                direction = "NEUTRAL"
+                target = stop = None
+
+            cost_ok, cost_capture, cost_min = _cost_gate(spread, actual, p50)
+            if direction != "NEUTRAL" and not cost_ok:
                 direction = "NEUTRAL"
                 target = stop = None
 
@@ -671,6 +707,8 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
                 "recommendation_source": "regime",
                 "regime":          regime,
                 "model_health":    health,
+                "cost_gate":       {"passed": cost_ok, "expected_capture": cost_capture,
+                                    "min_edge": cost_min},
             }
 
         # ── 2. Compute the rolling-z baseline candidate (always, for gated mode)
@@ -680,13 +718,18 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
             base = _baseline_rolling_signal(spreads[spread], live_actual=live_base)
             if base is not None:
                 b_actual = base["actual"]
-                if base["direction"] == "SELL":
+                b_direction = base["direction"]
+                if b_direction == "SELL":
                     b_target = round(b_actual + TUNED_TP_FRAC * (base["p50"] - b_actual), 3)  # halfway to mean
                     b_stop   = round(b_actual + TUNED_SL_MULT * base["sigma"], 3)
-                elif base["direction"] == "BUY":
+                elif b_direction == "BUY":
                     b_target = round(b_actual + TUNED_TP_FRAC * (base["p50"] - b_actual), 3)  # halfway to mean
                     b_stop   = round(b_actual - TUNED_SL_MULT * base["sigma"], 3)
                 else:
+                    b_target = b_stop = None
+                b_cost_ok, b_capture, b_min_edge = _cost_gate(spread, b_actual, base["p50"])
+                if b_direction != "NEUTRAL" and not b_cost_ok:
+                    b_direction = "NEUTRAL"
                     b_target = b_stop = None
                 # Confidence scaling that mirrors the regime path: |z|/3 ×
                 # band-confidence ≈ 0.5 (1σ band), × sqrt window.
@@ -699,7 +742,7 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
                     "spread":          spread,
                     "label":           LABELS[spread],
                     "description":     DESCRIPTIONS[spread],
-                    "direction":       base["direction"],
+                    "direction":       b_direction,
                     "current":         round(b_actual, 3),
                     "fair_value":      round(base["fair"], 3),
                     "band_low":        round(base["p10"], 3),
@@ -722,6 +765,8 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
                     "competition":     {},
                     "recommendation_source": "baseline",
                     "regime":          regime,
+                    "cost_gate":       {"passed": b_cost_ok, "expected_capture": b_capture,
+                                        "min_edge": b_min_edge},
                 }
 
         # ── 3. Pick the winner per spread (or the only one we have)
@@ -840,7 +885,9 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
             # Phase 8 per-spread gate
             "per_spread_gate":  (sorted(perspread_enabled) if perspread_enabled is not None else None),
             "per_spread_method": perspread_method,
-            "method":           "Pooled signal taken only when regime_pooled=='BACK' AND winner_model ∈ {Lasso, Huber} AND |z|≥0.5σ; else 252d rolling-z baseline.",
+            "method":           (f"Pooled signal taken only when regime_pooled=='{GATED_REGIME}' "
+                                 f"AND winner_model ∈ {sorted(GATED_WINNERS)} AND "
+                                 f"|z|≥{GATED_Z_THRESHOLD}σ; else 252d rolling-z baseline."),
             # Phase 2.7 sizing context
             "size_mode":        size_mode,
             "kelly_map":        kelly_map if size_mode == "kelly" else None,
@@ -880,7 +927,9 @@ def get_recommendation(*, force_mode: str | None = None, force_gated: bool | Non
             "sl_mult":          TUNED_SL_MULT,
             "max_hold_days":    TUNED_MAX_HOLD_DAYS,
             "excluded_spreads": sorted(TUNED_EXCLUDED_SPREADS),
-            "note":             "TP halfway to fair · SL 2.5σ · 30d time-stop · M3-M6 dropped (Phase 2.9.1)",
+            "note":             ("TP halfway to fair · SL 2.5σ · 30d time-stop · M3-M6 dropped "
+                                 "(Phase 2.9.1) · entry refused when expected TP capture < 2× RT cost "
+                                 "(audit 2026-07-14)"),
         },
         "top":                   top,
         "ranked":                ranked,

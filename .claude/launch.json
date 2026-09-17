@@ -2,6 +2,12 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "pulse",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["start.py"],
+      "port": 5000
+    },
+    {
       "name": "pulse-dashboard",
       "runtimeExecutable": "node",
       "runtimeArgs": ["frontend/node_modules/vite/bin/vite.js", "frontend", "--host", "127.0.0.1", "--port", "8080"],

@@ -67,6 +67,35 @@ def _prior(factor: str) -> tuple[float, str]:
     return FACTOR_PRIORS.get(factor, (0.20, "unclassified driver — small default prior"))
 
 
+# Audit fix (2026-07-14) — the measured-beta gate is stricter than |t|≥T on
+# n≥N. With ~9 factors × 3 horizons × 2 regimes ≈ 54 implicit hypotheses, a
+# |t|≥2 screen alone WILL promote outlier-driven fits (GEOPOLITICAL was serving
+# basis=MEASURED at t=+3.0 with an 18% aligned hit rate — the slope was carried
+# by a few clustered war-headline days, not a directional edge). A measured
+# beta must now ALSO:
+#   • have an aligned hit rate ≥ 50% (the direction it implies must actually
+#     win at least a coin flip on the tape it was fitted on), and
+#   • be POSITIVE — the signed crude-polarity lexicon defines +1 as bullish,
+#     so a negative beta says "bullish headlines → price falls", which on this
+#     corpus is a sign of confounding, not an edge. Fail closed to the prior.
+MEASURED_MIN_HIT = 0.50
+
+
+def _measured_ok(row: dict) -> tuple[bool, str | None]:
+    """(passes, reason-if-not). Fail-closed: missing fields → prior."""
+    if not row or not row.get("significant"):
+        return False, None                      # normal not-significant path
+    beta = row.get("beta_brent_pct")
+    if beta is None or float(beta) <= 0:
+        return False, f"beta {beta} wrong-signed vs the sentiment lexicon"
+    hit = row.get("aligned_hit_rate")
+    if hit is None:
+        return False, "no aligned hit-rate on record"
+    if float(hit) < MEASURED_MIN_HIT:
+        return False, f"aligned hit rate {float(hit):.0%} < {MEASURED_MIN_HIT:.0%}"
+    return True, None
+
+
 def _betas_index(betas: dict | None, horizon: str | None = None) -> dict:
     """Map factor -> its row from the cached betas table at the headline horizon."""
     if betas is None:
@@ -111,20 +140,25 @@ def score_headline(title: str,
     measured_beta = row.get("beta_brent_pct")
     t = row.get("t_brent")
     n = int(row.get("n", 0) or 0)
-    significant = bool(row.get("significant"))
+    measured_pass, gate_reason = _measured_ok(row)
 
-    if significant and measured_beta is not None:
+    if measured_pass and measured_beta is not None:
         beta = float(measured_beta)
         basis = "measured"
-        rationale = (f"measured beta {beta:+.2f}%/unit (t={t}, n={n}) — "
+        rationale = (f"measured beta {beta:+.2f}%/unit (t={t}, n={n}, "
+                     f"hit {float(row.get('aligned_hit_rate') or 0):.0%}) — "
                      f"{factor} headlines historically moved Brent this way")
     else:
         mag, why = _prior(factor)
         beta = float(mag)               # priors are stated as positive magnitudes
         basis = "prior"
-        rationale = (f"prior {beta:.2f}%/unit ({why}); "
-                     + ("not enough significant evidence yet"
-                        if factor != "NOISE" else "treated as non-driver"))
+        if gate_reason:                 # significant on t, but failed the quality gate
+            rationale = (f"prior {beta:.2f}%/unit ({why}); measured beta rejected — "
+                         f"{gate_reason}")
+        else:
+            rationale = (f"prior {beta:.2f}%/unit ({why}); "
+                         + ("not enough significant evidence yet"
+                            if factor != "NOISE" else "treated as non-driver"))
 
     expected = round(beta * sentiment, 3)
     if factor == "NOISE" or abs(expected) < 0.05 or sentiment == 0:
@@ -259,20 +293,23 @@ def factor_table_view(betas: dict | None = None, horizon: str | None = None) -> 
     rows = []
     for factor, label in FACTORS.items():
         row = idx.get(factor) or {}
-        significant = bool(row.get("significant"))
+        measured_pass, gate_reason = _measured_ok(row)
         prior_mag, prior_note = _prior(factor)
+        if gate_reason:
+            # |t| cleared but the quality gate didn't — say why on the table
+            prior_note = f"{prior_note} · measured beta rejected: {gate_reason}"
         rows.append({
             "factor": factor,
             "label": label,
             "n": int(row.get("n", 0) or 0),
-            "basis": "measured" if significant else "prior",
-            "beta_pct": row.get("beta_brent_pct") if significant else prior_mag,
+            "basis": "measured" if measured_pass else "prior",
+            "beta_pct": row.get("beta_brent_pct") if measured_pass else prior_mag,
             "t_stat": row.get("t_brent"),
             "r2": row.get("r2_brent"),
             "beta_wti_pct": row.get("beta_wti_pct"),
             "aligned_mean_move": row.get("aligned_mean_move"),
             "aligned_hit_rate": row.get("aligned_hit_rate"),
-            "significant": significant,
+            "significant": measured_pass,
             "prior_note": prior_note,
             "by_curve": row.get("by_curve") or {},
         })

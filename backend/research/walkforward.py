@@ -203,15 +203,10 @@ SIZING_KELLY_MIN_N   = 5
 # AGGREGATION step only — model training/CV is unaffected, so no retraining is
 # required when the cost model changes. Live inference does not subtract cost
 # at trade entry; the cost-aware NET metric exists for backtest reporting.
-COST_PER_SPREAD_RT = {
-    "brent_m1_m2":   0.030,
-    "brent_m3_m6":   0.040,
-    "brent_fly_123": 0.050,
-    "wti_m1_m2":     0.030,
-    "wti_m3_m6":     0.040,
-    "wti_fly_123":   0.050,
-}
-COST_DEFAULT_RT = 0.040  # fallback when spread isn't in the table
+# Audit fix (2026-07-14): the table now lives in research.costs (single source
+# of truth, shared with ab_test + live_ranker). Module-level names preserved so
+# every existing consumer and the mirror invariant test keep working unchanged.
+from research.costs import COST_PER_SPREAD_RT, COST_DEFAULT_RT  # noqa: F401
 
 
 def _cost_for(t: dict) -> float:

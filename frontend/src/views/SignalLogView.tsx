@@ -22,8 +22,10 @@ export function SignalLogView() {
           on the tuned exit rule (TP halfway-to-fair · SL 2.5σ · 30-day time-stop). Read-only analysis
           tracking, not order entry.</>}
         badges={
+          /* Audit fix (2026-07-14): no unconditional pulsing "Live feed" claim —
+             the panel below shows the actual feed timestamp and flags staleness. */
           <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-gold/30 bg-gold/5 text-gold text-[9px] font-mono uppercase tracking-wider">
-            <span className="w-1.5 h-1.5 rounded-full bg-gold animate-pulse-soft" /> Live feed
+            15-min bar feed
           </span>
         }
       />
