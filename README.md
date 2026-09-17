@@ -1,158 +1,173 @@
 # PULSE
 
-**An energy trading terminal that tells you when it doesn't know.**
+### Most trading dashboards are built to look right. This one is built to catch itself being wrong.
 
-PULSE ingests roughly 35 market and fundamental data sources, runs a regime-conditional
-model over crude calendar spreads, and serves the result as a live dashboard with a
-paper-trading book attached. It was built over a trading-desk internship at Futures First.
+PULSE is an energy trading terminal — 35 data feeds, a regime-conditional model over crude
+calendar spreads, a live paper book, and a React front end. Built over a trading-desk
+internship at Futures First.
 
-The interesting part isn't the dashboard. It's that the engine was honestly graded — and
-where the models lost to a simple baseline, the code says so and trades the baseline instead.
+It also spent a week trying to lie to me, and most of what follows is about how I caught it.
 
-🔗 **[Live demo](https://rohithpranav45-pulse.hf.space)** · 📄 **[Methodology](docs/report/PULSE_One_Page_Report.pdf)**
-
----
-
-## Quick start
+**[Live demo](https://rohithpranav45-pulse.hf.space)** · **[Methodology](docs/report/PULSE_One_Page_Report.pdf)** · **[Full project state](docs/PROJECT_STATE.md)**
 
 ```bash
-pip install -r requirements.txt
-python start.py
+pip install -r requirements.txt && python start.py   # → http://127.0.0.1:5000
 ```
 
-Open http://127.0.0.1:5000.
-
-That's it for the dashboard. The quant engine additionally needs the `/Data` parquet lake,
-the trained model pickles, and a `.env` with API keys — none of which are in version control.
-See [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md) §2 and §5 to restore or rebuild them.
-
 ---
 
-## What it does
+## The result I didn't want
 
-**Reads the market.** ~35 sources — ICE and CME futures curves, EIA inventories, CFTC
-positioning, FRED macro series, freight, news wires — normalised into one cache with
-per-source health and provenance tracking. Stale data is shown as stale, never silently
-carried forward.
+Expanding-window walk-forward. 2018–2026. 34 quarterly refits. Net of costs.
 
-**Models crude spreads.** Six instruments (Brent and WTI × M1-M2, M3-M6, butterfly) across a
-three-axis regime grid: curve shape × inventory level × volatility. Seven models compete per
-regime cell — Ridge, Lasso, ElasticNet, Huber, XGBoost, LightGBM, CatBoost — and the data
-picks the winner.
-
-**Takes positions.** A paper book opens the ranked, decorrelated selection during market
-hours and closes on a tuned exit rule (take-profit at halfway to fair value, 2.5σ stop,
-30-day time stop). Correlated same-direction trades are filtered out so the book never
-doubles up on one bet.
-
-**Grades itself.** Every claim on the dashboard traces to a named source and a measured
-number. Where the evidence is thin, the interface says "prior", not a fabricated figure.
-
----
-
-## Results
-
-Validated on an expanding-window walk-forward, 2018–2026, 34 quarterly refits, net of
-transaction costs.
-
-| Strategy | NET Sharpe |
+| | NET Sharpe |
 |---|---|
-| Regime-unaware baseline | **+0.372** |
-| Per-spread gated regime | +0.374 |
+| **Regime-unaware baseline** | **+0.372** |
 | Global model, regime-as-feature | +0.380 |
+| Per-spread gated regime | +0.374 |
 | Pooled regime cells | +0.293 |
 | Data-driven HMM regimes | +0.289 |
+| Vol-targeted book | +0.198 |
 
-**The headline finding is negative, and that's the point.** Regime conditioning did not beat
-a simple rolling z-score baseline. Splitting the data by regime, softening the thresholds,
-learning the boundaries from an HMM, and vol-targeting the book were each tried and each
-failed to lift the number.
+The entire thesis of this project is that crude spreads behave differently across curve,
+inventory and volatility regimes. I built a 27-cell regime grid, ran seven models in
+competition inside every cell, and tested it properly.
 
-What did work was applying regime conditioning *selectively*. The per-spread gate enables it
-only on the two instruments where it measurably earned its place — WTI M1-M2 and the WTI
-butterfly — and routes the other four to the baseline. That brought the regime book to
-parity, which is an honest result rather than an impressive one.
+**A rolling z-score with no regime awareness beat all of it.**
 
-Two other measured edges came out of the same discipline:
+So I tried to break that result. Collapsed the grid and fed regime as a feature — tied.
+Softened the hard thresholds into logistic transitions — tied. Threw out the trader's
+thresholds entirely and learned the boundaries with an HMM — worse. Vol-targeted the book —
+halved the drawdown and gave up a third of the Sharpe.
 
-- **Inventories bite in a glut, not when tight.** A crude surprise predicts release-day
-  direction 75–81% of the time when stocks are high, and ~52% — a coin flip — in today's
-  backwardated market. So the framework abstains on crude and redirects to gasoline, which
-  holds a real 57% edge in exactly this regime.
-- **Geopolitical supply shocks show up in distillate, not flat price.** A chokepoint
-  disruption firms the ULSD crack 57% of the time over five days. Crude flat price spikes on
-  day one and reverts by day five — the risk premium round-trips while physical tightness
-  persists.
+Five attempts. The simple thing kept winning.
+
+What finally worked was giving up on regime conditioning *everywhere* and asking where it had
+actually earned its place. The per-spread gate enables it on exactly two instruments — WTI
+M1-M2 and the WTI butterfly — and routes the other four to the baseline. That closed the gap
+from +0.298 to +0.374.
+
+Parity. Not a win. The README says so because the code does too.
 
 ---
 
-## Architecture
+## Three times the system caught itself lying
+
+**The paper book was reporting +$110,179.**
+
+It wasn't. 374 of those rows were walk-forward replay trades sized at 4,000–22,000 barrels,
+sitting in the same table as the real book and drowning it. The actual live paper book was
+**10 trades and −$4.26**. The headline now defaults to the live book only; the replay view is
+behind an explicit flag.
+
+**The win rate said 43.8% next to a breakdown reading 166W / 69L.**
+
+Both were computed from the same table. The denominator included 144 break-even scratches
+that the numerator excluded. Win rate is now measured over decisive trades — **70.6%** — and
+scratches are reported as their own number instead of quietly dragging the headline down.
+
+**A news factor had a t-statistic of 3.0 and got demoted anyway.**
+
+GEOPOLITICAL cleared every significance bar I had set. It also had an 18% directional hit
+rate — the t-stat came from a handful of outlier war days, not a real edge. The gate now
+requires a positive beta *and* a hit rate above 50% before it will call anything "measured."
+The factor falls back to a labelled prior, with the rejection reason shown on the dashboard.
+
+There was also a thread race in the DuckDB layer that corrupted a cached frame at boot and
+killed the regime engine with `KeyError c6` until someone restarted the process — silently
+zeroing the A/B tick in the meantime. Thread-local cursors and validate-before-cache fixed it.
+An inventory endpoint that hung for over 120 seconds now answers in 0.12.
+
+None of this is in the repo because it went well. It is here because a system that reports its
+own P&L has every incentive to flatter itself, and the only defence is to go looking.
+
+---
+
+## Where the edges actually are
+
+Two survived honest grading.
+
+**Inventories bite in a glut, not when the market is tight.** A crude surprise predicts
+release-day direction 75–81% of the time when stocks are high (p < 0.01). In today's
+backwardated market it is 52% — a coin flip. So the framework abstains on crude and redirects
+to gasoline, which holds a real 57% edge in exactly the regime where crude is noise.
+
+Most inventory models will hand you a crude call every Wednesday. This one tells you when not
+to take it.
+
+**Geopolitical shocks show up in distillate, not flat price.** A chokepoint disruption firms
+the ULSD crack 57% of the time over five days. Crude flat price spikes on day one and reverts
+by day five — the risk premium round-trips while the physical tightness persists. Trade the
+crack, fade the spike.
+
+Single episode, overlapping windows, optimistic p-values. Labelled as such wherever it appears.
+
+---
+
+## What is in it
 
 ```
 backend/
 ├── app.py           Flask API — 73 endpoints + scheduler
-├── data_lake.py     DuckDB/parquet loaders over the desk feed
+├── data_lake.py     DuckDB over a 3.5 GB parquet lake
 ├── fetchers/        ~30 data-source modules
-├── models/          fair value · signal engine · pattern analogs
-├── research/        the quant engine (below)
-└── schemas/         Pydantic models → generated TypeScript types
+├── research/        the engine
+└── schemas/         Pydantic → generated TypeScript
 
-frontend/            React 18 + Vite + Tailwind → builds into backend/static
+frontend/            React 18 · Vite · Tailwind
 tests/               294 tests
-docs/                methodology, roadmap, phase history
-deploy/              Docker + Caddy, and the Hugging Face Space
 ```
-
-Inside `backend/research/`, the pieces worth knowing:
 
 | Module | Role |
 |---|---|
-| `regimes.py` | The 27-cell composite and 3-cell pooled regime grids |
-| `features.py` | Point-in-time feature matrix — no look-ahead |
-| `models.py` | Seven-model per-cell competition with quantile bands |
-| `live_ranker.py` | Classify → predict → rank, applying the tuned exit rule |
-| `gate_config.py` | Per-spread gate — the single source of truth, imported by both live and backtest so they can't drift |
-| `walkforward.py` | Expanding-window backtest; writes the trade tapes |
-| `vol_target.py` | Portfolio vol-targeting over the gated tape |
-| `auto_desk.py` | Reconciles the paper book to the live recommendation |
+| `features.py` | Point-in-time feature matrix. No look-ahead, and the tests prove it. |
+| `models.py` | Seven models compete per regime cell — Ridge, Lasso, ElasticNet, Huber, XGB, LightGBM, CatBoost. The data picks. |
+| `gate_config.py` | The gate rule, defined once. Imported by both the live ranker and the backtest so they physically cannot diverge. |
+| `walkforward.py` | Expanding-window backtest. Writes the trade tapes every number here comes from. |
+| `live_ranker.py` | Classify → predict → rank, with a cost gate that refuses any entry whose take-profit does not clear twice the round-trip cost. |
 
-The backend↔frontend seam is type-checked end to end: Pydantic response models generate the
-TypeScript types, so a schema change that breaks the UI fails at compile time.
+That last one is worth a sentence. On 13 July the engine's top pick was WTI M1-M2 with a $0.03
+take-profit against a $0.03 round-trip cost — a trade that nets zero *when it wins*. The gate
+blocks it now.
 
 ---
 
 ## Testing
 
 ```bash
-python -m pytest tests/
+python -m pytest tests/    # 294 tests
 ```
 
-294 tests. Most are hermetic — they build synthetic frames rather than touching the data
-lake, so they run anywhere.
+Most are hermetic — synthetic frames, no data lake, runs anywhere.
 
-A handful are load-bearing invariants rather than unit tests. The gate rule is mirrored
-between the live ranker and the backtest, and `test_invariants.py` asserts the two stay
-identical. If someone tunes the live gate without re-running the walk-forward, the suite
-fails. That's deliberate.
+A few are not tests at all, they are tripwires. The gate rule is mirrored between the live
+engine and the backtest, and `test_invariants.py` asserts the two stay bit-for-bit identical.
+Tune the live gate without re-running the walk-forward and the suite fails. That is the point.
+
+The backend↔frontend seam is type-checked end to end: Pydantic response models generate the
+TypeScript, so a schema change that would break the UI fails at compile time instead of in the
+browser.
 
 ---
 
-## Documentation
+## Reading further
 
-| Document | What's in it |
+| | |
 |---|---|
-| [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md) | Current state, how to run, architecture, gotchas. Start here. |
-| [`docs/ROADMAP.md`](docs/ROADMAP.md) | What's next |
-| [`docs/PHASE_HISTORY.md`](docs/PHASE_HISTORY.md) | Sprint-by-sprint log, including the experiments that failed |
+| [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md) | Current state, architecture, and every gotcha worth knowing. Start here. |
+| [`docs/PHASE_HISTORY.md`](docs/PHASE_HISTORY.md) | Sprint by sprint — including all five failed attempts to beat the baseline |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | What is next |
 | [`deploy/README.md`](deploy/README.md) | Deployment runbook |
 
 ---
 
-## A note on the numbers
+## The caveats, up front
 
-Every figure above is reproducible from the walk-forward report in the repo. Where a result
-is optimistic, it's labelled: the tuned exit rule's win rate is in-sample, the geopolitical
-event study covers a single episode with overlapping windows, and WTI settlements before 2021
-are synthesised from one-minute mids rather than real daily settles.
+The tuned exit rule's 82.9% win rate is in-sample; out-of-sample it is ~74–75%, and the Sharpe
+and profit factor should be read as optimistic. The geopolitical event study covers one
+episode with overlapping forward windows, so trust the direction and not the p-value. WTI
+settlements before 2021 are synthesised from one-minute mids rather than real daily settles,
+and anything derived from them is flagged `ESTIMATE` in the interface.
 
-Those caveats are in the code too, not just here.
+Every one of those is in the code as well as here. A number you cannot source is a number I
+do not ship.
