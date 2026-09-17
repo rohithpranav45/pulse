@@ -14,7 +14,7 @@ is `CO` (ICE Brent) or `CL` (CME WTI) and TENOR is a futures month code +
 This module turns that raw per-contract feed into the *same* spread instruments
 the regime engine already trades (spread_universe.INSTRUMENTS) — but built from
 **real** contract prices instead of the historical daily settlements (and, for
-WTI, instead of the synthetic 1-min-mid estimate; see CLAUDE.md gotcha 11).
+WTI, instead of the synthetic 1-min-mid estimate; see PROJECT_STATE.md gotcha 11).
 
 The mapping that makes this work: the engine's legs are nearby-ordinal
 (`c1`=front, `c2`=2nd, `c3`=3rd, `c6`=6th, `c12`=12th). We list the live
@@ -63,7 +63,7 @@ log = logging.getLogger("pulse.research.live_feed")
 
 # Default office-share location of the recorder output (the path the mentor
 # shared). Override with the PULSE_LIVE_FEED_DIR env var (e.g. on the Oracle
-# box, which can't see the I: share — see CLAUDE.md / the deploy notes).
+# box, which can't see the I: share — see PROJECT_STATE.md / the deploy notes).
 _DEFAULT_FEED_DIR = r"I:\Public\Summer Interns Energy\DB"
 
 # Futures month codes → calendar month number.

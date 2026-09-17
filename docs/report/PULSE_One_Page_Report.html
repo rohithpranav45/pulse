@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>PULSE — Internship Summary Report</title>
+<style>
+  @page { size: A4 portrait; margin: 6mm 7.5mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body {
+    font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    color: #171c26; font-size: 7.95px; line-height: 1.31; background: #fff;
+    width: 196mm; margin: 0 auto;
+  }
+  .amber { color: #b8801a; } .accent { color: #0e6ba8; } .muted { color: #5c6473; }
+  b, strong { color: #0a1018; }
+  .pos { color: #1a7a4a; font-weight: 700; } .neg { color: #b5382e; font-weight: 700; }
+
+  header { display: flex; justify-content: space-between; align-items: flex-end;
+    border-bottom: 2.2px solid #0a1018; padding-bottom: 4px; margin-bottom: 4px; }
+  .title .sub { font-size: 8px; color: #b8801a; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; }
+  .title h1 { font-size: 20px; letter-spacing: 1.4px; color: #0a1018; font-weight: 800; }
+  .title .tag { font-size: 7.3px; color: #5c6473; margin-top: .5px; }
+  .who { text-align: right; font-size: 7px; color: #34404f; line-height: 1.35; }
+  .who b { font-size: 8.3px; }
+
+  .metrics { display: flex; gap: 3.5px; margin-bottom: 5px; }
+  .metric { flex: 1; border: 0.7px solid #d5dae2; border-top: 2px solid #b8801a;
+    padding: 2.6px 3px; background: #fafbfc; border-radius: 2px; text-align:center; }
+  .metric .n { font-size: 11.5px; font-weight: 800; color: #0a1018; line-height: 1; }
+  .metric .l { font-size: 5.85px; color: #5c6473; text-transform: uppercase; letter-spacing: .15px; margin-top: 1.8px; }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .col { display: flex; flex-direction: column; gap: 5px; }
+  section { break-inside: avoid; }
+  h2 { font-size: 8.4px; text-transform: uppercase; letter-spacing: .3px; color: #0a1018;
+    border-bottom: 1px solid #cdd3db; padding-bottom: 1.2px; margin-bottom: 2.6px;
+    display: flex; align-items: center; gap: 3.5px; }
+  h2 .num { background: #0a1018; color: #fff; font-size: 6.4px; font-weight: 700; padding: .6px 3px; border-radius: 2px; }
+  p { margin-bottom: 2.1px; }
+  ul { list-style: none; } li { padding-left: 7px; position: relative; margin-bottom: 1.5px; }
+  li::before { content: "▪"; position: absolute; left: 0; color: #b8801a; font-size: 5.5px; top: 1.5px; }
+  .k { font-weight: 700; color: #0a1018; }
+  .mono { font-family: "Consolas","Courier New",monospace; }
+
+  table { width: 100%; border-collapse: collapse; margin: 2px 0; font-size: 7.05px; }
+  th { background: #0a1018; color: #fff; text-align: left; padding: 1.7px 4px; font-weight: 600; font-size: 6.7px; }
+  td { padding: 1.6px 4px; border-bottom: 0.5px solid #e3e7ec; }
+  tr:nth-child(even) td { background: #f7f8fa; }
+  td.r, th.r { text-align: right; font-family: "Consolas","Courier New",monospace; }
+  .perf td { font-size: 7.3px; }
+  .perf td:last-child { text-align: right; font-family: "Consolas","Courier New",monospace; font-weight: 700; color:#0a1018; }
+  .hi td:first-child { font-weight: 700; }
+  .star td { background: #eef6f0 !important; }
+  .star td:first-child { font-weight: 700; }
+
+  .insight { background: #fbf7ef; border-left: 2px solid #b8801a; padding: 3px 5px; border-radius: 0 2px 2px 0; }
+  .insight li::before { content: "→"; color: #b8801a; font-weight: 700; font-size: 6.8px; }
+  .chip { display: inline-block; background: #eef1f5; border: 0.5px solid #d5dae2; border-radius: 2px;
+    padding: .5px 3.5px; margin: 1px 1.6px 1px 0; font-size: 6.5px; color: #34404f; }
+  .lead { font-size: 7.6px; color: #24303f; margin-bottom: 3px; }
+  .lead b { color: #0a1018; }
+
+  .band { border: 0.8px solid #d5dae2; border-top: 2px solid #0a1018; border-radius: 2px;
+    padding: 4px 6px; margin-top: 6px; background: #fafbfc; }
+  .band h2 { border: none; margin-bottom: 2px; }
+  .two { display: grid; grid-template-columns: 1.12fr 1fr; gap: 10px; }
+  footer { margin-top: 5px; border-top: 1.3px solid #0a1018; padding-top: 3px;
+    display: flex; justify-content: space-between; font-size: 6.4px; color: #5c6473; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="title">
+    <div class="sub">Futures First · Energy Desk — Internship Summary</div>
+    <h1>PULSE</h1>
+    <div class="tag">A live oil-trading terminal: market data · price models · inventory &amp; news signals · an automated paper-trading desk</div>
+  </div>
+  <div class="who">
+    <b>Rohith Pranav</b><br>Quantitative Research &amp; Strategy<br>
+    <span class="muted">Live:</span> rohithpranav45-pulse.hf.space<br>
+    <span class="muted">02 Jul 2026</span>
+  </div>
+</header>
+
+<p class="lead">Over the internship I designed and built <b>PULSE</b> from the ground up — a complete oil-trading research terminal with a live dashboard. It pulls in <b>~35 data feeds</b> (prices, forward curves, inventories, positioning, macro and news), learns what each oil <b>spread</b> (the price gap between two futures months) should be worth in the current market, and trades the difference. On top of that sit two more signal engines — one that <b>predicts how prices react to the weekly US oil-inventory report</b>, and one that <b>reads geopolitical news and works out which oil prices it will move</b> — all shown across a 8-tab dashboard and wired into a <b>desk that opens and closes paper trades on its own, all day.</b> Everything below was tested on years of history and reported honestly, net of trading costs.</p>
+
+<div class="metrics">
+  <div class="metric"><div class="n">~35</div><div class="l">Live data feeds</div></div>
+  <div class="metric"><div class="n">6 × 27</div><div class="l">Spreads × market regimes</div></div>
+  <div class="metric"><div class="n">82.9%</div><div class="l">Backtest win rate</div></div>
+  <div class="metric"><div class="n">37</div><div class="l">Geo assets mapped</div></div>
+  <div class="metric"><div class="n">3-way</div><div class="l">EIA inventory model</div></div>
+  <div class="metric"><div class="n">284</div><div class="l">Automated tests</div></div>
+  <div class="metric"><div class="n">24/7</div><div class="l">Deployed live</div></div>
+</div>
+
+<div class="grid">
+  <!-- LEFT -->
+  <div class="col">
+
+    <section>
+      <h2><span class="num">01</span> The core strategy — a model for every market</h2>
+      <p>The heart of PULSE estimates the <b>fair value</b> of six oil spreads (Brent &amp; WTI near-month, far-month and butterflies) and trades them back toward fair value when the market drifts too far — mean-reversion, but adapted to conditions instead of one-size-fits-all.</p>
+      <ul>
+        <li><span class="k">27 market "regimes."</span> I split the market on three axes — the <b>shape of the curve</b> (oversupply vs shortage), <b>inventory level</b> (well-stocked vs tight vs average) and <b>volatility</b> (calm/normal/stressed). Three buckets on each = <b>27 distinct market conditions</b>, and each spread gets its own model in each one.</li>
+        <li><span class="k">7 models compete in every cell.</span> Four linear models (Ridge, Lasso, ElasticNet, Huber) and three gradient-boosted trees (<b>XGBoost, LightGBM, CatBoost</b>) all train on the same data; the one with the best out-of-sample score is picked automatically for that cell — so the method is different where the market behaves differently.</li>
+        <li><span class="k">What actually wins:</span> across the book <b>CatBoost and Huber</b> are chosen most often — CatBoost is right <b>67.5%</b> of the time where it wins (Sharpe 1.16), Huber elsewhere for stability.</li>
+        <li>Each model reads <b>22–24 point-in-time inputs</b> (curve shape, trader positioning, refinery margins, macro/rates, volatility) and outputs a fair value <b>plus a confidence band</b>, so trade size scales with conviction.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2><span class="num">02</span> Backtested performance (net of costs)</h2>
+      <p>Tested with an honest expanding-window backtest over <b>2018–2026</b> — the model only ever sees past data and is re-fit every quarter (no hindsight):</p>
+      <table class="perf">
+        <tr class="hi"><td>Win rate — completed trades</td><td>82.9%</td></tr>
+        <tr><td>Held up on a separate test period</td><td>~72%</td></tr>
+        <tr><td>Profit factor (winnings ÷ losses)</td><td>≈ 2.0×</td></tr>
+        <tr><td>Direction called correctly</td><td>61.3%</td></tr>
+        <tr><td>Trades tested · avg hold</td><td>6,140 · 3–6 d</td></tr>
+        <tr><td>Cumulative net P&amp;L (spread pts)</td><td>+848</td></tr>
+      </table>
+    </section>
+
+    <section>
+      <h2><span class="num">03</span> Results broken down by spread</h2>
+      <table>
+        <tr><th>Spread</th><th class="r">Win</th><th class="r">Sharpe</th><th class="r">Net P&amp;L</th></tr>
+        <tr class="star"><td>Brent butterfly</td><td class="r">74.7%</td><td class="r">1.26</td><td class="r">+229</td></tr>
+        <tr class="star"><td>WTI butterfly</td><td class="r">71.7%</td><td class="r">0.80</td><td class="r">+135</td></tr>
+        <tr><td>Brent M1–M2</td><td class="r">62.8%</td><td class="r">0.67</td><td class="r">+292</td></tr>
+        <tr><td>WTI far months</td><td class="r">58.1%</td><td class="r">0.31</td><td class="r">+128</td></tr>
+        <tr><td>WTI M1–M2</td><td class="r">57.1%</td><td class="r">0.26</td><td class="r">+90</td></tr>
+        <tr><td>Brent far months</td><td class="r">52.1%</td><td class="r">−0.04</td><td class="r">−25</td></tr>
+      </table>
+      <p class="muted" style="font-size:6.85px;">The butterflies are the standouts; I kept the one weak spread (Brent far-months) in the table rather than hide it — honesty over a prettier average.</p>
+    </section>
+
+    <section>
+      <h2><span class="num">04</span> Strategy research — I tested 10 versions</h2>
+      <p>A careful program to answer: does all this market-condition intelligence actually beat a simple version? Ten variants, all scored the same way:</p>
+      <table>
+        <tr><th>Version tested</th><th class="r">Sharpe</th></tr>
+        <tr><td>Market-condition model (regime-as-feature)</td><td class="r pos">0.380</td></tr>
+        <tr><td>Selective version (only where it helps)</td><td class="r pos">0.374</td></tr>
+        <tr><td>Simple baseline (plain mean-reversion)</td><td class="r pos">0.372</td></tr>
+        <tr><td>Machine-learned regimes (HMM)</td><td class="r">0.289</td></tr>
+        <tr><td>Volatility-targeted book (GARCH-sized)</td><td class="r">0.285</td></tr>
+      </table>
+      <p class="muted" style="font-size:6.85px;"><b>Honest finding:</b> the fancy versions <i>tied</i> the simple one rather than beating it — a real result I reported straight. The value was learning <i>where</i> complexity helps (WTI front spreads) and using it only there.</p>
+    </section>
+
+    <section>
+      <h2><span class="num">05</span> Predicting the weekly inventory reaction (EIA)</h2>
+      <p>Each Wednesday the US publishes oil-inventory data that moves the market. I built a model that predicts the reaction for <b>crude, gasoline and distillate</b> separately.</p>
+      <ul>
+        <li>It measures the <b>surprise</b> vs the real analyst forecast (10+ years of data), pulls the <b>actual number live from the official EIA feed</b>, and previews it with the Tuesday industry estimate.</li>
+        <li><span class="k">It only calls a trade when it has an edge</span> — a crude surprise is 75–81% predictive in an oversupplied market but a coin-flip when tight, so it stays quiet and <b>points to gasoline instead.</b> I also proved US inventories move <b>WTI ~17× more than Brent.</b></li>
+      </ul>
+    </section>
+
+  </div>
+
+  <!-- RIGHT -->
+  <div class="col">
+
+    <section>
+      <h2><span class="num">06</span> Turning news into trades — AI + retrieval (flagship)</h2>
+      <p>The piece I'm proudest of, and something I hadn't seen done before: a system that reads a geopolitical <b>headline</b>, works out which <b>physical oil asset</b> it's about, and predicts which specific <b>oil prices</b> will move, and in which direction.</p>
+      <ul>
+        <li><span class="k">A map of 37 real assets</span> — shipping chokepoints (Hormuz, Suez), refineries, pipelines and producers, each with its location and how a disruption there moves prices.</li>
+        <li><span class="k">AI reads the headline.</span> A large language model extracts <i>what</i> happened, <i>where</i> and <i>how serious</i> — and correctly separates "Hormuz closes" from "Hormuz reopens" (opposite trades). A keyword reader backs it up so it never breaks without an AI key.</li>
+        <li><span class="k">"This looks like…" — retrieval (RAG).</span> For any new headline it finds the most similar past events and shows what each actually did to prices — a transparent, explainable approach, not a black box.</li>
+        <li><span class="k">A plain-English desk note.</span> The AI writes a 2–3 sentence read grounded strictly in the real retrieved numbers — it is never allowed to invent a figure.</li>
+        <li><span class="k">A live world map</span> lights up each asset as related news breaks.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2><span class="num">07</span> What the news actually moved (measured)</h2>
+      <p>Graded on the 2026 Iran/Hormuz crisis (112 events, 1,400 price observations) — these reactions were real and statistically significant:</p>
+      <table>
+        <tr><th>Measured effect</th><th class="r">accuracy</th><th class="r">signif.</th></tr>
+        <tr><td>Chokepoint scare → Brent gains vs WTI</td><td class="r pos">59%</td><td class="r">p=0.008</td></tr>
+        <tr><td>Chokepoint scare → diesel margin firms</td><td class="r pos">57%</td><td class="r">p=0.047</td></tr>
+        <tr><td>Crude price spike fades within a week</td><td class="r">reverts</td><td class="r">p&lt;0.001</td></tr>
+      </table>
+      <p style="font-size:6.95px;" class="muted">A tradeable pattern emerged: <b>structural spreads keep the move while flat-price panic fades.</b> The model only prints a firm number when the statistics support it; otherwise it labels it an estimate.</p>
+    </section>
+
+    <section>
+      <h2><span class="num">08</span> Risk controls &amp; the live trading engine</h2>
+      <ul>
+        <li><span class="k">Never doubles up on the same bet</span> — a correlation filter blocks two trades that are really one risk, and keeps trades that hedge each other.</li>
+        <li><span class="k">Sizes down when markets get wild</span> — a volatility model (GARCH) shrinks positions as risk rises, cutting the worst drawdown by ~60% and roughly tripling that book's risk-adjusted return.</li>
+        <li><span class="k">A shock detector</span> spots market stress and pauses new trades automatically.</li>
+        <li><span class="k">Runs live</span> — reads the desk's 15-minute price feed, re-prices on the current market, logs every signal with its reasoning and confidence, and opens/closes paper trades on its own during market hours.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2><span class="num">09</span> Original ideas I contributed</h2>
+      <ul>
+        <li><span class="k">The news-to-price engine itself</span> — connecting a place in the news to the exact tradeable spread it affects is a genuinely new framework.</li>
+        <li><span class="k">Explainable retrieval (RAG) without a black box</span> — matching events by their real features, so every recommendation can be audited.</li>
+        <li><span class="k">"Only speak when you have an edge"</span> — used across all three engines: a firm signal when history backs it, otherwise clearly "no edge here."</li>
+        <li><span class="k">Bridging stale daily data to the live market</span> so the models score on today's prices in real time.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2><span class="num">10</span> How carefully it was tested</h2>
+      <ul>
+        <li><span class="k">No hindsight, anywhere</span> — models only ever see past data; results are out-of-sample and after realistic trading costs.</li>
+        <li><span class="k">Everything is checked</span> — the model's confidence lines up with reality (higher-conviction trades really do work more often), guarded by <b>284 automated tests</b>.</li>
+        <li><span class="k">Honesty over polish</span> — every number traces to a named source, stale data is flagged, and results that didn't work are reported plainly.</li>
+      </ul>
+    </section>
+
+  </div>
+</div>
+
+<!-- FULL-WIDTH BAND -->
+<div class="band">
+  <div class="two">
+    <div>
+      <h2><span class="num">11</span> How this fits into a real automated oil-trading desk</h2>
+      <p style="font-size:7.4px;">PULSE is already built the way an <b>automated (algorithmic) trading desk</b> works — the paper engine becomes a live execution engine simply by swapping the paper broker for a real one. In production it would:</p>
+      <ul style="font-size:7.3px;">
+        <li><b>Generate signals non-stop</b> from live prices, the inventory calendar and the news wire — the three engines feed one ranked list of trades.</li>
+        <li><b>Auto-execute with built-in risk controls</b> — volatility-based sizing, a correlation filter against concentration, hard stop-losses, and a shock breaker that halts trading in a crisis.</li>
+        <li><b>Trade the whole complex</b> — calendar spreads, butterflies, refinery margins (cracks) and grade spreads (WTI–Brent), exactly the products an oil desk runs.</li>
+        <li><b>Keep a human in the loop</b> — every automated decision comes with its reasoning, confidence and track record, so a trader can supervise or override it.</li>
+      </ul>
+    </div>
+    <div>
+      <h2><span class="num">12</span> Key lessons &amp; the skills I built</h2>
+      <div class="insight" style="margin-bottom:2.5px;">
+        <ul>
+          <li><b>A simple, well-built strategy is hard to beat</b> — added complexity only pays in specific, identifiable spots.</li>
+          <li><b>Fundamentals &amp; geopolitics only matter in the right conditions</b> — inventories in a glut, news in structural spreads.</li>
+          <li><b>Knowing when NOT to trade is itself an edge</b> — precision beats volume.</li>
+        </ul>
+      </div>
+      <p style="font-size:6.75px;"><b>Skills:</b>
+        <span class="chip">machine learning for time series</span><span class="chip">backtesting &amp; walk-forward validation</span><span class="chip">volatility modelling (GARCH)</span><span class="chip">market-regime detection</span><span class="chip">portfolio &amp; risk construction</span><span class="chip">statistics / hypothesis testing</span><span class="chip">large language models</span><span class="chip">retrieval (RAG)</span><span class="chip">Python · sklearn · XGBoost/LightGBM/CatBoost · DuckDB</span><span class="chip">full-stack (Flask + React)</span><span class="chip">live deployment</span>
+      </p>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <span><b>PULSE</b> — Energy Intelligence Terminal · spread strategy · inventory &amp; news signals · automated trading engine · deployed live</span>
+  <span>Futures First — Energy Desk Internship · July 2026</span>
+</footer>
+
+</body>
+</html>

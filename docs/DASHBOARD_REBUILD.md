@@ -237,7 +237,7 @@ is in AND Phase 4 is verified locally for ≥48h with no regressions.
 | 7 | 4.G — Signal Log dedup fix | Medium (backend + frontend) |
 | 8 | 4.H — Calibration plot (optional) | Small |
 
-**One phase per session.** Don't multitask. Update §1 of CLAUDE.md after each.
+**One phase per session.** Don't multitask. Update §1 of PROJECT_STATE.md after each.
 
 ---
 

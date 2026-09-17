@@ -62,7 +62,7 @@ _REPORT_PARQUET = _CACHE / "eia_report_history.parquet"
 DEFAULT_SURPRISE_METHOD = "consensus"
 
 # Real analyst consensus + the API leading indicator, staged 2026-06-25 (validated
-# in CLAUDE.md §1). All four are actual/forecast(=consensus)/previous in *millions*
+# in PROJECT_STATE.md §1). All four are actual/forecast(=consensus)/previous in *millions*
 # of bbl → ×1000 to MBBL (thousands). release_date is %d-%m-%Y. Empty-forecast
 # split rows (the mis-dated :29/:25 rows) are dropped by the loader.
 _CONSENSUS_FILES = {

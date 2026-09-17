@@ -2,7 +2,7 @@
 Phase 6 — research-leg unit tests (2.8.9 data-driven HMM / change-point regimes).
 
 The HMM leg is an additive re-training pass on the Phase 2.8 walk-forward (see
-CLAUDE.md §1): it replaces the hard −$2/+$5 curve thresholds with a fitted
+PROJECT_STATE.md §1): it replaces the hard −$2/+$5 curve thresholds with a fitted
 Gaussian-mixture + causal sticky-HMM detector and re-runs the per-cell
 competition over the discovered regimes. These tests are HERMETIC — tiny
 synthetic frames, never touching `/Data`, the model pkls, or the live cache —

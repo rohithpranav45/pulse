@@ -1116,7 +1116,7 @@ def html() -> str:
   <div class="wrap">
     <p><strong style="color:#94A3B8;">PULSE</strong> — Energy Intelligence Terminal · Futures First Internship · June 2026</p>
     <p>Built by Peruka Pranav · Flask 3 · React 18 · TypeScript · Tailwind · DuckDB · scikit-learn · XGBoost / LightGBM / CatBoost</p>
-    <p>Methodology PDF: <code>backend/data/research/PULSE_methodology.pdf</code> · Project notes: <code>CLAUDE.md</code></p>
+    <p>Methodology PDF: <code>backend/data/research/PULSE_methodology.pdf</code> · Project notes: <code>PROJECT_STATE.md</code></p>
   </div>
 </footer>
 

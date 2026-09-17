@@ -1,8 +1,8 @@
 # PULSE — Phase History (archive)
 
-> Detailed sprint-by-sprint log, archived from CLAUDE.md during the 2026-06-14
+> Detailed sprint-by-sprint log, archived from PROJECT_STATE.md during the 2026-06-14
 > cleanup. **For current state, run instructions, architecture, and active gotchas,
-> see `CLAUDE.md`.** This file is read-only reference for "what exactly did sprint X
+> see `PROJECT_STATE.md`.** This file is read-only reference for "what exactly did sprint X
 > do / how did we get here."
 
 ---
@@ -679,7 +679,7 @@ param, but the two must agree).
 **Next session — followup to the followup:**
 
 The harness needs ≥14 calendar days OR 30 closed trades/arm to declare
-a verdict. Until then this CLAUDE.md current-sprint section stays open
+a verdict. Until then this PROJECT_STATE.md current-sprint section stays open
 as "live A/B in progress." The next mentor-facing milestone is reading
 the verdict and writing the production-mode-flip PR (if pooled wins) or
 keeping the gated default (if gated wins or undecided).
@@ -1005,7 +1005,7 @@ unaffected, so no retraining required when the cost model changes.
 | **2.8.8** | Extend walk-forward to 2018-2026 (contango coverage). | **promoted to next-credible candidate** — Phase 2.8.6 showed costs don't lift the headline, but extending to 8 years (including 2018-2020 contango) is the largest remaining structural change. Would also need a fresh walk-forward run which persists `composite_trades.json` for full Phase 2.8.6 NET coverage. |
 | **2.8.9** | HMM or change-point regime detection. | pending |
 | **2.8.10** | Portfolio-level vol targeting. | pending |
-| **2.8.11** | Methodology PDF + CLAUDE.md update — done for 2.8.6; will redo end-of-phase. | partial |
+| **2.8.11** | Methodology PDF + PROJECT_STATE.md update — done for 2.8.6; will redo end-of-phase. | partial |
 
 **Acceptance for Phase 2.8 as a whole** (revised after 2.8.6): the original
 +0.65 gated Sharpe target hasn't moved (gated NET +0.297). But Phase 2.8.6
@@ -1190,7 +1190,7 @@ flag for Brent fly variance reduction, not a default.
 | **2.8.8** | Extend walk-forward to 2018-2026 (contango coverage). | pending |
 | **2.8.9** | HMM or change-point regime detection. | pending |
 | **2.8.10** | Portfolio-level vol targeting. | pending |
-| **2.8.11** | Methodology PDF + CLAUDE.md update — done for 2.8.3 and 2.8.6; will redo end-of-phase. | partial |
+| **2.8.11** | Methodology PDF + PROJECT_STATE.md update — done for 2.8.3 and 2.8.6; will redo end-of-phase. | partial |
 
 **Acceptance for Phase 2.8 as a whole** (revised after 2.8.6): Phase
 2.8.6 confirmed the gate widening alone (2.8.3) and costs (2.8.6) do
@@ -1209,7 +1209,7 @@ before committing more sprint cycles to 2.8.4–2.8.10.
 honest Phase 2.7 reporting surfaced — linear models leaving non-linear
 interactions on the table, and a feature set that was missing the
 alpha-bearing predictors. Walk-forward end-to-end before/after; methodology
-PDF and CLAUDE.md updated.
+PDF and PROJECT_STATE.md updated.
 
 **Headline (10 quarterly refits, 2024-2026, regenerated 2026-06-11):**
 
@@ -1366,8 +1366,8 @@ unless redirected by mentor feedback:
 | **2.8.8** | Extend walk-forward to 2018-2026 (contango coverage). | pending |
 | **2.8.9** | HMM or change-point regime detection. | pending |
 | **2.8.10** | Portfolio-level vol targeting. | pending |
-| **2.8.11** | Methodology PDF + CLAUDE.md update — done for 2.8.1+2; will redo end-of-phase. | partial |
-**Acceptance for Phase 2.8 as a whole** (unchanged): gated_blend NET Sharpe ≥ +0.65 over the full 2018-2026 walk-forward, with methodology PDF + walk-forward report regenerated and CLAUDE.md updated. After 2.8.1+2.8.2 we are at gated +0.389 GROSS — fix the gate (2.8.3), then transaction costs (2.8.6) + 2018-2026 walk-forward (2.8.8) are the remaining must-haves for credibility.
+| **2.8.11** | Methodology PDF + PROJECT_STATE.md update — done for 2.8.1+2; will redo end-of-phase. | partial |
+**Acceptance for Phase 2.8 as a whole** (unchanged): gated_blend NET Sharpe ≥ +0.65 over the full 2018-2026 walk-forward, with methodology PDF + walk-forward report regenerated and PROJECT_STATE.md updated. After 2.8.1+2.8.2 we are at gated +0.389 GROSS — fix the gate (2.8.3), then transaction costs (2.8.6) + 2018-2026 walk-forward (2.8.8) are the remaining must-haves for credibility.
 
 ---
 
@@ -1787,7 +1787,7 @@ baseline carry is already strong.
 | `backend/data/research/gated_trades.json` | NEW (1.0 MB) — raw gated-leg trade tape persisted by `run_walkforward()` for future post-processing |
 | `backend/data/research/walkforward_report.json` | Regenerated with `sized_blend` + `sized_blend_summary` + `lift_sized_*` keys |
 | `backend/data/research/PULSE_methodology.pdf` | Regenerated — 2 letter pages, 13 KB |
-| `.env.example` / `CLAUDE.md` env section | + `PULSE_GATED_SIZE=<full\|half\|kelly>` (opt-in; default `full` = Phase 2.6 behaviour) |
+| `.env.example` / `PROJECT_STATE.md` env section | + `PULSE_GATED_SIZE=<full\|half\|kelly>` (opt-in; default `full` = Phase 2.6 behaviour) |
 
 **Verification (all 2026-06-09):**
 
@@ -2270,7 +2270,7 @@ the only candidates with positive Sharpe (+0.41 and +0.40 respectively)
 | `backend/data/research/PULSE_methodology.pdf`   | NEW — 8.4 KB mentor deliverable |
 | `backend/app.py`                         | + `GET /api/regime/walkforward` route |
 | `requirements.txt`                       | + `reportlab==4.2.5` |
-| `CLAUDE.md`                              | this update |
+| `PROJECT_STATE.md`                              | this update |
 
 **Verification:**
 
@@ -2438,7 +2438,7 @@ change in `regimes.py`.
 ```
 pulse/
 ├── start.py                          # one-command launcher (local dev)
-├── CLAUDE.md                         # THIS FILE
+├── PROJECT_STATE.md                         # THIS FILE
 ├── .env                              # API keys (gitignored)
 ├── .env.example                      # template
 ├── requirements.txt                  # pinned Python deps
@@ -2808,7 +2808,7 @@ These bite a fresh session if not flagged:
 | 2026-06-11 | **Phase 2.8.3 shipped + honest finding** — the +0.20 Sharpe lift predicted from Phase 2.8.2 by-cohort booster Sharpe **did NOT materialise at the gated_blend headline**. Measured: +0.389 → **+0.384** (flat). Acceptance criterion (≥ +0.60) NOT met. **However the regime leg's individual Sharpe lifted dramatically**: +0.369 → **+0.888** across 244 fires (was 71) — the boosters genuinely contribute alpha when treated as regime signals (wti_fly +1.499, wti_m3_m6 +1.610, brent_fly +0.956). Mechanism: the booster trades' alpha was already leaking into the baseline-leg attribution under the narrow gate; widening REASSIGNS credit correctly to the engine but doesn't CREATE new alpha because the underlying realized PnL stream barely changes (most re-routed trades had baseline-z direction matching pooled-z direction). The widened gate is still methodologically more correct — the engine now reports its honest +0.888 regime Sharpe rather than understated +0.369 — and the live dashboard now badges those trades as REGIME rather than mis-attributing them to BASELINE. No retraining required: new `reroute_gated.py` script invertes `gated_trades.json` back into pooled+baseline candidates and re-runs `_build_gated_blend` + `_apply_sizing` + `_aggregate_mode` under the new gate in <2 s. The full ~3h walk-forward started at 06:56 but died at 08:22 mid-pooled-refit-3 (Windows sleep). **Concrete next move for the mentor**: Phase 2.8.6 transaction costs — boosters fire ~3.4× more often than the narrow gate; net Sharpe under realistic per-trade cost may differ materially. That's the next-credible headline lift. |
 | 2026-06-11 | **Phase 2.8.6 shipped + honest finding** — defensible per-leg per-side cost model ($0.0025 commission + $0.0050/$0.0075 half-spread front/deferred) → $0.030/$0.040/$0.050 RT $/bbl for M1-M2 / M3-M6 / fly. Applied as post-aggregation arithmetic; no retraining needed. **Headline: costs drag every mode by roughly the same ~−0.085 Sharpe**, gated_blend NET +0.297 vs baseline NET +0.301 (tied, same flat verdict as gross). The brief's hypothesis "boosters fire more often so net Sharpe differential may shift materially" is qualitatively confirmed (regime fires have higher mean cost $0.0451 vs baseline $0.0388 because boosters concentrate on the fly) but quantitatively small — doesn't move the headline. **Notable side finding worth raising with mentor**: the un-gated pooled engine wins both gross (+0.437) AND net (+0.351). Phase 2.8.1+2 boosters lifted pooled enough that the Phase 2.6 gate (added when pooled was losing in Phase 2.5) is now over-restrictive. Concrete recommendation: A/B paper-test `PULSE_REGIME_MODE=pooled` against current default `PULSE_GATED_BLEND=1` for ~2 weeks; if pooled wins, switch defaults. Files: `walkforward.py` (+ COST_PER_SPREAD_RT + _cost_for + _net_block + costs report block + persists all raw trade tapes for future cost recomputes), `reroute_gated.py` (+ baseline rebuild from spreads + NET section + CLI summary), `methodology_pdf.py` (+ §11 cost model on page 1 + NET headline table + per-spread NET table + finding callout on page 2; PDF grew 2 → 5 pages). |
 | 2026-06-14 | **Phase 2.9.3 robustness check shipped + graded verdict** — answers the trader's "is the 82.9 % tuned-rule win rate real or curve-fit?" with **no retraining** (reused the 2.9.0 simulator). Verdict: **WIN-RATE ROBUST, EDGE IN-SAMPLE-OPTIMISTIC.** (A) Out-of-sample in a *different era* — rebuilt the deterministic baseline leg (93 % of fires) over 2017→Nov-2023, a window the sweep never saw: wins **74.4 %** (vs 88.6 % in-sample baseline), still net-profitable (NET PF 1.16) and far above the 64 % un-tuned default, but the edge thins (OOS NET Sharpe 0.165 < 0.211 floor) and **brent_fly_123 is net-unprofitable OOS** (PF 0.74). (B) Selection generalisation — re-swept all 288 configs on the early 2/3, validated chosen on the late 1/3: chosen holds **74.8 %** / Sharpe 0.46, and the early-sweep's own winner CRATERS on the hold-out (64.3 % / Sharpe 0.06), so the chosen rule generalises *better* than any single-window peak. (C) Sensitivity — every one-knob perturbation incl. off-grid values stays feasible: a broad **plateau, not a spike. Recommendation to mentor: keep the tuned rule unchanged (the win rate she asked about IS trustworthy), but present NET Sharpe/PF as in-sample-optimistic, not a forward promise, and watch the Brent fly.** New `exit_robustness.py` + `exit_robustness_report.json`; no production code or models touched. |
-| 2026-06-14 | **Phase 3.D always-on deployment — artifacts shipped; host step is the owner's.** Built the production container stack so the tuned-rule A/B paper book accumulates live win-rate proof 24/7 without the desk staying awake (replaces the throwaway Cloudflare quick-tunnel). Multi-stage `Dockerfile` (node build → `python:3.13-slim` via uv → gunicorn `wsgi:app`), new `backend/wsgi.py` that starts the APScheduler + warm-up under gunicorn (app.py's `__main__` never fires there) with **`--workers 1`** so the scheduler stays singular (one A/B tick/day, not N), **SQLite WAL + busy_timeout + synchronous=NORMAL** on both connection factories so the 24/7 tick never locks the book, `docker-compose.yml` (mounts `Data/`+`backend/db`+`backend/data/research:ro`, binds `.env`, `restart: unless-stopped`) + a **Caddy reverse proxy with basic auth + auto-HTTPS** (`/api/health` exempt; app internal-only so the gate can't be bypassed). Verified locally: WAL live on the real db, compose YAML shape, wsgi import contract + scheduler-deferred-until-boot, smoke-test syntax. **Could NOT run here (no Docker/cloud creds):** the real `docker build`, host provisioning (Oracle Always-Free ARM preferred / $5 VPS), and the live daily-tick verification — fully scripted for the owner in `deploy/README.md` + `deploy/smoke_test.sh`. **Owner's remaining step: provision the host, copy Data+pkls+.env, set BASIC_AUTH_HASH (+ optional PULSE_DOMAIN for HTTPS), `docker compose up -d --build`, run the smoke test, then paste the URL into CLAUDE.md.** |
+| 2026-06-14 | **Phase 3.D always-on deployment — artifacts shipped; host step is the owner's.** Built the production container stack so the tuned-rule A/B paper book accumulates live win-rate proof 24/7 without the desk staying awake (replaces the throwaway Cloudflare quick-tunnel). Multi-stage `Dockerfile` (node build → `python:3.13-slim` via uv → gunicorn `wsgi:app`), new `backend/wsgi.py` that starts the APScheduler + warm-up under gunicorn (app.py's `__main__` never fires there) with **`--workers 1`** so the scheduler stays singular (one A/B tick/day, not N), **SQLite WAL + busy_timeout + synchronous=NORMAL** on both connection factories so the 24/7 tick never locks the book, `docker-compose.yml` (mounts `Data/`+`backend/db`+`backend/data/research:ro`, binds `.env`, `restart: unless-stopped`) + a **Caddy reverse proxy with basic auth + auto-HTTPS** (`/api/health` exempt; app internal-only so the gate can't be bypassed). Verified locally: WAL live on the real db, compose YAML shape, wsgi import contract + scheduler-deferred-until-boot, smoke-test syntax. **Could NOT run here (no Docker/cloud creds):** the real `docker build`, host provisioning (Oracle Always-Free ARM preferred / $5 VPS), and the live daily-tick verification — fully scripted for the owner in `deploy/README.md` + `deploy/smoke_test.sh`. **Owner's remaining step: provision the host, copy Data+pkls+.env, set BASIC_AUTH_HASH (+ optional PULSE_DOMAIN for HTTPS), `docker compose up -d --build`, run the smoke test, then paste the URL into PROJECT_STATE.md.** |
 
 ### Draft mentor message — WTI deferred-settlement file (Q5)
 
@@ -2853,8 +2853,8 @@ These bite a fresh session if not flagged:
 ```
 1. Open new chat
 2. Paste:
-   "Read CLAUDE.md in pulse/, then start [Sprint X].
-    Don't multi-task. When the sprint ships, update CLAUDE.md and stop."
+   "Read PROJECT_STATE.md in pulse/, then start [Sprint X].
+    Don't multi-task. When the sprint ships, update PROJECT_STATE.md and stop."
 
 3. The agent:
    a. Reads this file
@@ -2877,8 +2877,8 @@ The footer has exactly two lines:
 
 1. **Recommendation:** "continue in this chat" OR "start a new chat" — with one short reason. Heuristics:
    - **Same chat** when: next task touches files already in context, is small (<30 min of work), or directly extends what just shipped.
-   - **New chat** when: this thread is >50k tokens, the next sprint touches a completely different surface, or the just-shipped work loaded a lot of one-shot context (long file reads, big logs, screenshots). The CLAUDE.md cold-start is cheaper than dragging a saturated context forward.
-2. **Ready-to-paste prompt for the next task** — quoted, copy-pasteable, self-contained. Always begin with `Read CLAUDE.md in pulse/, then …`. Always end with `Don't multi-task. When the sprint ships, update CLAUDE.md and stop.` Pull the next task from the "Phase 2 sprints" table or whatever the user just identified.
+   - **New chat** when: this thread is >50k tokens, the next sprint touches a completely different surface, or the just-shipped work loaded a lot of one-shot context (long file reads, big logs, screenshots). The PROJECT_STATE.md cold-start is cheaper than dragging a saturated context forward.
+2. **Ready-to-paste prompt for the next task** — quoted, copy-pasteable, self-contained. Always begin with `Read PROJECT_STATE.md in pulse/, then …`. Always end with `Don't multi-task. When the sprint ships, update PROJECT_STATE.md and stop.` Pull the next task from the "Phase 2 sprints" table or whatever the user just identified.
 
 Skip the footer only if there is *no* obvious next task (e.g. user closed out with "we're done for today"). When in doubt, include it.
 
@@ -2897,5 +2897,5 @@ Use these as the tie-breaker when multiple paths are viable:
 
 ---
 
-**End of CLAUDE.md.**
+**End of PROJECT_STATE.md.**
 A fresh session should now have everything needed to resume. Start with "Current sprint."
