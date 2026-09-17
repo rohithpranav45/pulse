@@ -1,0 +1,599 @@
+<title>Regime Conditioning in Crude Spreads</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Serif:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --paper:      #F2F3EF;
+    --surface:    #FBFBF9;
+    --ink:        #16191D;
+    --ink-soft:   #5A6570;
+    --ink-faint:  #8A939C;
+    --rule:       #DADED6;
+    --rule-soft:  #E7EAE4;
+    --accent:     #0F4C5C;
+    --accent-dim: #CFE0E4;
+    --pos:        #2A6B45;
+    --neg:        #9E2B2B;
+    --warn:       #8A6218;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:      #0F1316;
+      --surface:    #161B1F;
+      --ink:        #E6E9E4;
+      --ink-soft:   #9AA4AC;
+      --ink-faint:  #6B757D;
+      --rule:       #262D33;
+      --rule-soft:  #1E252A;
+      --accent:     #58B4C7;
+      --accent-dim: #1B343C;
+      --pos:        #61BE8A;
+      --neg:        #DE7B72;
+      --warn:       #D3A64A;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper:      #0F1316;
+    --surface:    #161B1F;
+    --ink:        #E6E9E4;
+    --ink-soft:   #9AA4AC;
+    --ink-faint:  #6B757D;
+    --rule:       #262D33;
+    --rule-soft:  #1E252A;
+    --accent:     #58B4C7;
+    --accent-dim: #1B343C;
+    --pos:        #61BE8A;
+    --neg:        #DE7B72;
+    --warn:       #D3A64A;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+    font-size: 15px;
+    line-height: 1.65;
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+  }
+  .sheet {
+    max-width: 820px;
+    margin: 0 auto;
+    padding: 56px 32px 80px;
+  }
+
+  /* ---- masthead ---- */
+  .masthead { border-bottom: 2px solid var(--ink); padding-bottom: 22px; }
+  .kicker {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--accent); margin: 0 0 14px;
+  }
+  h1 {
+    font-family: "IBM Plex Serif", Georgia, serif;
+    font-size: clamp(30px, 5vw, 42px);
+    line-height: 1.12; font-weight: 600; margin: 0 0 10px;
+    text-wrap: balance; letter-spacing: -.01em;
+  }
+  .standfirst {
+    font-family: "IBM Plex Serif", Georgia, serif;
+    font-size: 18px; font-style: italic; color: var(--ink-soft);
+    margin: 0 0 22px; max-width: 62ch; text-wrap: balance;
+  }
+  .byline {
+    display: flex; flex-wrap: wrap; gap: 6px 22px;
+    font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--ink-soft);
+  }
+  .byline a { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--accent-dim); }
+  .byline a:hover, .byline a:focus-visible { border-bottom-color: var(--accent); }
+
+  /* ---- abstract ---- */
+  .abstract {
+    margin: 30px 0 8px; padding: 22px 26px;
+    background: var(--surface); border-left: 3px solid var(--accent);
+  }
+  .abstract p { margin: 0 0 12px; }
+  .abstract p:last-child { margin-bottom: 0; }
+  .abstract strong { color: var(--ink); font-weight: 600; }
+
+  /* ---- sections ---- */
+  section { margin-top: 46px; }
+  h2 {
+    font-family: "IBM Plex Serif", Georgia, serif;
+    font-size: 23px; font-weight: 600; margin: 0 0 4px;
+    padding-bottom: 8px; border-bottom: 1px solid var(--rule);
+    display: flex; align-items: baseline; gap: 14px;
+  }
+  h2 .num {
+    font-family: "IBM Plex Mono", monospace; font-size: 13px;
+    color: var(--accent); font-weight: 500; flex: none;
+  }
+  h3 {
+    font-family: "IBM Plex Sans", sans-serif; font-size: 15px; font-weight: 600;
+    margin: 26px 0 6px; color: var(--ink);
+  }
+  p { margin: 0 0 14px; max-width: 68ch; }
+  .lede { margin-top: 16px; }
+
+  /* ---- data tables ---- */
+  .scroll { overflow-x: auto; margin: 20px 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  th {
+    font-family: "IBM Plex Mono", monospace; font-size: 10.5px;
+    letter-spacing: .1em; text-transform: uppercase; color: var(--ink-faint);
+    text-align: left; font-weight: 500;
+    padding: 0 14px 7px 0; border-bottom: 1px solid var(--rule);
+    white-space: nowrap;
+  }
+  td {
+    padding: 9px 14px 9px 0; border-bottom: 1px solid var(--rule-soft);
+    vertical-align: top;
+  }
+  tr:last-child td { border-bottom: none; }
+  .num-col { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+  th.num-col { text-align: right; }
+  .win td { background: var(--accent-dim); font-weight: 600; }
+  .win td:first-child { box-shadow: inset 3px 0 0 var(--accent); padding-left: 11px; }
+  .pos { color: var(--pos); }
+  .neg { color: var(--neg); }
+
+  /* ---- figure ---- */
+  figure { margin: 26px 0; }
+  figure svg { width: 100%; height: auto; display: block; }
+  figcaption {
+    font-family: "IBM Plex Mono", monospace; font-size: 11px;
+    color: var(--ink-faint); margin-top: 10px; line-height: 1.5;
+  }
+
+  /* ---- pull quote ---- */
+  .finding {
+    margin: 26px 0; padding: 20px 0 20px 0;
+    border-top: 2px solid var(--ink); border-bottom: 1px solid var(--rule);
+    font-family: "IBM Plex Serif", Georgia, serif;
+    font-size: 19px; line-height: 1.45; text-wrap: balance;
+  }
+  .finding .tag {
+    display: block; font-family: "IBM Plex Mono", monospace;
+    font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); margin-bottom: 8px;
+  }
+
+  /* ---- defect list ---- */
+  .defect { border-top: 1px solid var(--rule); padding: 16px 0; }
+  .defect:last-of-type { border-bottom: 1px solid var(--rule); }
+  .defect h4 {
+    margin: 0 0 4px; font-size: 14.5px; font-weight: 600;
+    font-family: "IBM Plex Sans", sans-serif;
+  }
+  .defect p { margin: 0; font-size: 14px; color: var(--ink-soft); max-width: 70ch; }
+  .defect .fix {
+    font-family: "IBM Plex Mono", monospace; font-size: 12px;
+    color: var(--pos); margin-top: 6px; display: block;
+  }
+
+  /* ---- checklist ---- */
+  ul.checks { list-style: none; padding: 0; margin: 18px 0; }
+  ul.checks li {
+    padding: 11px 0 11px 26px; border-bottom: 1px solid var(--rule-soft);
+    position: relative; font-size: 14px; max-width: 72ch;
+  }
+  ul.checks li:last-child { border-bottom: none; }
+  ul.checks li::before {
+    content: "—"; position: absolute; left: 0; top: 11px;
+    font-family: "IBM Plex Mono", monospace; color: var(--accent);
+  }
+  ul.checks b { font-weight: 600; }
+
+  code {
+    font-family: "IBM Plex Mono", monospace; font-size: .88em;
+    background: var(--surface); padding: 1px 5px; border: 1px solid var(--rule-soft);
+  }
+
+  footer {
+    margin-top: 56px; padding-top: 20px; border-top: 2px solid var(--ink);
+    font-family: "IBM Plex Mono", monospace; font-size: 11.5px;
+    color: var(--ink-faint); line-height: 1.7;
+  }
+  footer a { color: var(--accent); text-decoration: none; }
+
+  @media (max-width: 620px) {
+    .sheet { padding: 36px 20px 60px; }
+    h2 { flex-direction: column; gap: 2px; }
+  }
+  @media print {
+    body { background: #fff; color: #000; font-size: 10.5pt; }
+    .sheet { max-width: none; padding: 0; }
+    section { page-break-inside: avoid; margin-top: 26px; }
+    .abstract { background: #f4f4f2; }
+    a { color: #000; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+<div class="sheet">
+
+  <header class="masthead">
+    <p class="kicker">Quantitative Research Note &nbsp;·&nbsp; Energy Futures</p>
+    <h1>Regime Conditioning in Crude Calendar Spreads</h1>
+    <p class="standfirst">A walk-forward study of regime-conditional models across six crude
+      spreads, the five ablations built to rescue the hypothesis, and the unconditional
+      baseline that beat all of them.</p>
+    <div class="byline">
+      <span>Rohith Pranav Peruka</span>
+      <span>IIT Mandi</span>
+      <span>Built at Futures First</span>
+      <span><a href="https://rohithpranav45-pulse.hf.space">Live system</a></span>
+      <span><a href="https://github.com/rohithpranav45/pulse">Source</a></span>
+    </div>
+  </header>
+
+  <div class="abstract">
+    <p><strong>Summary.</strong> PULSE is an end-to-end systematic research stack for crude
+      calendar spreads: 35 financial and alternative data feeds, a point-in-time feature
+      matrix, a seven-model competition run inside each regime cell, an expanding-window
+      walk-forward over 2018 to 2026, and a live paper book reconciled by scheduler during
+      market hours.</p>
+    <p>The central hypothesis was that crude spreads mean-revert differently across market
+      regimes, so a regime-conditioned model should beat one that ignores regime.
+      <strong>It did not.</strong> An unconditional rolling z-score returned a NET Sharpe of
+      +0.372 against +0.293 for the pooled regime book. Five further ablations failed to
+      close the gap. The deployed configuration applies regime conditioning only to the two
+      instruments where it measurably earned its place, reaching parity at +0.374.</p>
+    <p>This note reports that negative result as the headline, alongside the two alternative
+      data signals that did survive grading and the defects found when the system was
+      audited against its own output.</p>
+  </div>
+
+  <section>
+    <h2><span class="num">01</span> Research question</h2>
+    <p class="lede">Crude calendar spreads are a carry instrument. The front spread prices
+      the market's willingness to hold a barrel for a month, so its behaviour should depend
+      on physical state: whether the curve is in contango or backwardation, whether
+      inventories are tight or in surplus, and whether realised volatility is stressed.</p>
+    <p>That motivates a testable claim:</p>
+    <div class="finding">
+      <span class="tag">Hypothesis</span>
+      Mean reversion in crude spreads is regime-dependent, so a model conditioned on curve
+      shape, inventory level and volatility will outperform an unconditional one.
+    </div>
+    <p>The universe is six instruments: Brent and WTI, each at M1&#8211;M2, M3&#8211;M6, and the
+      1&#8211;2&#8211;3 butterfly. The regime grid is three axes at three levels each, giving 27
+      composite cells, with a coarser three-cell pooled grid used for the live book.</p>
+  </section>
+
+  <section>
+    <h2><span class="num">02</span> Data</h2>
+    <p class="lede">Roughly 35 sources, normalised into a DuckDB parquet lake with per-source
+      health and provenance tracking. Three of them are non-price and were built specifically
+      to test whether alternative data carries tradeable information here.</p>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr><th>Source</th><th>Coverage</th><th>Role</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><b>ICE / CME futures curves</b></td>
+            <td class="num-col">C1&#8211;C31, 2016&#8211;2026</td>
+            <td>Spread construction, curve state, realised volatility</td>
+          </tr>
+          <tr>
+            <td><b>EIA weekly petroleum status</b></td>
+            <td class="num-col">2015&#8211;2026</td>
+            <td>Inventory level and release-day surprise</td>
+          </tr>
+          <tr>
+            <td><b>Analyst consensus history</b></td>
+            <td class="num-col">548 weeks</td>
+            <td>Real expectation, replacing a seasonal proxy</td>
+          </tr>
+          <tr>
+            <td><b>CFTC Commitments of Traders</b></td>
+            <td class="num-col">Weekly</td>
+            <td>Positioning features</td>
+          </tr>
+          <tr>
+            <td><b>GDELT news corpus</b></td>
+            <td class="num-col">3,564 headlines</td>
+            <td>Geopolitical event study (see &sect;05)</td>
+          </tr>
+          <tr>
+            <td><b>ACLED political violence</b></td>
+            <td class="num-col">2021&#8211;2025</td>
+            <td>Conflict-intensity regime descriptor</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p>The geopolitical layer is not a sentiment score. It is a hand-built registry of 37
+      geolocated physical assets, each carrying a signed prior over nine price nodes, with an
+      LLM extractor resolving every headline into a validated
+      <code>{asset, event_type, severity}</code> triple before it reaches the study.</p>
+  </section>
+
+  <section>
+    <h2><span class="num">03</span> Method</h2>
+    <p class="lede">Validation protocol first, because it constrains every number that
+      follows.</p>
+    <ul class="checks">
+      <li><b>Expanding-window walk-forward.</b> 34 quarterly refits, 2018 to 2026. No model
+        ever sees data past its own cutoff.</li>
+      <li><b>Point-in-time features.</b> Every feature is built from data available at the
+        timestamp it is attached to. Tests assert prefix stability, so a value computed at day
+        <i>t</i> cannot change when future data is appended.</li>
+      <li><b>Causal regime labelling.</b> The HMM forward filter at day <i>d</i> sees only
+        data up to <i>d</i>. Gate decisions at each cutoff use only trades that had already
+        closed.</li>
+      <li><b>Costs before conclusions.</b> A single cost module defines per-spread round-trip
+        cost, imported by both the backtest and the live A/B harness so the assumption cannot
+        drift between them.</li>
+      <li><b>Mirrored decision rule.</b> The gate is defined once and imported by both the
+        live engine and the backtest. An invariant test asserts they stay bit-for-bit
+        identical, so tuning the live gate without re-running the walk-forward fails the
+        suite.</li>
+    </ul>
+    <h3>Estimators</h3>
+    <p>Seven models compete inside every regime cell and the data selects the winner: Ridge,
+      Lasso, ElasticNet, Huber, XGBoost, LightGBM and CatBoost, each producing a point
+      estimate plus p10/p90 quantile bands. Regime detection was additionally tested with a
+      Gaussian mixture plus causal sticky-HMM forward filter over curve level and its 5-day
+      change. Conditional volatility was modelled with GARCH(1,1) and GJR-GARCH under
+      Student-t innovations, refit every 21 days and scored on QLIKE.</p>
+  </section>
+
+  <section>
+    <h2><span class="num">04</span> Results</h2>
+    <p class="lede">All figures are NET of round-trip transaction cost and annualised across
+      the full 2018 to 2026 walk-forward.</p>
+
+    <figure>
+      <svg viewBox="0 0 720 236" role="img" aria-label="NET Sharpe ratio by strategy. Unconditional baseline 0.372; global model with regime as feature 0.380; per-spread gate 0.374; pooled regime cells 0.293; HMM regimes 0.289; vol-targeted book 0.198.">
+        <g font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-faint)">
+          <line x1="340" y1="14" x2="340" y2="200" stroke="var(--rule)" stroke-width="1"/>
+          <line x1="450" y1="14" x2="450" y2="200" stroke="var(--rule)" stroke-width="1"/>
+          <line x1="560" y1="14" x2="560" y2="200" stroke="var(--rule)" stroke-width="1"/>
+          <line x1="670" y1="14" x2="670" y2="200" stroke="var(--rule)" stroke-width="1"/>
+          <text x="340" y="216" text-anchor="middle">0.10</text>
+          <text x="450" y="216" text-anchor="middle">0.20</text>
+          <text x="560" y="216" text-anchor="middle">0.30</text>
+          <text x="670" y="216" text-anchor="middle">0.40</text>
+        </g>
+        <line x1="230" y1="14" x2="230" y2="200" stroke="var(--ink-soft)" stroke-width="1"/>
+
+        <g font-family="IBM Plex Sans, sans-serif" font-size="12.5">
+          <text x="222" y="30" text-anchor="end" fill="var(--ink)" font-weight="600">Baseline, no regime</text>
+          <rect x="230" y="18" width="409" height="15" rx="3" fill="var(--accent)"/>
+          <text x="647" y="30" fill="var(--ink)" font-family="IBM Plex Mono, monospace" font-size="12" font-weight="600">0.372</text>
+
+          <text x="222" y="62" text-anchor="end" fill="var(--ink-soft)">Global, regime as feature</text>
+          <rect x="230" y="50" width="418" height="15" rx="3" fill="var(--accent-dim)"/>
+          <text x="656" y="62" fill="var(--ink-soft)" font-family="IBM Plex Mono, monospace" font-size="12">0.380</text>
+
+          <text x="222" y="94" text-anchor="end" fill="var(--ink-soft)">Per-spread gate</text>
+          <rect x="230" y="82" width="411" height="15" rx="3" fill="var(--accent-dim)"/>
+          <text x="649" y="94" fill="var(--ink-soft)" font-family="IBM Plex Mono, monospace" font-size="12">0.374</text>
+
+          <text x="222" y="126" text-anchor="end" fill="var(--ink-soft)">Pooled regime cells</text>
+          <rect x="230" y="114" width="322" height="15" rx="3" fill="var(--accent-dim)"/>
+          <text x="560" y="126" fill="var(--ink-soft)" font-family="IBM Plex Mono, monospace" font-size="12">0.293</text>
+
+          <text x="222" y="158" text-anchor="end" fill="var(--ink-soft)">HMM regimes</text>
+          <rect x="230" y="146" width="318" height="15" rx="3" fill="var(--accent-dim)"/>
+          <text x="556" y="158" fill="var(--ink-soft)" font-family="IBM Plex Mono, monospace" font-size="12">0.289</text>
+
+          <text x="222" y="190" text-anchor="end" fill="var(--ink-soft)">Vol-targeted book</text>
+          <rect x="230" y="178" width="218" height="15" rx="3" fill="var(--accent-dim)"/>
+          <text x="456" y="190" fill="var(--ink-soft)" font-family="IBM Plex Mono, monospace" font-size="12">0.198</text>
+        </g>
+      </svg>
+      <figcaption>NET Sharpe by strategy, 34 quarterly refits, 2018&#8211;2026. The
+        unconditional baseline is highlighted. Differences among the top three are within
+        noise.</figcaption>
+    </figure>
+
+    <div class="finding">
+      <span class="tag">Primary result</span>
+      A rolling z-score with no regime awareness returned a higher NET Sharpe than every
+      regime-conditional variant tested.
+    </div>
+
+    <h3>Ablations</h3>
+    <p>Rather than report the first result and stop, each plausible rescue of the hypothesis
+      was built and measured.</p>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr><th>Ablation</th><th class="num-col">NET Sharpe</th><th>Reading</th></tr>
+        </thead>
+        <tbody>
+          <tr class="win">
+            <td>Unconditional baseline</td>
+            <td class="num-col">+0.372</td>
+            <td>Reference</td>
+          </tr>
+          <tr>
+            <td>Collapse grid, regime as one-hot feature</td>
+            <td class="num-col">+0.380</td>
+            <td>Tied. The split, not the information, was the constraint</td>
+          </tr>
+          <tr>
+            <td>Logistic transitions instead of hard cuts</td>
+            <td class="num-col">+0.297</td>
+            <td>Tied with pooled. Threshold discontinuity was not binding</td>
+          </tr>
+          <tr>
+            <td>GMM plus sticky-HMM learned regimes</td>
+            <td class="num-col">+0.289</td>
+            <td>Worse. Learning the boundary does not beat the trader's cut</td>
+          </tr>
+          <tr>
+            <td>Lasso stability-selection feature pruning</td>
+            <td class="num-col">+0.308</td>
+            <td>Worse on Sharpe, but localises where signal lives</td>
+          </tr>
+          <tr>
+            <td>Portfolio vol targeting</td>
+            <td class="num-col">+0.198</td>
+            <td>Max drawdown cut 60%. Drawdown management, not alpha</td>
+          </tr>
+          <tr class="win">
+            <td>Per-spread gate (deployed)</td>
+            <td class="num-col">+0.374</td>
+            <td>Parity. Regime enabled on 2 of 6 instruments only</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p>The deployed configuration abandons the idea that regime conditioning should be applied
+      uniformly. Instead each instrument is asked, at each refit cutoff and using only trades
+      closed before it, whether its regime leg beat its baseline leg out of sample. Regime
+      survives on two of six: WTI M1&#8211;M2 and the WTI butterfly. The result is stable across a
+      margin sweep of 0 to 0.25 and a sample floor of 10 to 30, which is the evidence that it
+      is a selection rule rather than a fitted parameter.</p>
+  </section>
+
+  <section>
+    <h2><span class="num">05</span> Signals that survived grading</h2>
+    <p class="lede">Every empirical layer uses the same gate: serve a measured coefficient
+      only when it clears |t| &ge; 2 on a minimum sample and passes a directional sanity
+      check. Otherwise the interface shows a labelled economic prior. Two findings cleared it.</p>
+
+    <h3>Inventory surprises are regime-dependent, and today's regime is the wrong one</h3>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr><th>Conditioning regime</th><th class="num-col">Directional accuracy</th><th class="num-col">Significance</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Crude, high stocks (glut)</td><td class="num-col pos">75&#8211;81%</td><td class="num-col">p &lt; 0.01</td></tr>
+          <tr><td>Crude, backwardated (current)</td><td class="num-col">52%</td><td class="num-col">n.s.</td></tr>
+          <tr><td>Gasoline, backwardated (current)</td><td class="num-col pos">57%</td><td class="num-col">p = 0.008</td></tr>
+          <tr><td>Gasoline, large surprises</td><td class="num-col pos">63&#8211;68%</td><td class="num-col">p &lt; 0.001</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>The operational consequence is an abstention rule. In the current regime the framework
+      declines to make a directional crude call and redirects conviction to gasoline, where
+      the edge is measured. A model that produces a crude call every Wednesday regardless of
+      regime is producing noise three quarters of the time.</p>
+
+    <h3>Supply shocks price into distillate, not flat price</h3>
+    <p>Across 112 graded geopolitical events and 1,414 node-level claims, chokepoint
+      disruption firms the ULSD crack 57% of the time over five days (n = 229, p = 0.047).
+      Crude flat price spikes on day one and reverts by day five: the risk premium round-trips
+      while physical tightness persists in the refined product.</p>
+    <div class="finding">
+      <span class="tag">Data quality dominated model choice</span>
+      A keyword extractor could not separate &ldquo;Hormuz closes&rdquo; from &ldquo;Hormuz
+      reopens.&rdquo; Same asset, same disruption vocabulary, opposite sign. Replacing it with
+      structured LLM extraction multiplied the gradeable sample by 2.3&times; and turned a null
+      result into a measured edge.
+    </div>
+
+    <h3>Benchmark selection was tested, not assumed</h3>
+    <p>US crude inventories move WTI roughly 17 times more than Brent
+      (&beta; +0.026 versus +0.0015). The framework headlines WTI on inventory releases because
+      the regression says WTI, not because crude is conventionally quoted in Brent.</p>
+  </section>
+
+  <section>
+    <h2><span class="num">06</span> Research integrity audit</h2>
+    <p class="lede">A system that computes its own P&amp;L has every incentive to flatter
+      itself. The stack was audited against its own output; four defects materially changed
+      reported performance.</p>
+
+    <div class="defect">
+      <h4>Reported P&amp;L was inflated by a factor of roughly 25,000</h4>
+      <p>The paper book headline read +$110,179. Of those rows, 374 were walk-forward replay
+        trades sized at 4,000 to 22,000 barrels, sharing a table with the live book and
+        drowning it. The genuine live book was 10 trades and &minus;$4.26.</p>
+      <span class="fix">Fixed: performance defaults to the live book; replay sits behind an explicit flag.</span>
+    </div>
+
+    <div class="defect">
+      <h4>Win rate and its own breakdown disagreed</h4>
+      <p>The headline read 43.8% beside a breakdown of 166W / 69L, which implies 70.6%. The
+        denominator counted 144 break-even scratches that the numerator excluded.</p>
+      <span class="fix">Fixed: win rate measured over decisive trades; scratches reported separately.</span>
+    </div>
+
+    <div class="defect">
+      <h4>A significant factor was significant for the wrong reason</h4>
+      <p>The geopolitical news factor cleared every threshold with t = 3.0, but had an 18%
+        directional hit rate. The t-statistic came from a small cluster of outlier war days,
+        not from a persistent relationship.</p>
+      <span class="fix">Fixed: the measured gate now also requires hit rate above 50% and a lexicon-consistent sign.</span>
+    </div>
+
+    <div class="defect">
+      <h4>A concurrency fault silently disabled the engine</h4>
+      <p>A shared DuckDB connection executed concurrently by warm-up and scheduler threads
+        corrupted a cached frame at boot. The regime engine then failed on every request until
+        the process restarted, zeroing the live A/B tick without raising an alert.</p>
+      <span class="fix">Fixed: thread-local cursors, lock-guarded cache, schema validation before any frame is cached.</span>
+    </div>
+
+    <p style="margin-top:22px">A cost-aware entry gate was added in the same pass. The live
+      ranker now refuses any entry whose expected take-profit does not clear twice the
+      round-trip cost. The rule was motivated by a real signal: a top-ranked WTI M1&#8211;M2 entry
+      with a $0.03 take-profit against $0.03 of round-trip cost, a trade that nets zero
+      <i>when it wins</i>.</p>
+  </section>
+
+  <section>
+    <h2><span class="num">07</span> Production</h2>
+    <p class="lede">The research does not stop at a backtest. The same decision logic that
+      the walk-forward validates is the logic that runs live.</p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Layer</th><th>Implementation</th></tr></thead>
+        <tbody>
+          <tr><td><b>Serving</b></td><td>Flask API, 73 endpoints, APScheduler jobs, ETag-cached polling</td></tr>
+          <tr><td><b>Storage</b></td><td>DuckDB over a 3.5 GB parquet lake with thread-local cursors; SQLite for the book</td></tr>
+          <tr><td><b>Execution</b></td><td>Scheduler reconciles the book to a decorrelated selection during market hours, gated by a volatility circuit-breaker</td></tr>
+          <tr><td><b>Risk</b></td><td>Signed-correlation decorrelation filter, per-position vol targeting, stress-conditioned de-risking</td></tr>
+          <tr><td><b>Exits</b></td><td>One mark-to-market sweep owns all exits: take-profit at halfway to fair, 2.5&sigma; stop, 30-day time stop</td></tr>
+          <tr><td><b>Type safety</b></td><td>Pydantic response models generate the frontend TypeScript, so a schema change that breaks the UI fails at compile time</td></tr>
+          <tr><td><b>Tests</b></td><td>294, mostly hermetic, including invariants that fail if live and backtest logic diverge</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>The system has run publicly and unattended on a containerised deployment, accumulating
+      a live forward book as out-of-sample confirmation of the walk-forward verdict.</p>
+  </section>
+
+  <section>
+    <h2><span class="num">08</span> Limitations</h2>
+    <p class="lede">Stated here rather than discovered by the reader.</p>
+    <ul class="checks">
+      <li><b>The tuned exit rule is in-sample.</b> Its 82.9% win rate falls to roughly 74&#8211;75%
+        out of sample. Sharpe and profit factor from that rule should be read as optimistic.</li>
+      <li><b>The geopolitical study is a single episode.</b> 112 events from one 2026 Hormuz
+        escalation, with clustered and overlapping forward windows. The p-values are
+        optimistic; the direction and cross-node coherence are the signal.</li>
+      <li><b>Pre-2021 WTI settlements are synthesised</b> from one-minute mids rather than real
+        daily settles. Everything derived from them is flagged as an estimate in the
+        interface, and the WTI glut regime is consequently untested.</li>
+      <li><b>The live forward book is slow.</b> With a 30-trading-day time stop it cannot
+        reach significance quickly, so it is confirmation of a question the walk-forward
+        already answered on 13,758 closed trades, not the primary evidence.</li>
+      <li><b>The conflict-intensity axis is degenerate on this corpus.</b> ACLED coverage ends
+        before the episode being studied, so every event maps to one stale level. The
+        machinery is validated on synthetic data; the real test needs more data, not more
+        code.</li>
+    </ul>
+  </section>
+
+  <footer>
+    <p>PULSE &nbsp;·&nbsp; Energy Intelligence Terminal &nbsp;·&nbsp; 294 tests &nbsp;·&nbsp;
+      73 endpoints &nbsp;·&nbsp; 3.5 GB parquet lake<br>
+      Python, scikit-learn, XGBoost, LightGBM, CatBoost, arch, DuckDB, Flask, React, TypeScript, Docker<br>
+      <a href="https://github.com/rohithpranav45/pulse">github.com/rohithpranav45/pulse</a>
+      &nbsp;·&nbsp;
+      <a href="https://rohithpranav45-pulse.hf.space">rohithpranav45-pulse.hf.space</a></p>
+    <p style="margin-top:14px; color:var(--ink-soft)">Every figure in this note is reproducible
+      from the persisted trade tapes in the repository. A number that cannot be sourced is a
+      number that does not ship.</p>
+  </footer>
+
+</div>
