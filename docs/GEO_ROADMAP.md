@@ -2,7 +2,7 @@
 
 Branch `phase4-live-feature-overlay` (not merged to main). The geospatial oil-news impact engine:
 **location-news → physical asset → price nodes/spreads → directional impact, regime-gated,
-prior-then-learn, with RAG analogs and a dashboard.** Full per-sprint detail lives in CLAUDE.md §1
+prior-then-learn, with RAG analogs and a dashboard.** Full per-sprint detail lives in PROJECT_STATE.md §1
 (the "Geo news-impact engine" entries). This doc is the forward plan.
 
 ## ✅ Done (Sprints 1–7, all on free Groq — no paid Claude)

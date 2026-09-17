@@ -9,7 +9,7 @@ they MUST stay in sync, or:
 
 These tests assert the duplicates by *importing both sides and comparing the live
 values*, so they fail loudly the moment one side changes without the other.
-See CLAUDE.md §5 gotchas 7-9 (and history gotchas 26 / 35 / 42 / 48).
+See PROJECT_STATE.md §5 gotchas 7-9 (and history gotchas 26 / 35 / 42 / 48).
 
 Run from the repo root:  python -m pytest tests/test_invariants.py -v
 """

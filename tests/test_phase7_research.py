@@ -2,7 +2,7 @@
 Phase 7 — research-leg unit tests (2.8.10 portfolio vol-targeting).
 
 The vol-target leg is an additive POST-PROCESSING pass on the Phase 2.8
-walk-forward (see CLAUDE.md §1): it reweights the persisted gated trade tape's
+walk-forward (see PROJECT_STATE.md §1): it reweights the persisted gated trade tape's
 notionals (it never retrains). These tests are HERMETIC — tiny synthetic
 tapes / vol / stress / correlation frames, never touching `/Data`, the model
 pkls, or the live cache — so they assert the sizing LOGIC (risk parity, stress

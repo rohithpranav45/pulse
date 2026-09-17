@@ -4,7 +4,7 @@
 
 Live URL (today, quick-tunnel): **https://jacket-army-appointed-racing.trycloudflare.com**
 
-⚠ Quick-tunnel URL changes if cloudflared restarts. Upgrade to named tunnel once admin access is granted (see CLAUDE.md → Deployment).
+⚠ Quick-tunnel URL changes if cloudflared restarts. Upgrade to named tunnel once admin access is granted (see PROJECT_STATE.md → Deployment).
 
 ---
 

@@ -529,7 +529,7 @@ def generate_live_signals(*, cadence: str = "daily", include_wti: bool = True) -
             spread_key = r.get("spread") or ""
             # WTI carries a "synth caveat": the WTI per-cell models were trained
             # on the synthetic-from-1-min-mids daily settlements (`data_lake.
-            # get_wti_settlements` returns ESTIMATE; CLAUDE.md gotcha 11), so
+            # get_wti_settlements` returns ESTIMATE; PROJECT_STATE.md gotcha 11), so
             # their fair_value can carry a level offset against the live real
             # WTI feed. Tag the metadata so the mentor sees this on hover and
             # we can deprioritise / suppress WTI rows later if needed.

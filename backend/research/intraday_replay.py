@@ -86,7 +86,7 @@ _CAVEATS = [
     "(mild look-ahead: a true walk-forward re-fits fair each day).",
     "Exits are close-based; intrabar high/low touches are not modeled. Sample is tiny, so "
     "treat every number as illustrative only.",
-    "WTI fair values come from SYNTH-trained models (CLAUDE.md gotcha 11) — treat wti_* as indicative.",
+    "WTI fair values come from SYNTH-trained models (PROJECT_STATE.md gotcha 11) — treat wti_* as indicative.",
 ]
 
 
@@ -326,7 +326,7 @@ def main() -> None:
     print("    can never trigger here, so trades that don't hit TP/SL are left OPEN with unrealized PnL.")
     print("  • Models are DAILY-trained; fair value + σ are held constant across the window.")
     print("  • Exits are close-based (intrabar high/low touches not modeled). Sample is tiny → illustrative only.")
-    print("  • WTI fair values come from SYNTH-trained models (CLAUDE.md gotcha 11) — treat wti_* as indicative.")
+    print("  • WTI fair values come from SYNTH-trained models (PROJECT_STATE.md gotcha 11) — treat wti_* as indicative.")
 
 
 if __name__ == "__main__":

@@ -2,7 +2,7 @@
 Phase 5 — research-leg unit tests (multi-horizon sweep + feature selection).
 
 Both legs are additive post-processing / re-training passes on the Phase 2.8
-walk-forward (see CLAUDE.md §1). These tests are HERMETIC — they build tiny
+walk-forward (see PROJECT_STATE.md §1). These tests are HERMETIC — they build tiny
 synthetic frames and never touch `/Data`, the model pkls, or the live cache —
 so they assert the leg LOGIC (horizon recompute, annualisation, cost, stability
 selection, lean-feature plumbing), not the production numbers.

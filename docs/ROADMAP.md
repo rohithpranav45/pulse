@@ -1,6 +1,6 @@
 # PULSE — Roadmap & Backlog
 
-**The *future* of the project.** Companion to `CLAUDE.md` (the *present* — current state)
+**The *future* of the project.** Companion to `PROJECT_STATE.md` (the *present* — current state)
 and `docs/PHASE_HISTORY.md` (the *past* — how we got here). Last updated 2026-07-03
 (settle-tail turned ON operationally: `start.py` defaults `PULSE_SETTLE_TAIL=1` for the desk dashboard
 process only — deliberately NOT in `.env`, so training/walk-forward CLI runs stay on the frozen lake;
@@ -16,16 +16,16 @@ we planned, deferred, or owe someone — with a timeline and a copy-paste prompt
 - Each task has a **▶ Prompt** — paste it into a fresh Claude Code session to start that task.
 - Tiers run top-down: do **Tier 1** before Tier 2, etc. Within a tier, higher = better value/effort.
 - **Effort:** `S` ≈ under a session · `M` ≈ one session · `L` ≈ multi-session.
-- **When a task ships:** check it off here, move the detail to `PHASE_HISTORY.md`, update `CLAUDE.md` §1.
+- **When a task ships:** check it off here, move the detail to `PHASE_HISTORY.md`, update `PROJECT_STATE.md` §1.
 
 ## Rules for opening a new session
-1. **One sprint per session.** Read `CLAUDE.md` end-to-end, do the *one* task, update the docs, stop.
+1. **One sprint per session.** Read `PROJECT_STATE.md` end-to-end, do the *one* task, update the docs, stop.
 2. **Paste the task's ▶ Prompt** from this file — they're self-contained.
 3. **My preferences** (also saved in memory, so any session knows them):
    - **Ask me** before doing anything only I can do — accounts, money, cards, API keys, irreversible deletes. Never silently hand it off.
    - **Explain ops/infra step-by-step** — I'm not a DevOps/cloud expert; assume little, walk me through it.
    - **Keep everything clean and structured.** No paid tools, no credit card.
-4. **Don't break the invariants** (`CLAUDE.md` §5, gotchas 7–9: gate mirror, tuned-rule mirror, A/B cost mirror) and **don't fold the exit rule into the walk-forward** (separate layers).
+4. **Don't break the invariants** (`PROJECT_STATE.md` §5, gotchas 7–9: gate mirror, tuned-rule mirror, A/B cost mirror) and **don't fold the exit rule into the walk-forward** (separate layers).
 5. **End every session** with the footer: *continue-here vs new-chat* + a ready-to-paste next prompt.
 
 ---
@@ -56,7 +56,7 @@ valid for any VPS/Oracle host.
 
 ## ✅ SHIPPED — Ultimate dashboard glow-up: full visual + structural redesign (2026-07-03)
 
-Frontend-only, 3 committed waves (detail: `CLAUDE.md` §1). Wave 1: aurora + film-grain atmosphere,
+Frontend-only, 3 committed waves (detail: `PROJECT_STATE.md` §1). Wave 1: aurora + film-grain atmosphere,
 46px workspace strip (replaces the double-header), Trading/Engine/Intel sidebar rails with a sliding
 `layoutId` active pill, DESK mission-control hero (full-width directive band + 76px z + ranked card
 rail). Wave 2: every tab framed by the upgraded shared PageHeader; REGIME as a numbered decision chain
@@ -77,7 +77,7 @@ desk hourly OHLCV feed's post-lake tail (LCO=Brent, CL=WTI; extend-only, weekend
 `ohlcv_tail (ESTIMATE)`, never persisted). Feature matrix advances 05-26 → feed latest; provenance on
 `as_of_source` / `live_feed.feature_overlay` / `/api/regime/live`. Overlap-validated (Brent m1_m2 proxy
 error ≈ 0.36× daily vol; WTI ≈ 0.84× vs the synth lake — flagged). Training still ends at the lake — keep
-the flag OFF for training/walk-forward. Detail: `CLAUDE.md` §1. **Follow-ups:** (1) ✅ **DONE 2026-07-03**
+the flag OFF for training/walk-forward. Detail: `PROJECT_STATE.md` §1. **Follow-ups:** (1) ✅ **DONE 2026-07-03**
 — `start.py` now defaults `PULSE_SETTLE_TAIL=1` into the desk app process's env (overridable with
 `PULSE_SETTLE_TAIL=0`); deliberately NOT in `.env` because `features.py → external_history` calls
 `load_dotenv()`, which would silently flip training/walk-forward CLI runs onto the tail. Full live
@@ -98,7 +98,7 @@ Mentor: "run your framework on live market data" + "add a trade/signal log to th
 SQLite 15-min bar files on `I:\Public\Summer Interns Energy\DB\` (the **live** recorder; the
 `…/Siddharth Raj/lightstreamer_data/` path is the **dead** old recorder — ignore it). Backend + the
 Signal Log dashboard tab shipped and verified live; remaining items are operational (L2) + WTI
-enablement. Full context: CLAUDE.md §1 Phase 3.1. Since then the desk also gained the auto-trade desk
+enablement. Full context: PROJECT_STATE.md §1 Phase 3.1. Since then the desk also gained the auto-trade desk
 (Phase 3/4), live feature overlay, decorrelated selection, and the Phase 8 per-spread gate.
 
 **✅ Backend shipped + verified (2026-06-15):** `research/live_feed.py` (real spreads + curve from the
@@ -141,7 +141,7 @@ real feed before enabling `include_wti` (still synth-trained; `CL_*` live tables
 Once the book has data, read `/api/regime/ab`. If `pooled_wins` → write the one-line production-default
 flip PR (`PULSE_REGIME_MODE=pooled`). If `gated_wins`/`undecided` → keep the gated default. Then regenerate
 the methodology PDF with the winning arm.
-> ▶ **Prompt:** `Read CLAUDE.md in pulse/, then read the A/B verdict at /api/regime/ab (start the app first if needed). If a winner is declared (>=30 closed/arm AND p<0.05), make the production-mode decision: if pooled wins, flip the default and write a short PR; if gated/undecided, keep the gated default and say why. Regenerate the methodology PDF for the winning arm. Don't multi-task; update CLAUDE.md + docs/ROADMAP.md and stop.`
+> ▶ **Prompt:** `Read PROJECT_STATE.md in pulse/, then read the A/B verdict at /api/regime/ab (start the app first if needed). If a winner is declared (>=30 closed/arm AND p<0.05), make the production-mode decision: if pooled wins, flip the default and write a short PR; if gated/undecided, keep the gated default and say why. Regenerate the methodology PDF for the winning arm. Don't multi-task; update PROJECT_STATE.md + docs/ROADMAP.md and stop.`
 
 **T1.3 — Mentor: send the WTI ask + chase the 7 sign-offs.** `[S · owner action]` ✏️ **DRAFTED — ready to send**
 Both messages are written and ready in **[`docs/mentor_followups.md`](mentor_followups.md)**: (1) the
@@ -250,8 +250,8 @@ Research-only dep; live path unchanged.
 
 **T2.7 — conformal prediction bands.** `[M]` — calibrated prediction intervals (deferred when 2.8.3 took its slot). *Polish — low priority now baseline is the headline.*
 **T2.8 — per-spread sizing override.** `[S]` — config map to half-size only `brent_fly_123` (the Phase-2.7 win) without sizing the rest. *Polish.*
-**T2.9 — 2.8.11: end-of-phase methodology PDF + CLAUDE.md refresh.** `[S]` ✅ **effectively DONE** — the PDF is regenerated each leg (now 29.5 kB through Phase 8) and CLAUDE.md §1 is kept current per sprint.
-> ▶ **Generic Tier-2 prompt:** `Read CLAUDE.md in pulse/, then do [TASK ID + name] from docs/ROADMAP.md Tier 2. Reuse the existing research/ harness; report the honest verdict vs baseline; regenerate the methodology PDF. Don't multi-task; update CLAUDE.md + docs/ROADMAP.md and stop.`
+**T2.9 — 2.8.11: end-of-phase methodology PDF + PROJECT_STATE.md refresh.** `[S]` ✅ **effectively DONE** — the PDF is regenerated each leg (now 29.5 kB through Phase 8) and PROJECT_STATE.md §1 is kept current per sprint.
+> ▶ **Generic Tier-2 prompt:** `Read PROJECT_STATE.md in pulse/, then do [TASK ID + name] from docs/ROADMAP.md Tier 2. Reuse the existing research/ harness; report the honest verdict vs baseline; regenerate the methodology PDF. Don't multi-task; update PROJECT_STATE.md + docs/ROADMAP.md and stop.`
 
 ---
 
@@ -271,7 +271,7 @@ justified by measurement, not guesswork. Most are **only worth doing if a real a
 | ~~Docker + HTTPS deploy~~ | — | ✅ done in Phase 3.D (host step pending — see D1) |
 | ~~Named Cloudflare tunnel + Access~~ | — | likely **obsolete** now we have Oracle + Caddy; drop unless needed |
 
-> ▶ **Prompt:** `Read CLAUDE.md in pulse/, then do [Tier-3 item] from docs/ROADMAP.md — but first measure the current behaviour so the upgrade is justified empirically. Keep the 30+ data streams working. Don't multi-task; update the docs and stop.`
+> ▶ **Prompt:** `Read PROJECT_STATE.md in pulse/, then do [Tier-3 item] from docs/ROADMAP.md — but first measure the current behaviour so the upgrade is justified empirically. Keep the 30+ data streams working. Don't multi-task; update the docs and stop.`
 
 ---
 
@@ -297,4 +297,4 @@ justified by measurement, not guesswork. Most are **only worth doing if a real a
 
 ---
 
-*Maintained alongside CLAUDE.md. If you finish or add a task, edit this file in the same session so it stays the single source of truth for "what's next."*
+*Maintained alongside PROJECT_STATE.md. If you finish or add a task, edit this file in the same session so it stays the single source of truth for "what's next."*

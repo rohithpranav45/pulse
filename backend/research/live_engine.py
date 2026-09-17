@@ -10,7 +10,7 @@ ranking the engine WOULD trade in the current market — the mentor's ask:
 Design choices (see the Phase 3.1 plan):
   • Brent-first. The Brent models are real-on-real, so the Brent live overlay
     is clean. WTI is opt-in (`include_wti=True`) because the WTI models were
-    trained on the SYNTHETIC WTI estimate (CLAUDE.md gotcha 11), so live real
+    trained on the SYNTHETIC WTI estimate (PROJECT_STATE.md gotcha 11), so live real
     WTI may carry a level offset until retrained on the real feed.
   • Honours the same env config as the rest of the engine (PULSE_GATED_BLEND /
     PULSE_REGIME_MODE / PULSE_GATED_SIZE) so the live engine reflects the

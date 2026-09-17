@@ -56,3 +56,13 @@ cloudflared.exe
 
 # Geo engine — runtime-accumulating live geo-event store (machine/time-specific)
 backend/data/research/news_impact/geo_live_events.json
+
+# Local tooling config
+.claude/
+
+# Never commit dependencies
+node_modules/
+
+# Fetched data caches — regenerated on demand, never committed
+backend/cache/
+backend/data/cache/
