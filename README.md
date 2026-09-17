@@ -11,8 +11,6 @@ Hypothesis, alternative data, walk-forward validation, live deployment.
 
 <img src="docs/screenshots/hero.png" alt="PULSE dashboard" width="100%">
 
-<sub>Built over a trading-desk internship at Futures First.</sub>
-
 </div>
 
 ---
@@ -171,13 +169,13 @@ validate-before-cache. An inventory endpoint that hung for 120 seconds now answe
 So the framework abstains on crude and redirects to gasoline. Most inventory models hand you
 a crude call every Wednesday. This one tells you when not to take it.
 
-**🌍 Supply shocks show up in distillate, not flat price.**
+** Supply shocks show up in distillate, not flat price.**
 
 Chokepoint disruption firms the ULSD crack 57% of the time over five days (n=229, p=0.047).
 Crude flat price spikes on day one and reverts by day five. The risk premium round-trips while
 physical tightness persists. Trade the crack, fade the spike.
 
-**🎯 Benchmark selection is empirical, not assumed.**
+** Benchmark selection is empirical, not assumed.**
 
 US crude inventories move WTI roughly 17× more than Brent (β +0.026 vs +0.0015). The call
 headlines WTI because the data says WTI.
@@ -205,20 +203,20 @@ Otherwise show a labelled economic prior. The desk never sees a fabricated-preci
 
 This is enforced mechanically, not by convention.
 
-🔒 **Point-in-time features.** Tests assert prefix-stability: a value computed at day *t* must
+ **Point-in-time features.** Tests assert prefix-stability: a value computed at day *t* must
 not change when future data is appended.
 
-🔒 **Causal labelling.** The HMM forward filter at day *d* sees only data ≤ *d*. Gate
+ **Causal labelling.** The HMM forward filter at day *d* sees only data ≤ *d*. Gate
 decisions at each refit cutoff use only trades that had closed before it.
 
-🔒 **Costs before conclusions.** One `costs.py` defines round-trip cost. Backtest and live A/B
+ **Costs before conclusions.** One `costs.py` defines round-trip cost. Backtest and live A/B
 both import it, so the assumption cannot drift.
 
-🔒 **Live entry economics.** The ranker refuses any entry whose take-profit does not clear
+ **Live entry economics.** The ranker refuses any entry whose take-profit does not clear
 twice the round-trip cost. On 13 July the top pick was WTI M1-M2 with a $0.03 take-profit
 against $0.03 of cost, a trade that nets zero *when it wins*. Blocked.
 
-🔒 **Mirrored gate rule.** Defined once in `gate_config.py`, imported by both live and
+ **Mirrored gate rule.** Defined once in `gate_config.py`, imported by both live and
 backtest. `test_invariants.py` asserts they stay bit-for-bit identical, so tuning the live
 gate without re-running the walk-forward fails the suite.
 
