@@ -7,11 +7,6 @@
 **A systematic trading research stack for crude calendar spreads.**
 Hypothesis, alternative data, walk-forward validation, live deployment.
 
-[![Python](https://img.shields.io/badge/Python-3.13-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org)
-[![Tests](https://img.shields.io/badge/tests-294%20passing-2ea44f?style=flat-square)](tests/)
-[![React](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=white)](frontend/)
-[![Live](https://img.shields.io/badge/demo-live-FFD700?style=flat-square)](https://rohithpranav45-pulse.hf.space)
-
 **[Live demo](https://rohithpranav45-pulse.hf.space)** &nbsp;·&nbsp; **[Methodology](docs/report/PULSE_One_Page_Report.pdf)** &nbsp;·&nbsp; **[Project state](docs/PROJECT_STATE.md)**
 
 <img src="docs/screenshots/hero.png" alt="PULSE dashboard" width="100%">
