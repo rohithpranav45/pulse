@@ -7,7 +7,7 @@
 **A systematic trading research stack for crude calendar spreads.**
 Hypothesis, alternative data, walk-forward validation, live deployment.
 
-**[Live demo](https://rohithpranav45-pulse.hf.space)** &nbsp;·&nbsp; **[Methodology](docs/report/PULSE_One_Page_Report.pdf)** &nbsp;·&nbsp; **[Project state](docs/PROJECT_STATE.md)**
+**[Live demo](https://pulseterminal-live.hf.space)** &nbsp;·&nbsp; **[Methodology](docs/report/PULSE_One_Page_Report.pdf)** &nbsp;·&nbsp; **[Project state](docs/PROJECT_STATE.md)**
 
 <img src="docs/screenshots/hero.png" alt="PULSE dashboard" width="100%">
 
