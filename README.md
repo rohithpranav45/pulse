@@ -29,7 +29,7 @@ python start.py          # http://127.0.0.1:5000
 
 **Hypothesis.** Crude calendar spreads mean-revert differently across market regimes (curve
 shape, inventory level, realised volatility), so a regime-conditioned model should beat one
-that ignores regime.
+that ignores the regime.
 
 **Test.** Expanding-window walk-forward, 2018 to 2026, 34 quarterly refits. Point-in-time
 features, no look-ahead. Every figure net of round-trip cost.
